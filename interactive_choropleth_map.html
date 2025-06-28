@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queens Gate Election Map - Complete Dataset</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .control-group label {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        select, button {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .map-container {
+            position: relative;
+            padding: 20px;
+            overflow: auto;
+        }
+        
+        #map {
+            background: white;
+            border: 1px solid #ccc;
+            display: block;
+        }
+        
+        .polygon {
+            stroke: #333;
+            stroke-width: 0.5;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .polygon:hover {
+            stroke: #fff;
+            stroke-width: 2;
+            filter: brightness(1.1);
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            max-width: 250px;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip h4 {
+            margin: 0 0 8px 0;
+            color: #ffd700;
+            font-size: 14px;
+        }
+        
+        .vote-bar {
+            display: flex;
+            height: 20px;
+            margin: 5px 0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .vote-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        
+        .legend {
+            margin: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        .legend h3 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #333;
+            border-radius: 3px;
+        }
+        
+        .stats {
+            margin: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .note {
+            margin: 20px;
+            padding: 15px;
+            background: #d4edda;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+            color: #155724;
+        }
+
+        .loading {
+            margin: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 6px;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+        }
+
+        .error {
+            margin: 20px;
+            padding: 15px;
+            background: #f8d7da;
+            border-radius: 6px;
+            border-left: 4px solid #dc3545;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Queens Gate Election Results - Complete Interactive Map</h1>
+            <p>All 209 Lower Level Districts | Dynamic CSV Loading</p>
+        </div>
+        
+        <div id="status-message" class="loading">
+            <strong>Loading Data:</strong> Fetching CSV files and processing all 209 Lower level districts...
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="round-select">Election Round:</label>
+                <select id="round-select">
+                    <option value="first">First Round</option>
+                    <option value="second">Second Round</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="display-mode">Display Mode:</label>
+                <select id="display-mode">
+                    <option value="winner">Winner</option>
+                    <option value="turnout">Turnout %</option>
+                    <option value="margin">Victory Margin</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <button id="reset-zoom">Reset View</button>
+                <button id="zoom-fit">Fit to Screen</button>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <svg id="map"></svg>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+        
+        <div class="legend">
+            <h3>Legend</h3>
+            <div id="legend-content"></div>
+        </div>
+        
+        <div class="stats">
+            <h3>Map Statistics</h3>
+            <div id="stats-content"></div>
+        </div>
+    </div>
+
+    <script>
+        console.log("=== QUEENS GATE ELECTION MAP - BROWSER COMPATIBLE ===");
+
+        // Browser-compatible CSV loading function
+        async function loadCSVData() {
+            try {
+                console.log("Starting CSV loading with fetch API...");
+                
+                // Use standard fetch API for web browsers
+                const polygonResponse = await fetch('polygon_result_20241226.csv');
+                const voteResponse = await fetch('20250622_QueensGate_Final.csv');
+                
+                if (!polygonResponse.ok) {
+                    throw new Error(`Failed to load polygon_result_20241226.csv: ${polygonResponse.status} ${polygonResponse.statusText}`);
+                }
+                if (!voteResponse.ok) {
+                    throw new Error(`Failed to load 20250622_QueensGate_Final.csv: ${voteResponse.status} ${voteResponse.statusText}`);
+                }
+                
+                const polygonData = await polygonResponse.text();
+                const voteData = await voteResponse.text();
+                
+                console.log("CSV files loaded successfully");
+                console.log("Polygon data length:", polygonData.length, "characters");
+                console.log("Vote data length:", voteData.length, "characters");
+                
+                return { polygonData, voteData };
+                
+            } catch (error) {
+                console.error("Error loading CSV files:", error);
+                throw new Error(`Failed to load CSV files: ${error.message}`);
+            }
+        }
+
+        // Process coordinates with proper handling of Float and String types
+        function processCoordinates(row) {
+            const coordinates = [];
+            const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
+            
+            for (const letter of letters) {
+                let x = row[`${letter}1`];
+                let y = row[`${letter}2`];
+                
+                // Handle different data types (Integer, Float, String)
+                if (x !== null && y !== null && x !== undefined && y !== undefined && x !== '' && y !== '') {
+                    // Convert string coordinates to numbers if needed
+                    if (typeof x === 'string') x = parseFloat(x);
+                    if (typeof y === 'string') y = parseFloat(y);
+                    
+                    // Check if coordinates are valid numbers
+                    if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) {
+                        // Apply Y-flip transformation: Y = 2100 - Y (following Python logic)
+                        const flippedY = 2100 - y;
+                        // Use coordinates with minimal adjustment for full dataset
+                        const scaledX = x - 500; // Adjust base offset for full dataset
+                        const scaledY = flippedY; // Keep Y as-is after flip
+                        coordinates.push([scaledX, scaledY]);
+                    }
+                }
+            }
+            return coordinates;
+        }
+
+        // Process election data (following Python cleaning logic)
+        function processElectionData(voteData) {
+            return voteData.map(row => {
+                // Clean 2nd round data (following Python logic)
+                let left2nd = row.Left_2nd === 0 ? 0 : row.Left_1st + row.Left_2nd;
+                let mid2nd = row.Mid_2nd === 0 ? 0 : row.Mid_1st + row.Mid_2nd;
+                let right2nd = row.Right_2nd === 0 ? 0 : row.Right_1st + row.Right_2nd;
+                
+                // If Status is 0, use first round results for second round
+                if (row.Status === 0) {
+                    left2nd = row.Left_1st;
+                    mid2nd = row.Mid_1st;
+                    right2nd = row.Right_1st;
+                }
+                
+                return {
+                    ...row,
+                    Left_2nd_processed: left2nd,
+                    Mid_2nd_processed: mid2nd,
+                    Right_2nd_processed: right2nd
+                };
+            });
+        }
+
+        // Main data processing function
+        async function processData() {
+            try {
+                console.log("=== PROCESSING COMPLETE DATASET ===");
+                
+                // Load CSV data dynamically
+                const { polygonData, voteData } = await loadCSVData();
+                
+                // Parse CSV data with D3
+                const polygons = d3.csvParse(polygonData, d3.autoType);
+                const votes = d3.csvParse(voteData, d3.autoType);
+                
+                console.log("Parsed data:");
+                console.log("- Total polygons:", polygons.length);
+                console.log("- Total votes:", votes.length);
+                
+                // Filter for Lower level only
+                const lowerPolygons = polygons.filter(d => d.Location === 'Lower');
+                console.log("- Lower level polygons:", lowerPolygons.length);
+                
+                // Get matching vote data for lower polygons
+                const lowerVotes = votes.filter(v => 
+                    lowerPolygons.some(p => p.County === v.County)
+                );
+                console.log("- Matching vote records:", lowerVotes.length);
+                
+                // Get unique constituencies
+                const constituencies = [...new Set(lowerVotes.map(v => v.Constituency))].sort();
+                console.log("- Constituencies:", constituencies.length, constituencies);
+                
+                // Process election data
+                const processedVotes = processElectionData(lowerVotes);
+                
+                // Combine polygon and vote data
+                const allMapData = [];
+                let successCount = 0;
+                let errorCount = 0;
+                
+                lowerPolygons.forEach(polygon => {
+                    const voteInfo = processedVotes.find(v => v.County === polygon.County);
+                    const coordinates = processCoordinates(polygon);
+                    
+                    if (coordinates.length === 0) {
+                        console.warn(`No valid coordinates for ${polygon.County}`);
+                        errorCount++;
+                        return;
+                    }
+                    
+                    if (!voteInfo) {
+                        console.warn(`No vote data for ${polygon.County}`);
+                        errorCount++;
+                        return;
+                    }
+                    
+                    allMapData.push({
+                        ...polygon,
+                        ...voteInfo,
+                        coordinates: coordinates
+                    });
+                    successCount++;
+                });
+                
+                // Separate standalone polygons from holes using Parent column
+                const standalonePolygons = allMapData.filter(d => d.County === d.Parent);
+                const holes = allMapData.filter(d => d.County !== d.Parent);
+                
+                console.log(`Processing complete: ${successCount} successful, ${errorCount} errors`);
+                console.log(`- Standalone polygons: ${standalonePolygons.length}`);
+                console.log(`- Hole polygons: ${holes.length}`);
+                
+                // Update status message
+                const statusElement = document.getElementById('status-message');
+                statusElement.className = 'note';
+                statusElement.innerHTML = `
+                    <strong>Data Loaded Successfully:</strong> 
+                    ${successCount} Lower level districts from ${constituencies.length} constituencies. 
+                    (${standalonePolygons.length} standalone, ${holes.length} holes)
+                    ${errorCount > 0 ? `${errorCount} districts had data issues.` : 'All data processed correctly.'}
+                `;
+                
+                return { standalonePolygons, holes, allData: allMapData };
+                
+            } catch (error) {
+                console.error('Error processing data:', error);
+                
+                // Update status with error
+                const statusElement = document.getElementById('status-message');
+                statusElement.className = 'error';
+                statusElement.innerHTML = `
+                    <strong>Error Loading Data:</strong> ${error.message}<br>
+                    <small>Make sure the CSV files (polygon_result_20241226.csv and 20250622_QueensGate_Final.csv) 
+                    are available in the same directory as this HTML file and you're running this through a web server.</small>
+                `;
+                
+                return { standalonePolygons: [], holes: [], allData: [] };
+            }
+        }
+
+        // Color functions
+        function getWinnerColor(left, mid, right) {
+            const votes = { Left: left, Mid: mid, Right: right };
+            const total = left + mid + right;
+            if (total === 0) return '#cccccc';
+            
+            const winner = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
+            const voteShare = votes[winner] / total;
+            
+            let baseColor;
+            if (winner === 'Left') baseColor = '#2196f3'; // Blue
+            else if (winner === 'Mid') baseColor = '#ffc107'; // Gold
+            else baseColor = '#f44336'; // Red
+            
+            // Adjust intensity based on vote share (following Python logic)
+            let intensity;
+            if (voteShare >= 0.6) intensity = 1.0;
+            else if (voteShare >= 0.55) intensity = 0.85;
+            else if (voteShare >= 0.5) intensity = 0.7;
+            else intensity = 0.5;
+            
+            const color = d3.color(baseColor);
+            color.opacity = intensity;
+            return color.toString();
+        }
+        
+        function getTurnoutColor(turnout, electorate) {
+            if (electorate === 0) return '#cccccc';
+            const turnoutRate = turnout / electorate;
+            return d3.interpolateBlues(turnoutRate);
+        }
+        
+        function getMarginColor(left, mid, right) {
+            const votes = [left, mid, right].sort((a, b) => b - a);
+            const total = votes[0] + votes[1] + votes[2];
+            if (total === 0) return '#cccccc';
+            
+            const margin = (votes[0] - votes[1]) / total;
+            return d3.interpolateRdYlBu(1 - margin); // Red for close, blue for decisive
+        }
+        
+        function getWinnerInfo(left, mid, right) {
+            const votes = { Left: left, Mid: mid, Right: right };
+            const total = left + mid + right;
+            if (total === 0) return { winner: 'None', voteShare: 0, margin: 0 };
+            
+            const sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+            const winner = sorted[0][0];
+            const voteShare = sorted[0][1] / total;
+            const margin = total > 0 ? (sorted[0][1] - sorted[1][1]) / total : 0;
+            
+            return { winner, voteShare, margin };
+        }
+
+        // Create map function
+        async function createMap() {
+            const processedData = await processData();
+            
+            if (processedData.allData.length === 0) {
+                document.getElementById('map').innerHTML = '<text x="50" y="50" fill="red" font-size="16">No data available to display</text>';
+                return;
+            }
+            
+            const { standalonePolygons, holes, allData } = processedData;
+            console.log(`Creating map with ${allData.length} polygons (${standalonePolygons.length} standalone, ${holes.length} holes)`);
+
+            // Set up dimensions
+            const margin = { top: 50, right: 50, bottom: 50, left: 50 };
+            const containerWidth = document.querySelector('.map-container').clientWidth;
+            const width = Math.max(containerWidth - margin.left - margin.right, 1000);
+            const height = Math.max(800, width * 0.6);
+            
+            // Get coordinate bounds from all data
+            const allCoords = allData.reduce((acc, d) => acc.concat(d.coordinates), []);
+            const xExtent = d3.extent(allCoords, d => d[0]);
+            const yExtent = d3.extent(allCoords, d => d[1]);
+            
+            console.log("Coordinate extents:", { xExtent, yExtent });
+            console.log("SVG dimensions:", { width, height });
+            
+            // Create scales
+            const padding = 100;
+            const xScale = d3.scaleLinear()
+                .domain(xExtent)
+                .range([padding, width - padding]);
+            
+            const yScale = d3.scaleLinear()
+                .domain(yExtent)
+                .range([height - padding, padding]);
+
+            // Create SVG
+            const svg = d3.select('#map')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .style('background', 'white');
+            
+            svg.selectAll('*').remove();
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            
+            // Add zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 10])
+                .on('zoom', (event) => {
+                    g.attr('transform', `translate(${margin.left},${margin.top}) ${event.transform}`);
+                });
+            
+            svg.call(zoom);
+            
+            // Tooltip
+            const tooltip = d3.select('#tooltip');
+            
+            // Update map function with proper layering
+            function updateMap() {
+                const round = document.getElementById('round-select').value;
+                const mode = document.getElementById('display-mode').value;
+                
+                // Clear existing polygons
+                g.selectAll('.polygon').remove();
+                g.selectAll('.hole').remove();
+                
+                // Function to get color for a polygon
+                function getPolygonColor(d) {
+                    if (mode === 'winner') {
+                        if (round === 'first') {
+                            return getWinnerColor(d.Left_1st, d.Mid_1st, d.Right_1st);
+                        } else {
+                            return getWinnerColor(d.Left_2nd_processed, d.Mid_2nd_processed, d.Right_2nd_processed);
+                        }
+                    } else if (mode === 'turnout') {
+                        return getTurnoutColor(d.Turnout, d.Electorate);
+                    } else {
+                        if (round === 'first') {
+                            return getMarginColor(d.Left_1st, d.Mid_1st, d.Right_1st);
+                        } else {
+                            return getMarginColor(d.Left_2nd_processed, d.Mid_2nd_processed, d.Right_2nd_processed);
+                        }
+                    }
+                }
+                
+                // Function to create polygon path
+                function getPolygonPath(d) {
+                    const coords = d.coordinates.map(coord => [xScale(coord[0]), yScale(coord[1])]);
+                    return `M${coords.map(c => c.join(',')).join('L')}Z`;
+                }
+                
+                // Function to handle mouse events
+                function handleMouseOver(event, d) {
+                    const round = document.getElementById('round-select').value;
+                    let left, mid, right;
+                    
+                    if (round === 'first') {
+                        left = d.Left_1st;
+                        mid = d.Mid_1st;
+                        right = d.Right_1st;
+                    } else {
+                        left = d.Left_2nd_processed;
+                        mid = d.Mid_2nd_processed;
+                        right = d.Right_2nd_processed;
+                    }
+                    
+                    const info = getWinnerInfo(left, mid, right);
+                    const total = left + mid + right;
+                    const turnoutRate = d.Electorate > 0 ? (d.Turnout / d.Electorate * 100).toFixed(1) : 0;
+                    
+                    const leftPct = total > 0 ? (left / total * 100).toFixed(1) : 0;
+                    const midPct = total > 0 ? (mid / total * 100).toFixed(1) : 0;
+                    const rightPct = total > 0 ? (right / total * 100).toFixed(1) : 0;
+                    
+                    tooltip.html(`
+                        <h4>${d.County} (${d.Constituency})</h4>
+                        <strong>Winner:</strong> ${info.winner} (${(info.voteShare * 100).toFixed(1)}%)<br>
+                        <strong>Margin:</strong> ${(info.margin * 100).toFixed(1)}%<br>
+                        <strong>Turnout:</strong> ${d.Turnout.toLocaleString()} / ${d.Electorate.toLocaleString()} (${turnoutRate}%)<br>
+                        <div class="vote-bar">
+                            <div class="vote-segment" style="width: ${leftPct}%; background: #2196f3;">${leftPct}%</div>
+                            <div class="vote-segment" style="width: ${midPct}%; background: #ffc107;">${midPct}%</div>
+                            <div class="vote-segment" style="width: ${rightPct}%; background: #f44336;">${rightPct}%</div>
+                        </div>
+                        <strong>Votes:</strong> Left: ${left.toLocaleString()}, Mid: ${mid.toLocaleString()}, Right: ${right.toLocaleString()}
+                    `);
+                    
+                    tooltip
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px')
+                        .classed('visible', true);
+                }
+                
+                function handleMouseOut() {
+                    tooltip.classed('visible', false);
+                }
+                
+                // First, render standalone polygons (outer polygons)
+                const standaloneSelection = g.selectAll('.polygon')
+                    .data(standalonePolygons, d => d.County)
+                    .enter()
+                    .append('path')
+                    .attr('class', 'polygon')
+                    .attr('d', getPolygonPath)
+                    .attr('fill', getPolygonColor)
+                    .attr('stroke', '#333')
+                    .attr('stroke-width', 0.5)
+                    .attr('opacity', 0.8)
+                    .style('cursor', 'pointer')
+                    .on('mouseover', handleMouseOver)
+                    .on('mouseout', handleMouseOut);
+                
+                // Then, render holes with white background first, then color
+                holes.forEach(hole => {
+                    // Add white background for hole effect
+                    g.append('path')
+                        .datum(hole)
+                        .attr('class', 'hole')
+                        .attr('d', getPolygonPath)
+                        .attr('fill', 'white')
+                        .attr('stroke', '#333')
+                        .attr('stroke-width', 0.5)
+                        .attr('opacity', 1);
+                    
+                    // Add colored hole on top
+                    g.append('path')
+                        .datum(hole)
+                        .attr('class', 'hole')
+                        .attr('d', getPolygonPath)
+                        .attr('fill', getPolygonColor)
+                        .attr('stroke', '#333')
+                        .attr('stroke-width', 0.5)
+                        .attr('opacity', 0.8)
+                        .style('cursor', 'pointer')
+                        .on('mouseover', handleMouseOver)
+                        .on('mouseout', handleMouseOut);
+                });
+                
+                // Add hover effects
+                g.selectAll('.polygon, .hole')
+                    .on('mouseenter', function() {
+                        d3.select(this)
+                            .attr('stroke', '#fff')
+                            .attr('stroke-width', 2)
+                            .style('filter', 'brightness(1.1)');
+                    })
+                    .on('mouseleave', function() {
+                        d3.select(this)
+                            .attr('stroke', '#333')
+                            .attr('stroke-width', 0.5)
+                            .style('filter', 'none');
+                    });
+                
+                updateLegend();
+                updateStats();
+            }
+            
+            // Update legend
+            function updateLegend() {
+                const mode = document.getElementById('display-mode').value;
+                const legendContent = document.getElementById('legend-content');
+                
+                if (mode === 'winner') {
+                    legendContent.innerHTML = `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #2196f3;"></div>
+                            <span>Left Party</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #ffc107;"></div>
+                            <span>Middle Right Party</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #f44336;"></div>
+                            <span>Right Party</span>
+                        </div>
+                        <p><small>Darker colors indicate higher vote share</small></p>
+                    `;
+                } else if (mode === 'turnout') {
+                    legendContent.innerHTML = `
+                        <p>Turnout Rate</p>
+                        <div style="background: linear-gradient(to right, #f7fbff, #08519c); height: 20px; border: 1px solid #333; margin: 5px 0;"></div>
+                        <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                            <span>Low</span>
+                            <span>High</span>
+                        </div>
+                    `;
+                } else {
+                    legendContent.innerHTML = `
+                        <p>Victory Margin</p>
+                        <div style="background: linear-gradient(to right, #d73027, #fee08b, #4575b4); height: 20px; border: 1px solid #333; margin: 5px 0;"></div>
+                        <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                            <span>Close</span>
+                            <span>Decisive</span>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Update statistics
+            function updateStats() {
+                const round = document.getElementById('round-select').value;
+                let totalLeft = 0, totalMid = 0, totalRight = 0, totalVotes = 0;
+                let totalElectorate = 0, totalTurnout = 0;
+                
+                allData.forEach(d => {
+                    let left, mid, right;
+                    if (round === 'first') {
+                        left = d.Left_1st;
+                        mid = d.Mid_1st;
+                        right = d.Right_1st;
+                    } else {
+                        left = d.Left_2nd_processed;
+                        mid = d.Mid_2nd_processed;
+                        right = d.Right_2nd_processed;
+                    }
+                    
+                    totalLeft += left;
+                    totalMid += mid;
+                    totalRight += right;
+                    totalVotes += left + mid + right;
+                    totalElectorate += d.Electorate;
+                    totalTurnout += d.Turnout;
+                });
+                
+                const overallTurnout = totalElectorate > 0 ? (totalTurnout / totalElectorate * 100).toFixed(1) : 0;
+                const leftPct = totalVotes > 0 ? (totalLeft / totalVotes * 100).toFixed(1) : 0;
+                const midPct = totalVotes > 0 ? (totalMid / totalVotes * 100).toFixed(1) : 0;
+                const rightPct = totalVotes > 0 ? (totalRight / totalVotes * 100).toFixed(1) : 0;
+                
+                const constituencies = new Set(allData.map(d => d.Constituency));
+                
+                document.getElementById('stats-content').innerHTML = `
+                    <p><strong>Total Districts:</strong> ${allData.length}</p>
+                    <p><strong>Constituencies:</strong> ${constituencies.size} (${Array.from(constituencies).sort().join(', ')})</p>
+                    <p><strong>Total Electorate:</strong> ${totalElectorate.toLocaleString()}</p>
+                    <p><strong>Overall Turnout:</strong> ${totalTurnout.toLocaleString()} (${overallTurnout}%)</p>
+                    <p><strong>Vote Share:</strong> Left: ${leftPct}%, Mid: ${midPct}%, Right: ${rightPct}%</p>
+                `;
+            }
+            
+            // Event listeners
+            document.getElementById('round-select').addEventListener('change', updateMap);
+            document.getElementById('display-mode').addEventListener('change', updateMap);
+            
+            document.getElementById('reset-zoom').addEventListener('click', () => {
+                svg.transition().duration(750).call(
+                    zoom.transform,
+                    d3.zoomIdentity
+                );
+            });
+            
+            document.getElementById('zoom-fit').addEventListener('click', () => {
+                const bounds = g.node().getBBox();
+                const fullWidth = width;
+                const fullHeight = height;
+                const widthScale = fullWidth / bounds.width;
+                const heightScale = fullHeight / bounds.height;
+                const scale = 0.9 * Math.min(widthScale, heightScale);
+                const translate = [fullWidth / 2 - scale * (bounds.x + bounds.width / 2), 
+                                 fullHeight / 2 - scale * (bounds.y + bounds.height / 2)];
+                
+                svg.transition().duration(750).call(
+                    zoom.transform,
+                    d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                );
+            });
+            
+            // Initial render
+            updateMap();
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', createMap);
+    </script>
+</body>
+</html>
