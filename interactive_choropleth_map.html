@@ -1,4 +1,8 @@
-<!DOCTYPE html>
+// Add the missing handleMouseMove function
+            function handleMouseMove(event, d) {
+                // Get mouse position relative to the page (works better with zoom)
+                const mouseX = event.pageX;
+       <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -78,7 +82,9 @@
         .map-container {
             position: relative;
             padding: 20px;
-            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         
         #map {
@@ -102,10 +108,12 @@
         
         .tooltip {
             position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
+            background: white;
+            color: black;
             padding: 12px;
             border-radius: 6px;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             font-size: 12px;
             pointer-events: none;
             opacity: 0;
@@ -120,8 +128,9 @@
         
         .tooltip h4 {
             margin: 0 0 8px 0;
-            color: #ffd700;
+            color: #333;
             font-size: 14px;
+            font-weight: bold;
         }
         
         .vote-bar {
@@ -242,8 +251,7 @@
             </div>
             
             <div class="control-group">
-                <button id="reset-zoom">Reset View</button>
-                <button id="zoom-fit">Fit to Screen</button>
+                <button id="reset-view">Reset View</button>
             </div>
         </div>
         
@@ -535,11 +543,10 @@
             
             console.log(`Creating map with Lower: ${processedData.lowerData.length}, Upper: ${processedData.upperData.length} polygons`);
 
-            // Set up dimensions
-            const margin = { top: 50, right: 50, bottom: 50, left: 50 };
-            const containerWidth = document.querySelector('.map-container').clientWidth;
-            const width = Math.max(containerWidth - margin.left - margin.right, 1000);
-            const height = Math.max(800, width * 0.6);
+            // Set up fixed dimensions (no dynamic sizing)
+            const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+            const width = 1200;  // Fixed width
+            const height = 700;  // Fixed height
             
             // IMPORTANT: Calculate coordinate bounds from Lower level data ONLY to establish fixed framework
             const lowerCoords = processedData.lowerData.reduce((acc, d) => acc.concat(d.coordinates), []);
@@ -549,7 +556,7 @@
             console.log("Fixed coordinate framework (from Lower level):", { fixedXExtent, fixedYExtent });
             
             // Create fixed scales based on Lower level bounds
-            const padding = 100;
+            const padding = 50;
             const fixedXScale = d3.scaleLinear()
                 .domain(fixedXExtent)
                 .range([padding, width - padding]);
@@ -562,7 +569,7 @@
             window.mapData = processedData;
             window.fixedScales = { xScale: fixedXScale, yScale: fixedYScale };
             
-            // Create SVG
+            // Create SVG with fixed size
             const svg = d3.select('#map')
                 .attr('width', width + margin.left + margin.right)
                 .attr('height', height + margin.top + margin.bottom)
@@ -573,17 +580,10 @@
             const g = svg.append('g')
                 .attr('transform', `translate(${margin.left},${margin.top})`);
             
-            // Add zoom behavior
-            const zoom = d3.zoom()
-                .scaleExtent([0.5, 10])
-                .on('zoom', (event) => {
-                    g.attr('transform', `translate(${margin.left},${margin.top}) ${event.transform}`);
-                });
+            // Remove zoom behavior completely
+            // No zoom functionality
             
-            svg.call(zoom);
-            
-            // Store zoom behavior globally
-            window.mapZoom = zoom;
+            // Store elements globally (no zoom)
             window.mapSvg = svg;
             window.mapG = g;
             window.mapDimensions = { width, height, margin };
@@ -595,6 +595,53 @@
             function getCurrentLevelData() {
                 const level = document.getElementById('level-select').value;
                 return level === 'Lower' ? processedData.lowerData : processedData.upperData;
+            }
+            
+            // Add the missing handleMouseMove function
+            function handleMouseMove(event, d) {
+                // Get the browser zoom level
+                const zoomLevel = window.devicePixelRatio || 1;
+                
+                // Get viewport dimensions
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                
+                // Get tooltip dimensions (estimate)
+                const tooltipWidth = 250; // max-width from CSS
+                const tooltipHeight = 200; // estimated height
+                
+                // Calculate base position accounting for zoom
+                // Use a combination of clientX/Y and pageX/Y based on zoom
+                const baseX = event.clientX;
+                const baseY = event.clientY;
+                
+                let tooltipX = baseX + 15;
+                let tooltipY = baseY - 15;
+                
+                // Adjust if tooltip would go off screen to the right
+                if (tooltipX + tooltipWidth > viewportWidth) {
+                    tooltipX = baseX - tooltipWidth - 15;
+                }
+                
+                // Adjust if tooltip would go off screen at the top
+                if (tooltipY < 0) {
+                    tooltipY = baseY + 15;
+                }
+                
+                // Adjust if tooltip would go off screen at the bottom
+                if (tooltipY + tooltipHeight > viewportHeight) {
+                    tooltipY = baseY - tooltipHeight - 15;
+                }
+                
+                // Ensure tooltip doesn't go off the left edge
+                if (tooltipX < 0) {
+                    tooltipX = 15;
+                }
+                
+                // Update tooltip position
+                tooltip
+                    .style('left', tooltipX + 'px')
+                    .style('top', tooltipY + 'px');
             }
             
             // Update map function with fixed coordinate framework
@@ -609,8 +656,8 @@
                 if (currentData.length === 0) {
                     g.selectAll('*').remove();
                     g.append('text')
-                        .attr('x', width / 2)
-                        .attr('y', height / 2)
+                        .attr('x', 600) // Fixed position based on fixed width
+                        .attr('y', 350) // Fixed position based on fixed height
                         .attr('text-anchor', 'middle')
                         .attr('fill', 'red')
                         .attr('font-size', '16px')
@@ -694,9 +741,36 @@
                         <strong>Votes:</strong> Left: ${left.toLocaleString()}, Mid: ${mid.toLocaleString()}, Right: ${right.toLocaleString()}
                     `);
                     
+                    // Use zoom-aware positioning logic
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    const tooltipWidth = 250; // max-width from CSS
+                    const tooltipHeight = 200; // estimated height
+                    
+                    // Use clientX/Y for zoom-independent positioning
+                    const baseX = event.clientX;
+                    const baseY = event.clientY;
+                    
+                    let tooltipX = baseX + 15;
+                    let tooltipY = baseY - 15;
+                    
+                    // Adjust if tooltip would go off screen
+                    if (tooltipX + tooltipWidth > viewportWidth) {
+                        tooltipX = baseX - tooltipWidth - 15;
+                    }
+                    if (tooltipY < 0) {
+                        tooltipY = baseY + 15;
+                    }
+                    if (tooltipY + tooltipHeight > viewportHeight) {
+                        tooltipY = baseY - tooltipHeight - 15;
+                    }
+                    if (tooltipX < 0) {
+                        tooltipX = 15;
+                    }
+                    
                     tooltip
-                        .style('left', (event.pageX + 10) + 'px')
-                        .style('top', (event.pageY - 10) + 'px')
+                        .style('left', tooltipX + 'px')
+                        .style('top', tooltipY + 'px')
                         .classed('visible', true);
                 }
                 
@@ -717,6 +791,7 @@
                     .attr('opacity', 0.8)
                     .style('cursor', 'pointer')
                     .on('mouseover', handleMouseOver)
+                    .on('mousemove', handleMouseMove)
                     .on('mouseout', handleMouseOut);
                 
                 // Then, render holes with white background first, then color
@@ -742,6 +817,7 @@
                         .attr('opacity', 0.8)
                         .style('cursor', 'pointer')
                         .on('mouseover', handleMouseOver)
+                        .on('mousemove', handleMouseMove)
                         .on('mouseout', handleMouseOut);
                 });
                 
@@ -753,20 +829,14 @@
                             .attr('stroke-width', 2)
                             .style('filter', 'brightness(1.1)');
                     })
-                    .on('mouseleave', function() {
+                                            .on('mouseleave', function() {
                         d3.select(this)
                             .attr('stroke', '#333')
                             .attr('stroke-width', 0.5)
                             .style('filter', 'none');
                     });
                 
-                // Reset zoom when switching levels (but keep original scale for Upper to avoid stretching)
-                if (level === 'Lower') {
-                    window.mapSvg.transition().duration(750).call(
-                        window.mapZoom.transform,
-                        d3.zoomIdentity
-                    );
-                }
+                // No automatic zoom reset needed since there's no zoom
                 
                 updateLegend();
                 updateStats();
@@ -779,6 +849,10 @@
                 
                 if (mode === 'winner') {
                     legendContent.innerHTML = `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #2196f3;"></div>
+                            <span>Left Party</span>
+                        </div>
                         <div class="legend-item">
                             <div class="legend-color" style="background: #ffc107;"></div>
                             <span>Middle Right Party</span>
@@ -868,27 +942,9 @@
             document.getElementById('round-select').addEventListener('change', updateMap);
             document.getElementById('display-mode').addEventListener('change', updateMap);
             
-            document.getElementById('reset-zoom').addEventListener('click', () => {
-                window.mapSvg.transition().duration(750).call(
-                    window.mapZoom.transform,
-                    d3.zoomIdentity
-                );
-            });
-            
-            document.getElementById('zoom-fit').addEventListener('click', () => {
-                const bounds = window.mapG.node().getBBox();
-                const fullWidth = width;
-                const fullHeight = height;
-                const widthScale = fullWidth / bounds.width;
-                const heightScale = fullHeight / bounds.height;
-                const scale = 0.9 * Math.min(widthScale, heightScale);
-                const translate = [fullWidth / 2 - scale * (bounds.x + bounds.width / 2), 
-                                 fullHeight / 2 - scale * (bounds.y + bounds.height / 2)];
-                
-                window.mapSvg.transition().duration(750).call(
-                    window.mapZoom.transform,
-                    d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-                );
+            document.getElementById('reset-view').addEventListener('click', () => {
+                // Simply refresh the current map view
+                updateMap();
             });
             
             // Initial render
@@ -899,8 +955,4 @@
         document.addEventListener('DOMContentLoaded', createMap);
     </script>
 </body>
-</html>d-color" style="background: #2196f3;"></div>
-                            <span>Left Party</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legen
+</html>
