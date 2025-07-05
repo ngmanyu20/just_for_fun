@@ -208,14 +208,22 @@
     <div class="container">
         <div class="header">
             <h1>Queens Gate Election Results - Complete Interactive Map</h1>
-            <p>All 209 Lower Level Districts | Dynamic CSV Loading</p>
+            <p>All 295 Districts (Upper & Lower Levels) | Dynamic CSV Loading</p>
         </div>
         
         <div id="status-message" class="loading">
-            <strong>Loading Data:</strong> Fetching CSV files and processing all 209 Lower level districts...
+            <strong>Loading Data:</strong> Fetching CSV files and processing all 295 districts (Upper & Lower levels)...
         </div>
         
         <div class="controls">
+            <div class="control-group">
+                <label for="level-select">Map Level:</label>
+                <select id="level-select">
+                    <option value="Lower">Lower Level</option>
+                    <option value="Upper">Upper Level</option>
+                </select>
+            </div>
+            
             <div class="control-group">
                 <label for="round-select">Election Round:</label>
                 <select id="round-select">
@@ -290,7 +298,7 @@
         }
 
         // Process coordinates with proper handling of Float and String types
-        function processCoordinates(row) {
+        function processCoordinates(row, level = 'Lower') {
             const coordinates = [];
             const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
             
@@ -308,9 +316,19 @@
                     if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) {
                         // Apply Y-flip transformation: Y = 2100 - Y (following Python logic)
                         const flippedY = 2100 - y;
-                        // Use coordinates with minimal adjustment for full dataset
-                        const scaledX = x - 500; // Adjust base offset for full dataset
-                        const scaledY = flippedY; // Keep Y as-is after flip
+                        
+                        // Use different scaling for Upper level to prevent stretching
+                        let scaledX, scaledY;
+                        if (level === 'Upper') {
+                            // Minimal transformation for Upper level to preserve proportions
+                            scaledX = x;
+                            scaledY = flippedY;
+                        } else {
+                            // Original transformation for Lower level
+                            scaledX = x - 500; // Adjust base offset for full dataset
+                            scaledY = flippedY; // Keep Y as-is after flip
+                        }
+                        
                         coordinates.push([scaledX, scaledY]);
                     }
                 }
@@ -358,71 +376,83 @@
                 console.log("- Total polygons:", polygons.length);
                 console.log("- Total votes:", votes.length);
                 
-                // Filter for Lower level only
+                // Separate by level
                 const lowerPolygons = polygons.filter(d => d.Location === 'Lower');
+                const upperPolygons = polygons.filter(d => d.Location === 'Upper');
                 console.log("- Lower level polygons:", lowerPolygons.length);
+                console.log("- Upper level polygons:", upperPolygons.length);
                 
-                // Get matching vote data for lower polygons
-                const lowerVotes = votes.filter(v => 
-                    lowerPolygons.some(p => p.County === v.County)
+                // Get matching vote data for all polygons
+                const allVotes = votes.filter(v => 
+                    polygons.some(p => p.County === v.County)
                 );
-                console.log("- Matching vote records:", lowerVotes.length);
+                console.log("- Matching vote records:", allVotes.length);
                 
                 // Get unique constituencies
-                const constituencies = [...new Set(lowerVotes.map(v => v.Constituency))].sort();
+                const constituencies = [...new Set(allVotes.map(v => v.Constituency))].sort();
                 console.log("- Constituencies:", constituencies.length, constituencies);
                 
                 // Process election data
-                const processedVotes = processElectionData(lowerVotes);
+                const processedVotes = processElectionData(allVotes);
                 
-                // Combine polygon and vote data
-                const allMapData = [];
-                let successCount = 0;
-                let errorCount = 0;
-                
-                lowerPolygons.forEach(polygon => {
-                    const voteInfo = processedVotes.find(v => v.County === polygon.County);
-                    const coordinates = processCoordinates(polygon);
+                // Function to combine polygon and vote data for a specific level
+                function combineData(levelPolygons, level) {
+                    const mapData = [];
+                    let successCount = 0;
+                    let errorCount = 0;
                     
-                    if (coordinates.length === 0) {
-                        console.warn(`No valid coordinates for ${polygon.County}`);
-                        errorCount++;
-                        return;
-                    }
-                    
-                    if (!voteInfo) {
-                        console.warn(`No vote data for ${polygon.County}`);
-                        errorCount++;
-                        return;
-                    }
-                    
-                    allMapData.push({
-                        ...polygon,
-                        ...voteInfo,
-                        coordinates: coordinates
+                    levelPolygons.forEach(polygon => {
+                        const voteInfo = processedVotes.find(v => v.County === polygon.County);
+                        const coordinates = processCoordinates(polygon, level);
+                        
+                        if (coordinates.length === 0) {
+                            console.warn(`No valid coordinates for ${polygon.County} (${level})`);
+                            errorCount++;
+                            return;
+                        }
+                        
+                        if (!voteInfo) {
+                            console.warn(`No vote data for ${polygon.County} (${level})`);
+                            errorCount++;
+                            return;
+                        }
+                        
+                        mapData.push({
+                            ...polygon,
+                            ...voteInfo,
+                            coordinates: coordinates
+                        });
+                        successCount++;
                     });
-                    successCount++;
-                });
+                    
+                    return { mapData, successCount, errorCount };
+                }
                 
-                // Separate standalone polygons from holes using Parent column
-                const standalonePolygons = allMapData.filter(d => d.County === d.Parent);
-                const holes = allMapData.filter(d => d.County !== d.Parent);
+                // Process both levels
+                const lowerData = combineData(lowerPolygons, 'Lower');
+                const upperData = combineData(upperPolygons, 'Upper');
                 
-                console.log(`Processing complete: ${successCount} successful, ${errorCount} errors`);
-                console.log(`- Standalone polygons: ${standalonePolygons.length}`);
-                console.log(`- Hole polygons: ${holes.length}`);
+                console.log(`Lower processing: ${lowerData.successCount} successful, ${lowerData.errorCount} errors`);
+                console.log(`Upper processing: ${upperData.successCount} successful, ${upperData.errorCount} errors`);
                 
                 // Update status message
                 const statusElement = document.getElementById('status-message');
                 statusElement.className = 'note';
                 statusElement.innerHTML = `
                     <strong>Data Loaded Successfully:</strong> 
-                    ${successCount} Lower level districts from ${constituencies.length} constituencies. 
-                    (${standalonePolygons.length} standalone, ${holes.length} holes)
-                    ${errorCount > 0 ? `${errorCount} districts had data issues.` : 'All data processed correctly.'}
+                    Lower: ${lowerData.successCount} districts, Upper: ${upperData.successCount} districts 
+                    from ${constituencies.length} constituencies.
+                    ${(lowerData.errorCount + upperData.errorCount) > 0 ? 
+                        `${lowerData.errorCount + upperData.errorCount} districts had data issues.` : 
+                        'All data processed correctly.'}
                 `;
                 
-                return { standalonePolygons, holes, allData: allMapData };
+                return { 
+                    lowerData: lowerData.mapData, 
+                    upperData: upperData.mapData,
+                    allVotes: processedVotes,
+                    constituencies 
+                };
                 
             } catch (error) {
                 console.error('Error processing data:', error);
@@ -436,7 +466,7 @@
                     are available in the same directory as this HTML file and you're running this through a web server.</small>
                 `;
                 
-                return { standalonePolygons: [], holes: [], allData: [] };
+                return { lowerData: [], upperData: [], allVotes: [], constituencies: [] };
             }
         }
 
@@ -498,13 +528,12 @@
         async function createMap() {
             const processedData = await processData();
             
-            if (processedData.allData.length === 0) {
+            if (processedData.lowerData.length === 0 && processedData.upperData.length === 0) {
                 document.getElementById('map').innerHTML = '<text x="50" y="50" fill="red" font-size="16">No data available to display</text>';
                 return;
             }
             
-            const { standalonePolygons, holes, allData } = processedData;
-            console.log(`Creating map with ${allData.length} polygons (${standalonePolygons.length} standalone, ${holes.length} holes)`);
+            console.log(`Creating map with Lower: ${processedData.lowerData.length}, Upper: ${processedData.upperData.length} polygons`);
 
             // Set up dimensions
             const margin = { top: 50, right: 50, bottom: 50, left: 50 };
@@ -512,24 +541,27 @@
             const width = Math.max(containerWidth - margin.left - margin.right, 1000);
             const height = Math.max(800, width * 0.6);
             
-            // Get coordinate bounds from all data
-            const allCoords = allData.reduce((acc, d) => acc.concat(d.coordinates), []);
-            const xExtent = d3.extent(allCoords, d => d[0]);
-            const yExtent = d3.extent(allCoords, d => d[1]);
+            // IMPORTANT: Calculate coordinate bounds from Lower level data ONLY to establish fixed framework
+            const lowerCoords = processedData.lowerData.reduce((acc, d) => acc.concat(d.coordinates), []);
+            const fixedXExtent = d3.extent(lowerCoords, d => d[0]);
+            const fixedYExtent = d3.extent(lowerCoords, d => d[1]);
             
-            console.log("Coordinate extents:", { xExtent, yExtent });
-            console.log("SVG dimensions:", { width, height });
+            console.log("Fixed coordinate framework (from Lower level):", { fixedXExtent, fixedYExtent });
             
-            // Create scales
+            // Create fixed scales based on Lower level bounds
             const padding = 100;
-            const xScale = d3.scaleLinear()
-                .domain(xExtent)
+            const fixedXScale = d3.scaleLinear()
+                .domain(fixedXExtent)
                 .range([padding, width - padding]);
             
-            const yScale = d3.scaleLinear()
-                .domain(yExtent)
+            const fixedYScale = d3.scaleLinear()
+                .domain(fixedYExtent)
                 .range([height - padding, padding]);
-
+            
+            // Store processed data globally for access in update functions
+            window.mapData = processedData;
+            window.fixedScales = { xScale: fixedXScale, yScale: fixedYScale };
+            
             // Create SVG
             const svg = d3.select('#map')
                 .attr('width', width + margin.left + margin.right)
@@ -550,17 +582,56 @@
             
             svg.call(zoom);
             
+            // Store zoom behavior globally
+            window.mapZoom = zoom;
+            window.mapSvg = svg;
+            window.mapG = g;
+            window.mapDimensions = { width, height, margin };
+            
             // Tooltip
             const tooltip = d3.select('#tooltip');
             
-            // Update map function with proper layering
+            // Function to get current level data
+            function getCurrentLevelData() {
+                const level = document.getElementById('level-select').value;
+                return level === 'Lower' ? processedData.lowerData : processedData.upperData;
+            }
+            
+            // Update map function with fixed coordinate framework
             function updateMap() {
                 const round = document.getElementById('round-select').value;
                 const mode = document.getElementById('display-mode').value;
+                const level = document.getElementById('level-select').value;
+                const currentData = getCurrentLevelData();
+                
+                console.log(`Updating map: ${level} level, ${currentData.length} polygons`);
+                
+                if (currentData.length === 0) {
+                    g.selectAll('*').remove();
+                    g.append('text')
+                        .attr('x', width / 2)
+                        .attr('y', height / 2)
+                        .attr('text-anchor', 'middle')
+                        .attr('fill', 'red')
+                        .attr('font-size', '16px')
+                        .text(`No ${level} level data available`);
+                    return;
+                }
+                
+                // Always use the fixed scales (from Lower level framework)
+                const xScale = window.fixedScales.xScale;
+                const yScale = window.fixedScales.yScale;
+                
+                console.log(`${level} level using fixed coordinate framework`);
                 
                 // Clear existing polygons
-                g.selectAll('.polygon').remove();
-                g.selectAll('.hole').remove();
+                g.selectAll('.polygon, .hole').remove();
+                
+                // Separate standalone polygons from holes using Parent column
+                const standalonePolygons = currentData.filter(d => d.County === d.Parent);
+                const holes = currentData.filter(d => d.County !== d.Parent);
+                
+                console.log(`${level} level - Standalone: ${standalonePolygons.length}, Holes: ${holes.length}`);
                 
                 // Function to get color for a polygon
                 function getPolygonColor(d) {
@@ -581,7 +652,7 @@
                     }
                 }
                 
-                // Function to create polygon path
+                // Function to create polygon path using fixed scales
                 function getPolygonPath(d) {
                     const coords = d.coordinates.map(coord => [xScale(coord[0]), yScale(coord[1])]);
                     return `M${coords.map(c => c.join(',')).join('L')}Z`;
@@ -611,7 +682,7 @@
                     const rightPct = total > 0 ? (right / total * 100).toFixed(1) : 0;
                     
                     tooltip.html(`
-                        <h4>${d.County} (${d.Constituency})</h4>
+                        <h4>${d.County} (${d.Constituency}) - ${d.Location}</h4>
                         <strong>Winner:</strong> ${info.winner} (${(info.voteShare * 100).toFixed(1)}%)<br>
                         <strong>Margin:</strong> ${(info.margin * 100).toFixed(1)}%<br>
                         <strong>Turnout:</strong> ${d.Turnout.toLocaleString()} / ${d.Electorate.toLocaleString()} (${turnoutRate}%)<br>
@@ -689,6 +760,14 @@
                             .style('filter', 'none');
                     });
                 
+                // Reset zoom when switching levels (but keep original scale for Upper to avoid stretching)
+                if (level === 'Lower') {
+                    window.mapSvg.transition().duration(750).call(
+                        window.mapZoom.transform,
+                        d3.zoomIdentity
+                    );
+                }
+                
                 updateLegend();
                 updateStats();
             }
@@ -700,10 +779,6 @@
                 
                 if (mode === 'winner') {
                     legendContent.innerHTML = `
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #2196f3;"></div>
-                            <span>Left Party</span>
-                        </div>
                         <div class="legend-item">
                             <div class="legend-color" style="background: #ffc107;"></div>
                             <span>Middle Right Party</span>
@@ -738,10 +813,13 @@
             // Update statistics
             function updateStats() {
                 const round = document.getElementById('round-select').value;
+                const level = document.getElementById('level-select').value;
+                const currentData = getCurrentLevelData();
+                
                 let totalLeft = 0, totalMid = 0, totalRight = 0, totalVotes = 0;
                 let totalElectorate = 0, totalTurnout = 0;
                 
-                allData.forEach(d => {
+                currentData.forEach(d => {
                     let left, mid, right;
                     if (round === 'first') {
                         left = d.Left_1st;
@@ -766,10 +844,13 @@
                 const midPct = totalVotes > 0 ? (totalMid / totalVotes * 100).toFixed(1) : 0;
                 const rightPct = totalVotes > 0 ? (totalRight / totalVotes * 100).toFixed(1) : 0;
                 
-                const constituencies = new Set(allData.map(d => d.Constituency));
+                const constituencies = new Set(currentData.map(d => d.Constituency));
+                const standaloneCount = currentData.filter(d => d.County === d.Parent).length;
+                const holeCount = currentData.filter(d => d.County !== d.Parent).length;
                 
                 document.getElementById('stats-content').innerHTML = `
-                    <p><strong>Total Districts:</strong> ${allData.length}</p>
+                    <p><strong>Current Level:</strong> ${level} (${currentData.length} districts)</p>
+                    <p><strong>Structure:</strong> ${standaloneCount} standalone, ${holeCount} holes</p>
                     <p><strong>Constituencies:</strong> ${constituencies.size} (${Array.from(constituencies).sort().join(', ')})</p>
                     <p><strong>Total Electorate:</strong> ${totalElectorate.toLocaleString()}</p>
                     <p><strong>Overall Turnout:</strong> ${totalTurnout.toLocaleString()} (${overallTurnout}%)</p>
@@ -777,19 +858,25 @@
                 `;
             }
             
+            // Store update functions globally
+            window.updateMap = updateMap;
+            window.updateLegend = updateLegend;
+            window.updateStats = updateStats;
+            
             // Event listeners
+            document.getElementById('level-select').addEventListener('change', updateMap);
             document.getElementById('round-select').addEventListener('change', updateMap);
             document.getElementById('display-mode').addEventListener('change', updateMap);
             
             document.getElementById('reset-zoom').addEventListener('click', () => {
-                svg.transition().duration(750).call(
-                    zoom.transform,
+                window.mapSvg.transition().duration(750).call(
+                    window.mapZoom.transform,
                     d3.zoomIdentity
                 );
             });
             
             document.getElementById('zoom-fit').addEventListener('click', () => {
-                const bounds = g.node().getBBox();
+                const bounds = window.mapG.node().getBBox();
                 const fullWidth = width;
                 const fullHeight = height;
                 const widthScale = fullWidth / bounds.width;
@@ -798,8 +885,8 @@
                 const translate = [fullWidth / 2 - scale * (bounds.x + bounds.width / 2), 
                                  fullHeight / 2 - scale * (bounds.y + bounds.height / 2)];
                 
-                svg.transition().duration(750).call(
-                    zoom.transform,
+                window.mapSvg.transition().duration(750).call(
+                    window.mapZoom.transform,
                     d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
                 );
             });
@@ -812,4 +899,8 @@
         document.addEventListener('DOMContentLoaded', createMap);
     </script>
 </body>
-</html>
+</html>d-color" style="background: #2196f3;"></div>
+                            <span>Left Party</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legen
