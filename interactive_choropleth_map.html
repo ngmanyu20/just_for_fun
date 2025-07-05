@@ -1,8 +1,4 @@
-// Add the missing handleMouseMove function
-            function handleMouseMove(event, d) {
-                // Get mouse position relative to the page (works better with zoom)
-                const mouseX = event.pageX;
-       <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -110,45 +106,86 @@
             position: absolute;
             background: white;
             color: black;
-            padding: 12px;
-            border-radius: 6px;
+            padding: 0;
+            border-radius: 4px;
             border: 1px solid #ccc;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            font-family: Arial, sans-serif;
             font-size: 12px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s;
             z-index: 1000;
-            max-width: 250px;
+            min-width: 280px;
         }
         
         .tooltip.visible {
             opacity: 1;
         }
         
-        .tooltip h4 {
-            margin: 0 0 8px 0;
-            color: #333;
+        .tooltip-header {
+            padding: 8px 12px;
             font-size: 14px;
             font-weight: bold;
+            color: black;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f8f9fa;
         }
         
-        .vote-bar {
-            display: flex;
-            height: 20px;
-            margin: 5px 0;
-            border-radius: 10px;
-            overflow: hidden;
+        .tooltip-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
         }
         
-        .vote-segment {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
+        .tooltip-table th {
+            background: #f1f1f1;
+            padding: 6px 8px;
+            text-align: left;
             font-weight: bold;
-            color: white;
-            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        
+        .tooltip-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 11px;
+        }
+        
+        .tooltip-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .party-left {
+            color: #2196f3;
+            font-weight: bold;
+        }
+        
+        .party-mid {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        
+        .party-right {
+            color: #f44336;
+            font-weight: bold;
+        }
+        
+        .winner-row {
+            background: #fff3cd;
+        }
+        
+        .votes-number {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .pct-number {
+            text-align: right;
+            font-weight: bold;
         }
         
         .legend {
@@ -597,48 +634,39 @@
                 return level === 'Lower' ? processedData.lowerData : processedData.upperData;
             }
             
-            // Add the missing handleMouseMove function
+            // Add the missing handleMouseMove function (Direct SVG positioning)
             function handleMouseMove(event, d) {
-                // Get the browser zoom level
-                const zoomLevel = window.devicePixelRatio || 1;
+                // Get mouse position directly from the event coordinates
+                const mouseX = event.clientX;
+                const mouseY = event.clientY;
+                
+                // Get tooltip dimensions
+                const tooltipWidth = 300;
+                const tooltipHeight = 150;
                 
                 // Get viewport dimensions
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
                 
-                // Get tooltip dimensions (estimate)
-                const tooltipWidth = 250; // max-width from CSS
-                const tooltipHeight = 200; // estimated height
+                // Simple positioning - right next to cursor
+                let tooltipX = mouseX + 10;
+                let tooltipY = mouseY - 10;
                 
-                // Calculate base position accounting for zoom
-                // Use a combination of clientX/Y and pageX/Y based on zoom
-                const baseX = event.clientX;
-                const baseY = event.clientY;
-                
-                let tooltipX = baseX + 15;
-                let tooltipY = baseY - 15;
-                
-                // Adjust if tooltip would go off screen to the right
+                // Boundary checks using viewport coordinates
                 if (tooltipX + tooltipWidth > viewportWidth) {
-                    tooltipX = baseX - tooltipWidth - 15;
+                    tooltipX = mouseX - tooltipWidth - 10;
                 }
-                
-                // Adjust if tooltip would go off screen at the top
                 if (tooltipY < 0) {
-                    tooltipY = baseY + 15;
+                    tooltipY = mouseY + 10;
                 }
-                
-                // Adjust if tooltip would go off screen at the bottom
                 if (tooltipY + tooltipHeight > viewportHeight) {
-                    tooltipY = baseY - tooltipHeight - 15;
+                    tooltipY = mouseY - tooltipHeight - 10;
                 }
-                
-                // Ensure tooltip doesn't go off the left edge
                 if (tooltipX < 0) {
-                    tooltipX = 15;
+                    tooltipX = 10;
                 }
                 
-                // Update tooltip position
+                // Update tooltip position using viewport coordinates
                 tooltip
                     .style('left', tooltipX + 'px')
                     .style('top', tooltipY + 'px');
@@ -708,64 +736,100 @@
                 // Function to handle mouse events
                 function handleMouseOver(event, d) {
                     const round = document.getElementById('round-select').value;
-                    let left, mid, right;
+                    let left1st, mid1st, right1st, left2nd, mid2nd, right2nd;
                     
-                    if (round === 'first') {
-                        left = d.Left_1st;
-                        mid = d.Mid_1st;
-                        right = d.Right_1st;
-                    } else {
-                        left = d.Left_2nd_processed;
-                        mid = d.Mid_2nd_processed;
-                        right = d.Right_2nd_processed;
-                    }
+                    // Get first round votes
+                    left1st = d.Left_1st || 0;
+                    mid1st = d.Mid_1st || 0;
+                    right1st = d.Right_1st || 0;
                     
-                    const info = getWinnerInfo(left, mid, right);
-                    const total = left + mid + right;
-                    const turnoutRate = d.Electorate > 0 ? (d.Turnout / d.Electorate * 100).toFixed(1) : 0;
+                    // Get second round votes
+                    left2nd = d.Left_2nd_processed || 0;
+                    mid2nd = d.Mid_2nd_processed || 0;
+                    right2nd = d.Right_2nd_processed || 0;
                     
-                    const leftPct = total > 0 ? (left / total * 100).toFixed(1) : 0;
-                    const midPct = total > 0 ? (mid / total * 100).toFixed(1) : 0;
-                    const rightPct = total > 0 ? (right / total * 100).toFixed(1) : 0;
+                    // Calculate percentages
+                    const total1st = left1st + mid1st + right1st;
+                    const total2nd = left2nd + mid2nd + right2nd;
                     
+                    const left1stPct = total1st > 0 ? (left1st / total1st * 100).toFixed(0) : 0;
+                    const mid1stPct = total1st > 0 ? (mid1st / total1st * 100).toFixed(0) : 0;
+                    const right1stPct = total1st > 0 ? (right1st / total1st * 100).toFixed(0) : 0;
+                    
+                    const left2ndPct = total2nd > 0 ? (left2nd / total2nd * 100).toFixed(0) : 0;
+                    const mid2ndPct = total2nd > 0 ? (mid2nd / total2nd * 100).toFixed(0) : 0;
+                    const right2ndPct = total2nd > 0 ? (right2nd / total2nd * 100).toFixed(0) : 0;
+                    
+                    // Determine winners
+                    const winner1st = left1st >= mid1st && left1st >= right1st ? 'Left' :
+                                     mid1st >= right1st ? 'Mid' : 'Right';
+                    const winner2nd = left2nd >= mid2nd && left2nd >= right2nd ? 'Left' :
+                                     mid2nd >= right2nd ? 'Mid' : 'Right';
+                    
+                    // Create NYTimes-style tooltip
                     tooltip.html(`
-                        <h4>${d.County} (${d.Constituency}) - ${d.Location}</h4>
-                        <strong>Winner:</strong> ${info.winner} (${(info.voteShare * 100).toFixed(1)}%)<br>
-                        <strong>Margin:</strong> ${(info.margin * 100).toFixed(1)}%<br>
-                        <strong>Turnout:</strong> ${d.Turnout.toLocaleString()} / ${d.Electorate.toLocaleString()} (${turnoutRate}%)<br>
-                        <div class="vote-bar">
-                            <div class="vote-segment" style="width: ${leftPct}%; background: #2196f3;">${leftPct}%</div>
-                            <div class="vote-segment" style="width: ${midPct}%; background: #ffc107;">${midPct}%</div>
-                            <div class="vote-segment" style="width: ${rightPct}%; background: #f44336;">${rightPct}%</div>
-                        </div>
-                        <strong>Votes:</strong> Left: ${left.toLocaleString()}, Mid: ${mid.toLocaleString()}, Right: ${right.toLocaleString()}
+                        <div class="tooltip-header">${d.County}</div>
+                        <table class="tooltip-table">
+                            <thead>
+                                <tr>
+                                    <th>Party</th>
+                                    <th>1st Round</th>
+                                    <th>Pct.</th>
+                                    <th>2nd Round</th>
+                                    <th>Pct.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="${winner1st === 'Left' || winner2nd === 'Left' ? 'winner-row' : ''}">
+                                    <td class="party-left">Left</td>
+                                    <td class="votes-number">${left1st.toLocaleString()}</td>
+                                    <td class="pct-number">${left1stPct}%</td>
+                                    <td class="votes-number">${left2nd.toLocaleString()}</td>
+                                    <td class="pct-number">${left2ndPct}%</td>
+                                </tr>
+                                <tr class="${winner1st === 'Mid' || winner2nd === 'Mid' ? 'winner-row' : ''}">
+                                    <td class="party-mid">Mid</td>
+                                    <td class="votes-number">${mid1st.toLocaleString()}</td>
+                                    <td class="pct-number">${mid1stPct}%</td>
+                                    <td class="votes-number">${mid2nd.toLocaleString()}</td>
+                                    <td class="pct-number">${mid2ndPct}%</td>
+                                </tr>
+                                <tr class="${winner1st === 'Right' || winner2nd === 'Right' ? 'winner-row' : ''}">
+                                    <td class="party-right">Right</td>
+                                    <td class="votes-number">${right1st.toLocaleString()}</td>
+                                    <td class="pct-number">${right1stPct}%</td>
+                                    <td class="votes-number">${right2nd.toLocaleString()}</td>
+                                    <td class="pct-number">${right2ndPct}%</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     `);
                     
-                    // Use zoom-aware positioning logic
+                    // Use simple clientX/clientY positioning (most reliable)
+                    const mouseX = event.clientX;
+                    const mouseY = event.clientY;
+                    
+                    const tooltipWidth = 300;
+                    const tooltipHeight = 150;
                     const viewportWidth = window.innerWidth;
                     const viewportHeight = window.innerHeight;
-                    const tooltipWidth = 250; // max-width from CSS
-                    const tooltipHeight = 200; // estimated height
                     
-                    // Use clientX/Y for zoom-independent positioning
-                    const baseX = event.clientX;
-                    const baseY = event.clientY;
+                    // Simple positioning right next to cursor
+                    let tooltipX = mouseX + 10;
+                    let tooltipY = mouseY - 10;
                     
-                    let tooltipX = baseX + 15;
-                    let tooltipY = baseY - 15;
-                    
-                    // Adjust if tooltip would go off screen
+                    // Boundary checks
                     if (tooltipX + tooltipWidth > viewportWidth) {
-                        tooltipX = baseX - tooltipWidth - 15;
+                        tooltipX = mouseX - tooltipWidth - 10;
                     }
                     if (tooltipY < 0) {
-                        tooltipY = baseY + 15;
+                        tooltipY = mouseY + 10;
                     }
                     if (tooltipY + tooltipHeight > viewportHeight) {
-                        tooltipY = baseY - tooltipHeight - 15;
+                        tooltipY = mouseY - tooltipHeight - 10;
                     }
                     if (tooltipX < 0) {
-                        tooltipX = 15;
+                        tooltipX = 10;
                     }
                     
                     tooltip
