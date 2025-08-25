@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Data Processor</title>
+    <title>CSV Data Processor Phone</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -338,7 +338,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>CSV Data Processor</h1>
+        <h1>CSV Data Processor Phone</h1>
         
         <div class="upload-section">
             <h3>Upload CSV File</h3>
@@ -672,6 +672,11 @@
                         button.onmouseup = endDrag;
                         button.onclick = function(e) { handleButtonClick(e, actualIndex); };
                         
+                        // Add wheel event for mouse scrolling
+                        button.addEventListener('wheel', function(e) {
+                            handleWheelScroll(e, actualIndex);
+                        }, { passive: false });
+                        
                         // Add touch events for mobile scrolling
                         button.addEventListener('touchstart', function(e) { 
                             handleTouchStart(e, actualIndex);
@@ -706,6 +711,26 @@
             
             updateStats();
             updatePagination();
+        }
+        
+        function handleWheelScroll(e, index) {
+            e.preventDefault(); // Prevent page scrolling
+            e.stopPropagation(); // Stop event bubbling
+            
+            // Toggle value regardless of scroll direction
+            // This allows continuous toggling as you scroll over multiple cells
+            csvData[index].onMarkedRegister = csvData[index].onMarkedRegister ? 0 : 1;
+            
+            // Update display immediately for responsive feedback
+            const button = e.target;
+            button.className = 'toggle-btn ' + (csvData[index].onMarkedRegister ? 'active' : 'inactive');
+            button.textContent = csvData[index].onMarkedRegister ? '1' : '0';
+            
+            // Throttle full display updates to prevent excessive redraws
+            clearTimeout(window.scrollUpdateTimeout);
+            window.scrollUpdateTimeout = setTimeout(() => {
+                updateStats();
+            }, 50);
         }
         
         function handleTouchStart(e, index) {
@@ -768,9 +793,19 @@
         }
         
         function handleButtonClick(e, index) {
-            if (!isDragging && !touchScrolling) {
-                toggleValue(index);
-            }
+            // Always toggle on click, regardless of other interaction states
+            e.preventDefault();
+            e.stopPropagation();
+            
+            csvData[index].onMarkedRegister = csvData[index].onMarkedRegister ? 0 : 1;
+            
+            // Update display immediately for responsive feedback
+            const button = e.target;
+            button.className = 'toggle-btn ' + (csvData[index].onMarkedRegister ? 'active' : 'inactive');
+            button.textContent = csvData[index].onMarkedRegister ? '1' : '0';
+            
+            // Update stats
+            updateStats();
         }
         
         function toggleValue(index) {
