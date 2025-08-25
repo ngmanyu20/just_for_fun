@@ -65,7 +65,7 @@
             padding: 1px 2px;
             text-align: left;
             height: 0.4cm;
-            font-size: 9px;
+            font-size: 11px; /* Increased from 9px */
             line-height: 1;
             margin: 0;
             border-spacing: 0;
@@ -76,7 +76,7 @@
             background-color: #f8f9fa;
             font-weight: bold;
             color: #333;
-            font-size: 10px;
+            font-size: 12px; /* Increased from 10px */
         }
         
         .data-table tr:nth-child(even) {
@@ -85,9 +85,33 @@
         
         .fullpoll-text {
             font-weight: bold;
-            font-size: 8px;
+            font-size: 10px; /* Increased from 8px */
             display: block;
             margin-bottom: 1px;
+            text-align: right; /* Right-aligned text */
+            direction: rtl; /* Right-to-left direction for better right alignment */
+            unicode-bidi: bidi-override;
+        }
+        
+        .action-column {
+            position: relative;
+            overflow: hidden;
+            touch-action: pan-y; /* Enable vertical touch scrolling */
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        .scroll-container {
+            height: 100%;
+            overflow-y: auto;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+        }
+        
+        .scroll-container::-webkit-scrollbar {
+            display: none; /* Chrome/Safari/Opera */
         }
         
         .toggle-btn {
@@ -96,7 +120,7 @@
             border-radius: 1px !important;
             cursor: pointer;
             font-weight: bold !important;
-            font-size: 6px !important;
+            font-size: 8px !important; /* Increased from 6px */
             line-height: 1 !important;
             transition: all 0.2s;
             user-select: none;
@@ -107,6 +131,7 @@
             width: 100% !important;
             max-height: 0.25cm !important;
             box-sizing: border-box !important;
+            touch-action: manipulation; /* Optimize for touch */
         }
         
         .toggle-btn.active {
@@ -121,6 +146,10 @@
         
         .toggle-btn:hover {
             opacity: 0.8;
+        }
+        
+        .toggle-btn:active {
+            transform: scale(0.95);
         }
         
         .data-table tr.drag-toggled {
@@ -144,6 +173,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
+            touch-action: manipulation;
         }
         
         .start-btn {
@@ -182,15 +212,18 @@
         }
         
         .pagination-btn {
-            padding: 5px 12px;
+            padding: 8px 16px; /* Increased padding for better touch targets */
             margin: 0 5px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 14px; /* Increased from 12px */
             background-color: #007bff;
             color: white;
+            touch-action: manipulation;
+            min-width: 44px; /* Minimum touch target size */
+            min-height: 44px;
         }
         
         .pagination-btn:hover {
@@ -208,6 +241,7 @@
             margin: 0 15px;
             font-weight: bold;
             color: #333;
+            font-size: 16px; /* Increased font size */
         }
         
         .download-section {
@@ -227,6 +261,8 @@
             border-radius: 5px;
             cursor: pointer;
             margin: 0 10px;
+            touch-action: manipulation;
+            min-height: 44px;
         }
         
         .download-btn:hover {
@@ -239,10 +275,66 @@
             background-color: #e9ecef;
             border-radius: 5px;
             text-align: center;
+            font-size: 16px; /* Increased font size */
         }
         
         .hidden {
             display: none;
+        }
+        
+        /* Touch-friendly scrolling indicator */
+        .scroll-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 3px;
+            height: calc(100% - 4px);
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        
+        .scroll-thumb {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 2px;
+            transition: opacity 0.3s;
+            opacity: 0;
+        }
+        
+        .action-column:hover .scroll-thumb,
+        .action-column:active .scroll-thumb {
+            opacity: 1;
+        }
+        
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+                margin: 10px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                font-size: 12px; /* Even larger on mobile */
+            }
+            
+            .fullpoll-text {
+                font-size: 11px; /* Larger on mobile */
+            }
+            
+            .toggle-btn {
+                font-size: 9px !important; /* Larger on mobile */
+                min-height: 0.3cm !important;
+                height: 0.3cm !important;
+            }
+            
+            .timing-btn,
+            .pagination-btn,
+            .download-btn {
+                min-height: 48px; /* Larger touch targets on mobile */
+                padding: 12px 20px;
+            }
         }
     </style>
 </head>
@@ -257,8 +349,8 @@
         </div>
         
         <div id="dataSection" class="hidden">
-            <div style="margin: 15px 0; text-align: center; color: #666; font-style: italic;">
-                Tip: Click individual buttons or drag across action buttons to toggle multiple rows
+            <div style="margin: 15px 0; text-align: center; color: #666; font-style: italic; font-size: 16px;">
+                Tip: Click individual buttons, drag across action buttons, or use touch scrolling to toggle multiple rows
             </div>
             
             <div class="timing-controls">
@@ -324,6 +416,9 @@
         let currentPage = 1;
         const rowsPerPage = 200;
         let originalFileName = '';
+        let touchScrolling = false;
+        let scrollStartY = 0;
+        let scrollStartValue = 0;
         
         document.getElementById('csvFile').addEventListener('change', handleFile);
         
@@ -565,15 +660,32 @@
                         fullPollSpan.textContent = row.fullPoll;
                         tdFullPoll.appendChild(fullPollSpan);
                         
-                        // Action column
+                        // Action column with touch scrolling
                         const tdAction = document.createElement('td');
+                        tdAction.className = 'action-column';
+                        
                         const button = document.createElement('button');
                         button.className = 'toggle-btn ' + (row.onMarkedRegister ? 'active' : 'inactive');
                         button.textContent = row.onMarkedRegister ? '1' : '0';
+                        
+                        // Add mouse events
                         button.onmousedown = function(e) { startDrag(e, actualIndex); };
                         button.onmouseenter = function(e) { dragOver(e, actualIndex); };
                         button.onmouseup = endDrag;
                         button.onclick = function(e) { handleButtonClick(e, actualIndex); };
+                        
+                        // Add touch events for mobile scrolling
+                        button.addEventListener('touchstart', function(e) { 
+                            handleTouchStart(e, actualIndex);
+                        }, { passive: false });
+                        
+                        button.addEventListener('touchmove', function(e) { 
+                            handleTouchMove(e, actualIndex);
+                        }, { passive: false });
+                        
+                        button.addEventListener('touchend', function(e) { 
+                            handleTouchEnd(e, actualIndex);
+                        }, { passive: false });
                         
                         if (draggedRows.has(actualIndex)) {
                             tdAction.style.backgroundColor = '#d4edda';
@@ -596,6 +708,37 @@
             
             updateStats();
             updatePagination();
+        }
+        
+        function handleTouchStart(e, index) {
+            touchScrolling = true;
+            scrollStartY = e.touches[0].clientY;
+            scrollStartValue = csvData[index].onMarkedRegister;
+            e.preventDefault();
+        }
+        
+        function handleTouchMove(e, index) {
+            if (!touchScrolling) return;
+            
+            e.preventDefault();
+            const deltaY = e.touches[0].clientY - scrollStartY;
+            
+            // If the user has moved more than 20 pixels vertically, toggle the value
+            if (Math.abs(deltaY) > 20) {
+                const newValue = deltaY > 0 ? 1 : 0;
+                if (csvData[index].onMarkedRegister !== newValue) {
+                    csvData[index].onMarkedRegister = newValue;
+                    displayData();
+                }
+                scrollStartY = e.touches[0].clientY;
+            }
+        }
+        
+        function handleTouchEnd(e, index) {
+            if (touchScrolling) {
+                touchScrolling = false;
+                e.preventDefault();
+            }
         }
         
         function startDrag(e, index) {
@@ -627,7 +770,7 @@
         }
         
         function handleButtonClick(e, index) {
-            if (!isDragging) {
+            if (!isDragging && !touchScrolling) {
                 toggleValue(index);
             }
         }
@@ -708,84 +851,4 @@
         }
         
         function downloadCSV() {
-            if (csvData.length === 0) {
-                alert('No data to download');
-                return;
-            }
-            
-            let csvContent = 'FullPoll,OnMarkedRegister\n';
-            
-            csvData.forEach(row => {
-                const fullPoll = row.fullPoll.includes(',') ? '"' + row.fullPoll + '"' : row.fullPoll;
-                csvContent += fullPoll + ',' + row.onMarkedRegister + '\n';
-            });
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            
-            if (link.download !== undefined) {
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                
-                // Use exact original filename for CSV
-                const downloadName = originalFileName ? originalFileName + '.csv' : 'processed_data.csv';
-                link.setAttribute('download', downloadName);
-                
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-        }
-        
-        function downloadXLSX() {
-            if (csvData.length === 0) {
-                alert('No data to download');
-                return;
-            }
-            
-            // Create worksheet data
-            const wsData = [['FullPoll', 'OnMarkedRegister']];
-            csvData.forEach(row => {
-                wsData.push([row.fullPoll, row.onMarkedRegister]);
-            });
-            
-            // Create workbook and worksheet
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
-            
-            // Add worksheet to workbook
-            XLSX.utils.book_append_sheet(wb, ws, 'Data');
-            
-            // Download with exact original filename
-            const downloadName = originalFileName ? originalFileName + '.xlsx' : 'processed_data.xlsx';
-            XLSX.writeFile(wb, downloadName);
-        }
-        
-        document.addEventListener('selectstart', function(e) {
-            if (isDragging) {
-                e.preventDefault();
-            }
-        });
-        
-        document.addEventListener('mouseup', endDrag);
-        
-        // Keyboard navigation
-        document.addEventListener('keydown', function(e) {
-            // Only handle keyboard navigation if data is loaded
-            if (csvData.length === 0) return;
-            
-            // Check if user is typing in an input field
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            
-            if (e.key === '>' || e.key === '.') {
-                e.preventDefault();
-                nextPage();
-            } else if (e.key === '<' || e.key === ',') {
-                e.preventDefault();
-                previousPage();
-            }
-        });
-    </script>
-</body>
-</html>
+            if (csvData.length === 0
