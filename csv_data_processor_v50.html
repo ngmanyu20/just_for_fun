@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Data Processor</title>
+    <title>CSV Data Processor Phone</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -338,7 +338,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>CSV Data Processor</h1>
+        <h1>CSV Data Processor Phone</h1>
         
         <div class="upload-section">
             <h3>Upload CSV File</h3>
@@ -414,6 +414,8 @@
         let currentPage = 1;
         const rowsPerPage = 200;
         let originalFileName = '';
+        let isTouchDragging = false;
+        let touchDraggedRows = new Set();
         
         document.getElementById('csvFile').addEventListener('change', handleFile);
         
@@ -674,25 +676,17 @@
                             handleWheelScroll(e, actualIndex);
                         }, { passive: false });
                         
-                        // Simplified touch events for mobile
+                        // Simplified touch events for mobile with drag support
                         button.addEventListener('touchstart', function(e) {
-                            e.preventDefault();
-                            e.stopPropagation();
+                            handleTouchStart(e, actualIndex);
                         }, { passive: false });
                         
                         button.addEventListener('touchend', function(e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            // Direct toggle on touch end (like a click)
-                            csvData[actualIndex].onMarkedRegister = csvData[actualIndex].onMarkedRegister ? 0 : 1;
-                            
-                            // Update button immediately
-                            const btn = e.target;
-                            btn.className = 'toggle-btn ' + (csvData[actualIndex].onMarkedRegister ? 'active' : 'inactive');
-                            btn.textContent = csvData[actualIndex].onMarkedRegister ? '1' : '0';
-                            
-                            updateStats();
+                            handleTouchEnd(e, actualIndex);
                         }, { passive: false });
+                        
+                        // Add data attribute to track the actual index
+                        button.setAttribute('data-index', actualIndex);
                         
                         if (draggedRows.has(actualIndex)) {
                             tdAction.style.backgroundColor = '#d4edda';
@@ -715,6 +709,73 @@
             
             updateStats();
             updatePagination();
+        }
+        
+        function handleTouchStart(e, index) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isTouchDragging = true;
+            touchDraggedRows.clear();
+            
+            // Toggle the first touched button
+            csvData[index].onMarkedRegister = csvData[index].onMarkedRegister ? 0 : 1;
+            touchDraggedRows.add(index);
+            
+            // Update button immediately
+            const button = e.target;
+            button.className = 'toggle-btn ' + (csvData[index].onMarkedRegister ? 'active' : 'inactive');
+            button.textContent = csvData[index].onMarkedRegister ? '1' : '0';
+        }
+        
+        function handleTouchEnd(e, index) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (isTouchDragging) {
+                isTouchDragging = false;
+                
+                // If only one button was touched (no dragging), it's a simple tap
+                if (touchDraggedRows.size === 1 && !touchDraggedRows.has(index)) {
+                    // Simple tap - toggle this button
+                    csvData[index].onMarkedRegister = csvData[index].onMarkedRegister ? 0 : 1;
+                    
+                    // Update button immediately
+                    const button = e.target;
+                    button.className = 'toggle-btn ' + (csvData[index].onMarkedRegister ? 'active' : 'inactive');
+                    button.textContent = csvData[index].onMarkedRegister ? '1' : '0';
+                }
+                
+                setTimeout(() => {
+                    touchDraggedRows.clear();
+                    updateStats();
+                }, 100);
+            }
+        }
+        
+        function handleTouchMove(e) {
+            if (!isTouchDragging) return;
+            
+            e.preventDefault();
+            
+            // Get the element under the current touch position
+            const touch = e.touches[0];
+            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            if (elementBelow && elementBelow.classList.contains('toggle-btn')) {
+                // Get the actual index from the data attribute
+                const actualIndex = parseInt(elementBelow.getAttribute('data-index'));
+                
+                if (!isNaN(actualIndex) && actualIndex < csvData.length && !touchDraggedRows.has(actualIndex)) {
+                    // Toggle this button
+                    csvData[actualIndex].onMarkedRegister = csvData[actualIndex].onMarkedRegister ? 0 : 1;
+                    touchDraggedRows.add(actualIndex);
+                    
+                    // Update button immediately
+                    elementBelow.className = 'toggle-btn ' + (csvData[actualIndex].onMarkedRegister ? 'active' : 'inactive');
+                    elementBelow.textContent = csvData[actualIndex].onMarkedRegister ? '1' : '0';
+                }
+            }
         }
         
         function handleWheelScroll(e, index) {
@@ -918,6 +979,9 @@
         });
         
         document.addEventListener('mouseup', endDrag);
+        
+        // Add global touch move listener for drag functionality
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
         
         // Prevent zoom on double-tap for better mobile experience
         document.addEventListener('touchend', function (event) {
