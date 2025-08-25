@@ -851,4 +851,95 @@
         }
         
         function downloadCSV() {
-            if (csvData.length === 0
+            if (csvData.length === 0) {
+                alert('No data to download');
+                return;
+            }
+            
+            let csvContent = 'FullPoll,OnMarkedRegister\n';
+            
+            csvData.forEach(row => {
+                const fullPoll = row.fullPoll.includes(',') ? '"' + row.fullPoll + '"' : row.fullPoll;
+                csvContent += fullPoll + ',' + row.onMarkedRegister + '\n';
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                
+                // Use exact original filename for CSV
+                const downloadName = originalFileName ? originalFileName + '.csv' : 'processed_data.csv';
+                link.setAttribute('download', downloadName);
+                
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+        
+        function downloadXLSX() {
+            if (csvData.length === 0) {
+                alert('No data to download');
+                return;
+            }
+            
+            // Create worksheet data
+            const wsData = [['FullPoll', 'OnMarkedRegister']];
+            csvData.forEach(row => {
+                wsData.push([row.fullPoll, row.onMarkedRegister]);
+            });
+            
+            // Create workbook and worksheet
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Add worksheet to workbook
+            XLSX.utils.book_append_sheet(wb, ws, 'Data');
+            
+            // Download with exact original filename
+            const downloadName = originalFileName ? originalFileName + '.xlsx' : 'processed_data.xlsx';
+            XLSX.writeFile(wb, downloadName);
+        }
+        
+        document.addEventListener('selectstart', function(e) {
+            if (isDragging) {
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('mouseup', endDrag);
+        
+        // Prevent zoom on double-tap for better mobile experience
+        document.addEventListener('touchend', function (event) {
+            var now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        var lastTouchEnd = 0;
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            // Only handle keyboard navigation if data is loaded
+            if (csvData.length === 0) return;
+            
+            // Check if user is typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            if (e.key === '>' || e.key === '.') {
+                e.preventDefault();
+                nextPage();
+            } else if (e.key === '<' || e.key === ',') {
+                e.preventDefault();
+                previousPage();
+            }
+        });
+    </script>
+</body>
+</html>
