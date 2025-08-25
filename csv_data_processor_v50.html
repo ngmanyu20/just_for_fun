@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Data Processor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        
+        .file-input {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .file-input:hover {
+            background-color: #0056b3;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            table-layout: fixed;
+        }
+        
+        .data-table th,
+        .data-table td {
+            width: 10%;
+            border: 1px solid #ddd;
+            padding: 1px 2px;
+            text-align: left;
+            height: 0.4cm;
+            font-size: 9px;
+            line-height: 1;
+            margin: 0;
+            border-spacing: 0;
+            vertical-align: top;
+        }
+        
+        .data-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #333;
+            font-size: 10px;
+        }
+        
+        .data-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .fullpoll-text {
+            font-weight: bold;
+            font-size: 8px;
+            display: block;
+            margin-bottom: 1px;
+        }
+        
+        .toggle-btn {
+            padding: 0px 1px !important;
+            border: none !important;
+            border-radius: 1px !important;
+            cursor: pointer;
+            font-weight: bold !important;
+            font-size: 6px !important;
+            line-height: 1 !important;
+            transition: all 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            height: 0.25cm !important;
+            width: 100% !important;
+            max-height: 0.25cm !important;
+            box-sizing: border-box !important;
+        }
+        
+        .toggle-btn.active {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .toggle-btn.inactive {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .toggle-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .data-table tr.drag-toggled {
+            background-color: #d4edda !important;
+            border-left: 4px solid #28a745;
+        }
+        
+        .timing-controls {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e7f3ff;
+            border-radius: 5px;
+            text-align: center;
+            border: 1px solid #b3d9ff;
+        }
+        
+        .timing-btn {
+            padding: 8px 16px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .start-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .end-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .timing-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .timing-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .timing-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .pagination-controls {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }
+        
+        .pagination-btn {
+            padding: 5px 12px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .pagination-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .pagination-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .page-info {
+            display: inline-block;
+            margin: 0 15px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .download-section {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .download-btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        
+        .download-btn:hover {
+            background-color: #218838;
+        }
+        
+        .stats {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV Data Processor</h1>
+        
+        <div class="upload-section">
+            <h3>Upload CSV File</h3>
+            <input type="file" id="csvFile" accept=".csv,.xlsx" class="file-input">
+            <p>Select a CSV or XLSX file with FullPoll and OnMarkedRegister columns</p>
+        </div>
+        
+        <div id="dataSection" class="hidden">
+            <div style="margin: 15px 0; text-align: center; color: #666; font-style: italic;">
+                Tip: Click individual buttons or drag across action buttons to toggle multiple rows
+            </div>
+            
+            <div class="timing-controls">
+                <h4>Timing Controls</h4>
+                <button class="timing-btn start-btn" id="startBtn" onclick="recordStartTime()">Record Start Time</button>
+                <button class="timing-btn end-btn" id="endBtn" onclick="recordEndTime()" disabled>Record End Time</button>
+                <div class="timing-info" id="timingInfo"></div>
+            </div>
+            
+            <div class="pagination-controls">
+                <button class="pagination-btn" id="prevBtn" onclick="previousPage()" disabled>&lt; Previous</button>
+                <span class="page-info" id="pageInfo">Page 1 of 1</span>
+                <button class="pagination-btn" id="nextBtn" onclick="nextPage()" disabled>Next &gt;</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Col 1</th>
+                            <th>Col 2</th>
+                            <th>Col 3</th>
+                            <th>Col 4</th>
+                            <th>Col 5</th>
+                            <th>Col 6</th>
+                            <th>Col 7</th>
+                            <th>Col 8</th>
+                            <th>Col 9</th>
+                            <th>Col 10</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="timing-controls">
+                <button class="timing-btn end-btn" id="endBtn2" onclick="recordEndTime()" disabled>Record End Time</button>
+                <div class="timing-info" id="timingInfo2"></div>
+            </div>
+            
+            <div class="stats">
+                <strong>Total Records: </strong><span id="totalRecords">0</span> | 
+                <strong>Active (1): </strong><span id="activeCount">0</span> | 
+                <strong>Inactive (0): </strong><span id="inactiveCount">0</span>
+            </div>
+            
+            <div class="download-section">
+                <h3>Download Processed Data</h3>
+                <button class="download-btn" onclick="downloadCSV()">Download CSV</button>
+                <button class="download-btn" onclick="downloadXLSX()">Download XLSX</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let csvData = [];
+        let isDragging = false;
+        let draggedRows = new Set();
+        let startTime = null;
+        let endTime = null;
+        let currentPage = 1;
+        const rowsPerPage = 200;
+        let originalFileName = '';
+        
+        document.getElementById('csvFile').addEventListener('change', handleFile);
+        
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            console.log('File selected:', file.name, file.type);
+            
+            // Store original filename without extension
+            originalFileName = file.name.replace(/\.(csv|xlsx)$/i, '');
+            
+            const isCSV = file.name.toLowerCase().endsWith('.csv');
+            const isXLSX = file.name.toLowerCase().endsWith('.xlsx');
+            
+            if (!isCSV && !isXLSX) {
+                alert('Please select a CSV or XLSX file');
+                return;
+            }
+            
+            const reader = new FileReader();
+            
+            if (isCSV) {
+                reader.onload = function(e) {
+                    console.log('CSV file loaded, starting parse...');
+                    const csv = e.target.result;
+                    parseCSV(csv);
+                };
+                reader.readAsText(file);
+            } else if (isXLSX) {
+                reader.onload = function(e) {
+                    console.log('XLSX file loaded, starting parse...');
+                    const data = new Uint8Array(e.target.result);
+                    parseXLSX(data);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+            
+            reader.onerror = function(e) {
+                console.error('Error reading file:', e);
+                alert('Error reading file. Please try again.');
+            };
+        }
+        
+        function parseCSV(csv) {
+            console.log('Parsing CSV, first 200 chars:', csv.substring(0, 200));
+            
+            const lines = csv.split('\n');
+            console.log('Total lines found:', lines.length);
+            
+            if (lines.length < 2) {
+                alert('CSV file appears to be empty or invalid');
+                return;
+            }
+            
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            console.log('Headers found:', headers);
+            
+            const fullPollIndex = headers.findIndex(h => h.toLowerCase().includes('fullpoll'));
+            const onMarkedRegisterIndex = headers.findIndex(h => h.toLowerCase().includes('onmarkedregister'));
+            
+            console.log('FullPoll column index:', fullPollIndex);
+            console.log('OnMarkedRegister column index:', onMarkedRegisterIndex);
+            
+            if (fullPollIndex === -1 || onMarkedRegisterIndex === -1) {
+                alert('CSV must contain FullPoll and OnMarkedRegister columns. Found headers: ' + headers.join(', '));
+                return;
+            }
+            
+            csvData = [];
+            let processedRows = 0;
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line === '') continue;
+                
+                const values = parseCSVLine(line);
+                if (values.length >= Math.max(fullPollIndex, onMarkedRegisterIndex) + 1) {
+                    const fullPoll = values[fullPollIndex].replace(/"/g, '').trim();
+                    let onMarkedRegister = values[onMarkedRegisterIndex].replace(/"/g, '').trim();
+                    
+                    if (onMarkedRegister === '' || onMarkedRegister === 'null' || onMarkedRegister === 'NULL' || isNaN(onMarkedRegister)) {
+                        onMarkedRegister = 0;
+                    } else {
+                        onMarkedRegister = parseInt(onMarkedRegister) || 0;
+                    }
+                    
+                    onMarkedRegister = onMarkedRegister ? 1 : 0;
+                    
+                    csvData.push({
+                        fullPoll: fullPoll,
+                        onMarkedRegister: onMarkedRegister
+                    });
+                    processedRows++;
+                }
+            }
+            
+            console.log('Successfully processed rows:', processedRows);
+            console.log('Sample data:', csvData.slice(0, 3));
+            
+            if (csvData.length === 0) {
+                alert('No valid data found in CSV file');
+                return;
+            }
+            
+            currentPage = 1;
+            displayData();
+            document.getElementById('dataSection').classList.remove('hidden');
+        }
+        
+        function parseXLSX(data) {
+            console.log('Parsing XLSX file...');
+            
+            try {
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                // Convert to JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                console.log('XLSX data loaded, rows:', jsonData.length);
+                
+                if (jsonData.length < 2) {
+                    alert('XLSX file appears to be empty or invalid');
+                    return;
+                }
+                
+                const headers = jsonData[0].map(h => String(h || '').trim());
+                console.log('Headers found:', headers);
+                
+                // Find column indices (case insensitive)
+                const fullPollIndex = headers.findIndex(h => h.toLowerCase().includes('fullpoll'));
+                const onMarkedRegisterIndex = headers.findIndex(h => h.toLowerCase().includes('onmarkedregister'));
+                
+                console.log('FullPoll column index:', fullPollIndex);
+                console.log('OnMarkedRegister column index:', onMarkedRegisterIndex);
+                
+                if (fullPollIndex === -1 || onMarkedRegisterIndex === -1) {
+                    alert('XLSX must contain FullPoll and OnMarkedRegister columns. Found headers: ' + headers.join(', '));
+                    return;
+                }
+                
+                csvData = [];
+                let processedRows = 0;
+                
+                for (let i = 1; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (!row || row.length === 0) continue;
+                    
+                    const fullPoll = String(row[fullPollIndex] || '').trim();
+                    let onMarkedRegister = String(row[onMarkedRegisterIndex] || '').trim();
+                    
+                    if (fullPoll === '') continue;
+                    
+                    // Convert null, empty, or non-numeric values to 0
+                    if (onMarkedRegister === '' || onMarkedRegister === 'null' || onMarkedRegister === 'NULL' || isNaN(onMarkedRegister)) {
+                        onMarkedRegister = 0;
+                    } else {
+                        onMarkedRegister = parseInt(onMarkedRegister) || 0;
+                    }
+                    
+                    // Ensure it's either 0 or 1
+                    onMarkedRegister = onMarkedRegister ? 1 : 0;
+                    
+                    csvData.push({
+                        fullPoll: fullPoll,
+                        onMarkedRegister: onMarkedRegister
+                    });
+                    processedRows++;
+                }
+                
+                console.log('Successfully processed XLSX rows:', processedRows);
+                console.log('Sample data:', csvData.slice(0, 3));
+                
+                if (csvData.length === 0) {
+                    alert('No valid data found in XLSX file');
+                    return;
+                }
+                
+                currentPage = 1;
+                displayData();
+                document.getElementById('dataSection').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error parsing XLSX:', error);
+                alert('Error parsing XLSX file. Please check the file format.');
+            }
+        }
+        
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            result.push(current);
+            return result;
+        }
+        
+        function displayData() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, csvData.length);
+            const currentPageData = csvData.slice(startIndex, endIndex);
+            
+            // Create 40 rows (40 data points per column pair)
+            const maxRows = 40;
+            
+            for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
+                const tr = document.createElement('tr');
+                
+                // Create 10 columns (5 pairs of FullPoll + Action)
+                for (let colPair = 0; colPair < 5; colPair++) {
+                    // Calculate the data index for this column pair
+                    const dataIndex = colPair * 40 + rowIndex;
+                    const actualIndex = startIndex + dataIndex;
+                    
+                    if (dataIndex < currentPageData.length) {
+                        const row = currentPageData[dataIndex];
+                        
+                        // FullPoll column
+                        const tdFullPoll = document.createElement('td');
+                        const fullPollSpan = document.createElement('span');
+                        fullPollSpan.className = 'fullpoll-text';
+                        fullPollSpan.textContent = row.fullPoll;
+                        tdFullPoll.appendChild(fullPollSpan);
+                        
+                        // Action column
+                        const tdAction = document.createElement('td');
+                        const button = document.createElement('button');
+                        button.className = 'toggle-btn ' + (row.onMarkedRegister ? 'active' : 'inactive');
+                        button.textContent = row.onMarkedRegister ? '1' : '0';
+                        button.onmousedown = function(e) { startDrag(e, actualIndex); };
+                        button.onmouseenter = function(e) { dragOver(e, actualIndex); };
+                        button.onmouseup = endDrag;
+                        button.onclick = function(e) { handleButtonClick(e, actualIndex); };
+                        
+                        if (draggedRows.has(actualIndex)) {
+                            tdAction.style.backgroundColor = '#d4edda';
+                        }
+                        
+                        tdAction.appendChild(button);
+                        tr.appendChild(tdFullPoll);
+                        tr.appendChild(tdAction);
+                    } else {
+                        // Empty cells for remaining columns
+                        const tdEmpty1 = document.createElement('td');
+                        const tdEmpty2 = document.createElement('td');
+                        tr.appendChild(tdEmpty1);
+                        tr.appendChild(tdEmpty2);
+                    }
+                }
+                
+                tbody.appendChild(tr);
+            }
+            
+            updateStats();
+            updatePagination();
+        }
+        
+        function startDrag(e, index) {
+            e.preventDefault();
+            isDragging = true;
+            draggedRows.clear();
+            
+            toggleValue(index);
+            draggedRows.add(index);
+        }
+        
+        function dragOver(e, index) {
+            if (isDragging && e.buttons === 1) {
+                if (!draggedRows.has(index)) {
+                    toggleValue(index);
+                    draggedRows.add(index);
+                }
+            }
+        }
+        
+        function endDrag() {
+            if (isDragging) {
+                isDragging = false;
+                setTimeout(function() {
+                    draggedRows.clear();
+                    displayData();
+                }, 300);
+            }
+        }
+        
+        function handleButtonClick(e, index) {
+            if (!isDragging) {
+                toggleValue(index);
+            }
+        }
+        
+        function toggleValue(index) {
+            csvData[index].onMarkedRegister = csvData[index].onMarkedRegister ? 0 : 1;
+            displayData();
+        }
+        
+        function recordStartTime() {
+            startTime = new Date();
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('endBtn').disabled = false;
+            document.getElementById('endBtn2').disabled = false;
+            
+            const timeStr = startTime.toLocaleTimeString();
+            document.getElementById('timingInfo').innerHTML = '<strong>Started at:</strong> ' + timeStr;
+            document.getElementById('timingInfo2').innerHTML = '<strong>Started at:</strong> ' + timeStr;
+        }
+        
+        function recordEndTime() {
+            if (!startTime) return;
+            
+            endTime = new Date();
+            const timeDiff = endTime - startTime;
+            const minutes = Math.floor(timeDiff / 60000);
+            const seconds = Math.floor((timeDiff % 60000) / 1000);
+            
+            const totalEntries = csvData.length;
+            const entriesPer10Min = totalEntries > 0 ? (totalEntries / (timeDiff / 1000)) * 600 : 0;
+            
+            const endTimeStr = endTime.toLocaleTimeString();
+            const resultInfo = '<strong>Ended at:</strong> ' + endTimeStr + '<br>' +
+                '<strong>Total Time:</strong> ' + minutes + 'm ' + seconds + 's<br>' +
+                '<strong>Speed:</strong> ' + entriesPer10Min.toFixed(0) + ' entries per 10 minutes';
+            
+            document.getElementById('timingInfo').innerHTML = resultInfo;
+            document.getElementById('timingInfo2').innerHTML = resultInfo;
+            
+            document.getElementById('endBtn').disabled = true;
+            document.getElementById('endBtn2').disabled = true;
+            document.getElementById('startBtn').disabled = false;
+        }
+        
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayData();
+                updatePagination();
+            }
+        }
+        
+        function nextPage() {
+            const totalPages = Math.ceil(csvData.length / rowsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                displayData();
+                updatePagination();
+            }
+        }
+        
+        function updatePagination() {
+            const totalPages = Math.ceil(csvData.length / rowsPerPage);
+            document.getElementById('pageInfo').textContent = 'Page ' + currentPage + ' of ' + totalPages;
+            
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages === 0;
+        }
+        
+        function updateStats() {
+            const total = csvData.length;
+            const active = csvData.filter(row => row.onMarkedRegister === 1).length;
+            const inactive = total - active;
+            
+            document.getElementById('totalRecords').textContent = total;
+            document.getElementById('activeCount').textContent = active;
+            document.getElementById('inactiveCount').textContent = inactive;
+        }
+        
+        function downloadCSV() {
+            if (csvData.length === 0) {
+                alert('No data to download');
+                return;
+            }
+            
+            let csvContent = 'FullPoll,OnMarkedRegister\n';
+            
+            csvData.forEach(row => {
+                const fullPoll = row.fullPoll.includes(',') ? '"' + row.fullPoll + '"' : row.fullPoll;
+                csvContent += fullPoll + ',' + row.onMarkedRegister + '\n';
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                
+                // Use exact original filename for CSV
+                const downloadName = originalFileName ? originalFileName + '.csv' : 'processed_data.csv';
+                link.setAttribute('download', downloadName);
+                
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+        
+        function downloadXLSX() {
+            if (csvData.length === 0) {
+                alert('No data to download');
+                return;
+            }
+            
+            // Create worksheet data
+            const wsData = [['FullPoll', 'OnMarkedRegister']];
+            csvData.forEach(row => {
+                wsData.push([row.fullPoll, row.onMarkedRegister]);
+            });
+            
+            // Create workbook and worksheet
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Add worksheet to workbook
+            XLSX.utils.book_append_sheet(wb, ws, 'Data');
+            
+            // Download with exact original filename
+            const downloadName = originalFileName ? originalFileName + '.xlsx' : 'processed_data.xlsx';
+            XLSX.writeFile(wb, downloadName);
+        }
+        
+        document.addEventListener('selectstart', function(e) {
+            if (isDragging) {
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('mouseup', endDrag);
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            // Only handle keyboard navigation if data is loaded
+            if (csvData.length === 0) return;
+            
+            // Check if user is typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            if (e.key === '>' || e.key === '.') {
+                e.preventDefault();
+                nextPage();
+            } else if (e.key === '<' || e.key === ',') {
+                e.preventDefault();
+                previousPage();
+            }
+        });
+    </script>
+</body>
+</html>
