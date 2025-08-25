@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Data Processor Phone</title>
+    <title>CSV Data Processor</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -338,7 +338,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>CSV Data Processor Phone</h1>
+        <h1>CSV Data Processor</h1>
         
         <div class="upload-section">
             <h3>Upload CSV File</h3>
@@ -414,9 +414,6 @@
         let currentPage = 1;
         const rowsPerPage = 200;
         let originalFileName = '';
-        let touchScrolling = false;
-        let scrollStartY = 0;
-        let scrollStartValue = 0;
         
         document.getElementById('csvFile').addEventListener('change', handleFile);
         
@@ -672,22 +669,29 @@
                         button.onmouseup = endDrag;
                         button.onclick = function(e) { handleButtonClick(e, actualIndex); };
                         
-                        // Add wheel event for mouse scrolling
+                        // Add wheel event for mouse scrolling (desktop only)
                         button.addEventListener('wheel', function(e) {
                             handleWheelScroll(e, actualIndex);
                         }, { passive: false });
                         
-                        // Add touch events for mobile scrolling
-                        button.addEventListener('touchstart', function(e) { 
-                            handleTouchStart(e, actualIndex);
+                        // Simplified touch events for mobile
+                        button.addEventListener('touchstart', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
                         }, { passive: false });
                         
-                        button.addEventListener('touchmove', function(e) { 
-                            handleTouchMove(e, actualIndex);
-                        }, { passive: false });
-                        
-                        button.addEventListener('touchend', function(e) { 
-                            handleTouchEnd(e, actualIndex);
+                        button.addEventListener('touchend', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Direct toggle on touch end (like a click)
+                            csvData[actualIndex].onMarkedRegister = csvData[actualIndex].onMarkedRegister ? 0 : 1;
+                            
+                            // Update button immediately
+                            const btn = e.target;
+                            btn.className = 'toggle-btn ' + (csvData[actualIndex].onMarkedRegister ? 'active' : 'inactive');
+                            btn.textContent = csvData[actualIndex].onMarkedRegister ? '1' : '0';
+                            
+                            updateStats();
                         }, { passive: false });
                         
                         if (draggedRows.has(actualIndex)) {
@@ -731,37 +735,6 @@
             window.scrollUpdateTimeout = setTimeout(() => {
                 updateStats();
             }, 50);
-        }
-        
-        function handleTouchStart(e, index) {
-            touchScrolling = true;
-            scrollStartY = e.touches[0].clientY;
-            scrollStartValue = csvData[index].onMarkedRegister;
-            e.preventDefault();
-        }
-        
-        function handleTouchMove(e, index) {
-            if (!touchScrolling) return;
-            
-            e.preventDefault();
-            const deltaY = e.touches[0].clientY - scrollStartY;
-            
-            // If the user has moved more than 20 pixels vertically, toggle the value
-            if (Math.abs(deltaY) > 20) {
-                const newValue = deltaY > 0 ? 1 : 0;
-                if (csvData[index].onMarkedRegister !== newValue) {
-                    csvData[index].onMarkedRegister = newValue;
-                    displayData();
-                }
-                scrollStartY = e.touches[0].clientY;
-            }
-        }
-        
-        function handleTouchEnd(e, index) {
-            if (touchScrolling) {
-                touchScrolling = false;
-                e.preventDefault();
-            }
         }
         
         function startDrag(e, index) {
