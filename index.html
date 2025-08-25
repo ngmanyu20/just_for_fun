@@ -19,13 +19,15 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            height: 100vh;
+            min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            overflow-x: hidden;
             position: relative;
+            padding: 20px 0;
         }
 
         /* Animated background elements */
@@ -90,10 +92,11 @@
             border-radius: 20px;
             padding: 60px 50px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
+            max-width: 700px;
             width: 90%;
             animation: slideUp 1s ease-out;
             border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 30px;
         }
 
         @keyframes slideUp {
@@ -131,9 +134,18 @@
             font-weight: 300;
         }
 
+        .projects-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 500px;
+        }
+
         .cta-button {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 15px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -148,6 +160,12 @@
             cursor: pointer;
             position: relative;
             overflow: hidden;
+            width: 100%;
+        }
+
+        .cta-button.secondary {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
         }
 
         .cta-button::before {
@@ -166,12 +184,16 @@
         }
 
         .cta-button:hover {
-            transform: translateY(-5px) scale(1.05);
+            transform: translateY(-5px) scale(1.02);
             box-shadow: 0 20px 40px rgba(102, 126, 234, 0.4);
         }
 
+        .cta-button.secondary:hover {
+            box-shadow: 0 20px 40px rgba(255, 107, 107, 0.4);
+        }
+
         .cta-button:active {
-            transform: translateY(-2px) scale(1.02);
+            transform: translateY(-2px) scale(1.01);
         }
 
         .icon {
@@ -281,25 +303,34 @@
             Explore some beautiful coding products from your cutiee and appreciate the beauty of gitt! 
         </p>
         
-        <a href="/interactive_choropleth_map.html" class="cta-button">
-            <span>Explore Virtual Election Maps</span>
-            <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-            </svg>
-        </a>
+        <div class="projects-section">
+            <a href="/interactive_choropleth_map.html" class="cta-button">
+                <span>Explore Virtual Election Maps</span>
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                </svg>
+            </a>
+
+            <a href="/csv_data_processor_v50.html" class="cta-button secondary">
+                <span>CSV Data Processor Tool</span>
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                </svg>
+            </a>
+        </div>
 
         <div class="features">
             <div class="feature">
                 <div class="feature-icon">📊</div>
-                <div>In<br>Progress</div>
+                <div>Data<br>Visualization</div>
             </div>
             <div class="feature">
                 <div class="feature-icon">🗺️</div>
-                <div>In<br>Progress meow!</div>
+                <div>Interactive<br>Maps</div>
             </div>
             <div class="feature">
-                <div class="feature-icon">📱</div>
-                <div>In<br>Progress</div>
+                <div class="feature-icon">📈</div>
+                <div>CSV<br>Processing</div>
             </div>
         </div>
     </div>
@@ -349,12 +380,14 @@
         document.head.appendChild(style);
 
         // Smooth scroll and button interactions
-        document.querySelector('.cta-button').addEventListener('click', function(e) {
-            // Add a nice click effect
-            this.style.transform = 'translateY(-2px) scale(0.98)';
-            setTimeout(() => {
-                this.style.transform = '';
-            }, 150);
+        document.querySelectorAll('.cta-button').forEach(button => {
+            button.addEventListener('click', function(e) {
+                // Add a nice click effect
+                this.style.transform = 'translateY(-2px) scale(0.98)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 150);
+            });
         });
     </script>
 </body>
