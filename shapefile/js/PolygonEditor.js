@@ -18,10 +18,11 @@ class PolygonEditor {
         this.mouseHandler = new MouseHandler(this.canvas, this.geometryOps);
         this.renderer = new Renderer(this.canvas, this.geometryOps);
         this.adjacencyGraph = new AdjacencyGraph();
-        this.polygonCombiner = new PolygonCombiner(this.adjacencyGraph);
-        this.polygonSplitter = new PolygonSplitter();
+        const backendUrl = window.BACKEND_URL || window.location.origin;
+        this.polygonCombiner = new PolygonCombiner(this.adjacencyGraph, backendUrl);
+        this.polygonSplitter = new PolygonSplitter(backendUrl);
         this.vertexSync = new VertexSync(0.001);
-        this.layerManager = new LayerManager();
+        this.layerManager = new LayerManager(backendUrl);
         this.fixedCountyVertices = new FixedCountyVertices();
         this.vertexSelection = new VertexSelection();
         this.vertexDeletion = new VertexDeletion(this.fixedCountyVertices);

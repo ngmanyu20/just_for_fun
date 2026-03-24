@@ -60,13 +60,14 @@ function setupLayerButtons() {
 async function getCsvFiles() {
     // Prefer backend list endpoint that works with FastAPI
     try {
-        const response = await fetch('/csv_files', { cache: 'no-store' });
+        const backendUrl = window.BACKEND_URL || window.location.origin;
+        const response = await fetch(`${backendUrl}/csv_files`, { cache: 'no-store' });
         if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data.files)) {
                 return data.files.map(name => ({
                     name: name,
-                    url: `${window.location.origin}/csv_input/${encodeURIComponent(name)}`
+                    url: `${backendUrl}/csv_input/${encodeURIComponent(name)}`
                 }));
             }
         } else {
