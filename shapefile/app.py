@@ -2,6 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from schemas import SplitRequest, MergeRequest
 from geometry_core import split_polygon_geojson, merge_polygons_geojson
@@ -13,6 +14,13 @@ class SaveCSVRequest(BaseModel):
     content: str
 
 app = FastAPI(title="Polygon Geometry Engine")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
