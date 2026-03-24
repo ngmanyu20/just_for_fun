@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polygon Splitter Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .example-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .success {
+            color: #4caf50;
+        }
+        .error {
+            color: #f44336;
+        }
+        .info {
+            color: #2196f3;
+        }
+        .warning {
+            color: #ff9800;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Polygon Splitter Example</h1>
+        <p class="subtitle">Client for Python Geometry Service (http://localhost:8000)</p>
+
+        <div class="example-section">
+            <h2>Example 1: Split a Simple Rectangle</h2>
+            <p>Splits a rectangle polygon into 5 districts using the Python backend service.</p>
+            <button id="btn-example1" onclick="runExample1()">Run Example 1</button>
+        </div>
+
+        <div class="example-section">
+            <h2>Example 2: Split with Custom Seed</h2>
+            <p>Uses a specific random seed for reproducible results.</p>
+            <button id="btn-example2" onclick="runExample2()">Run Example 2</button>
+        </div>
+
+        <div class="example-section">
+            <h2>Example 3: Health Check</h2>
+            <p>Checks if the Python service is running and accessible.</p>
+            <button id="btn-example3" onclick="runExample3()">Run Example 3</button>
+        </div>
+
+        <div class="output" id="output">
+            Ready to run examples. Make sure Python service is running at <code>http://localhost:8000</code>
+        </div>
+    </div>
+
+    <script src="js/PolygonSplitter.js"></script>
+    <script>
+        const splitter = new PolygonSplitter('http://localhost:8000');
+        let outputElement;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type; // 'success', 'error', 'info', 'warning'
+            outputElement.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            outputElement.scrollTop = outputElement.scrollHeight;
+        }
+
+        function clearOutput() {
+            outputElement = document.getElementById('output');
+            outputElement.innerHTML = '';
+        }
+
+        // Example 1: Basic split
+        async function runExample1() {
+            clearOutput();
+            log('Starting Example 1: Split Rectangle into 5 Districts', 'info');
+            log('='.repeat(60), 'info');
+
+            // Define a simple rectangle polygon
+            const polygon = {
+                id: 'rect_001',
+                county: 'Example County',
+                rings: [
+                    [
+                        { x: 0, y: 0 },
+                        { x: 100, y: 0 },
+                        { x: 100, y: 50 },
+                        { x: 0, y: 50 },
+                        { x: 0, y: 0 }  // Closed ring
+                    ]
+                ]
+            };
+
+            log(`Input polygon: ${polygon.id}`, 'info');
+            log(`Number of districts: 5`, 'info');
+
+            try {
+                const result = await splitter.splitPolygon(polygon, 5);
+
+                if (result.success) {
+                    log(`✓ ${result.message}`, 'success');
+                    log(`Number of sub-polygons created: ${result.subPolygons.length}`, 'success');
+
+                    result.subPolygons.forEach((sub, idx) => {
+                        log(`  Sub-polygon ${idx + 1}: ${sub.id} (${sub.rings[0].length} vertices)`, 'info');
+                    });
+
+                    log('\nFirst sub-polygon sample:', 'info');
+                    log(JSON.stringify(result.subPolygons[0], null, 2), 'info');
+                } else {
+                    log(`✗ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                log(`✗ Exception: ${error.message}`, 'error');
+            }
+        }
+
+        // Example 2: Split with custom seed
+        async function runExample2() {
+            clearOutput();
+            log('Starting Example 2: Split with Custom Seed', 'info');
+            log('='.repeat(60), 'info');
+
+            const polygon = {
+                id: 'triangle_001',
+                county: 'Triangle County',
+                rings: [
+                    [
+                        { x: 50, y: 10 },
+                        { x: 90, y: 80 },
+                        { x: 10, y: 80 },
+                        { x: 50, y: 10 }  // Closed ring
+                    ]
+                ]
+            };
+
+            const numDistricts = 3;
+            const seed = 12345;
+
+            log(`Input polygon: ${polygon.id}`, 'info');
+            log(`Number of districts: ${numDistricts}`, 'info');
+            log(`Random seed: ${seed}`, 'info');
+
+            try {
+                const result = await splitter.splitPolygon(polygon, numDistricts, seed);
+
+                if (result.success) {
+                    log(`✓ ${result.message}`, 'success');
+
+                    // Show GeoJSON format that was sent
+                    const geojson = splitter.convertToGeoJSON(polygon);
+                    log('\nRequest payload (GeoJSON format):', 'info');
+                    log(JSON.stringify({
+                        geometry: geojson,
+                        num_districts: numDistricts,
+                        seed: seed
+                    }, null, 2), 'info');
+                } else {
+                    log(`✗ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                log(`✗ Exception: ${error.message}`, 'error');
+            }
+        }
+
+        // Example 3: Health check
+        async function runExample3() {
+            clearOutput();
+            log('Starting Example 3: Service Health Check', 'info');
+            log('='.repeat(60), 'info');
+
+            log(`Checking service at: ${splitter.serviceUrl}`, 'info');
+
+            try {
+                const isHealthy = await splitter.checkServiceHealth();
+
+                if (isHealthy) {
+                    log('✓ Python service is running and accessible', 'success');
+                    log(`Service URL: ${splitter.serviceUrl}`, 'success');
+                    log(`API Documentation: ${splitter.serviceUrl}/docs`, 'info');
+                } else {
+                    log('✗ Python service is not accessible', 'error');
+                    log('Make sure to start the server with: uvicorn app:app --reload', 'warning');
+                }
+            } catch (error) {
+                log(`✗ Health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Example 4: Direct API call (advanced)
+        async function runExample4() {
+            clearOutput();
+            log('Starting Example 4: Direct API Call', 'info');
+            log('='.repeat(60), 'info');
+
+            const requestPayload = {
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [
+                        [
+                            [0, 0],
+                            [100, 0],
+                            [100, 100],
+                            [0, 100],
+                            [0, 0]
+                        ]
+                    ]
+                },
+                num_districts: 4,
+                seed: 42
+            };
+
+            log('Request payload:', 'info');
+            log(JSON.stringify(requestPayload, null, 2), 'info');
+
+            try {
+                const featureCollection = await splitter.callSplitAPI(requestPayload);
+
+                log('✓ Received FeatureCollection', 'success');
+                log(`Type: ${featureCollection.type}`, 'info');
+                log(`Number of features: ${featureCollection.features.length}`, 'info');
+
+                featureCollection.features.forEach((feature, idx) => {
+                    const subId = feature.properties.subdivision_id;
+                    const geomType = feature.geometry.type;
+                    log(`  Feature ${idx + 1}: subdivision_id=${subId}, type=${geomType}`, 'info');
+                });
+
+                log('\nFull response:', 'info');
+                log(JSON.stringify(featureCollection, null, 2), 'info');
+
+            } catch (error) {
+                log(`✗ API call failed: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polygon Shape Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        .header {
+            display: none;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            overflow: hidden;
+        }
+
+        .controls {
+            background: white;
+            padding: 12px;
+            border-radius: 0;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+            width: 260px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            font-size: 10px;
+            color: #495057;
+        }
+
+        .control-group input[type="file"],
+        .control-group select,
+        .control-group input[type="number"] {
+            width: 100%;
+            padding: 4px 6px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .control-group input[type="file"] {
+            cursor: pointer;
+        }
+
+        .inline-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .inline-control input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        .inline-control label {
+            margin: 0;
+            font-weight: normal;
+            font-size: 11px;
+        }
+
+        .split-controls {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .split-controls select,
+        .split-controls input[type="number"] {
+            flex: 1;
+            padding: 4px 6px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .csv-file-list {
+            border: 1px solid #ddd;
+            background: #ffffff;
+            padding: 8px;
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+            max-height: 180px;
+            overflow: auto;
+        }
+
+        .csv-file-list.hidden {
+            display: none;
+        }
+
+        .csv-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .csv-modal-backdrop.open {
+            display: flex;
+        }
+
+        .csv-modal {
+            background: white;
+            border-radius: 12px;
+            width: min(90%, 500px);
+            max-height: 80vh;
+            padding: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        .csv-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .csv-modal-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            overflow-y: auto;
+            flex: 1;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 8px;
+            background: #fafafa;
+        }
+
+        .csv-modal-list li {
+            margin-bottom: 5px;
+        }
+
+        .csv-modal-list button {
+            width: 100%;
+            text-align: left;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .csv-modal-list button:hover {
+            background: #f0f4ff;
+        }
+
+        .csv-file-list-header {
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .csv-file-list-items {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            font-size: 11px;
+        }
+
+        .csv-file-list-items li {
+            margin-bottom: 4px;
+        }
+
+        .csv-file-list-items button {
+            width: 100%;
+            text-align: left;
+            border: 1px solid #ccc;
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 5px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .csv-file-list-items button:hover {
+            background: #e9ecef;
+        }
+
+        .section-title {
+            font-weight: 700;
+            font-size: 12px;
+            color: #667eea;
+            margin-top: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .button-row button {
+            flex: 1;
+        }
+
+        button {
+            width: 100%;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 11px;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        button.small {
+            padding: 3px 5px;
+            font-size: 9px;
+            min-width: auto;
+        }
+
+        .collapsible-section {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .collapsible-header:hover {
+            background: #e9ecef;
+        }
+
+        .collapsible-header span {
+            font-weight: 600;
+            font-size: 11px;
+            color: #495057;
+        }
+
+        .collapsible-toggle {
+            font-size: 14px;
+            font-weight: bold;
+            color: #667eea;
+            transition: transform 0.3s ease;
+        }
+
+        .collapsible-toggle.active {
+            transform: rotate(45deg);
+        }
+
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            padding: 0 8px;
+        }
+
+        .collapsible-content.active {
+            max-height: 300px;
+            padding: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 2px solid #dee2e6;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        button.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #canvas {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: grab;
+            width: 100%;
+            flex: 1;
+        }
+
+        .info-panel {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .coordinates {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .active {
+            background: #28a745 !important;
+            color: white !important;
+        }
+        
+        .status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        #sharedInfo {
+            color: #ff6b35;
+            font-weight: bold;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 107, 53, 0.1);
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="status" id="status"></div>
+
+    <div class="container">
+        <!-- Main Content Area (Left Side) -->
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="canvas" width="1200" height="800"></canvas>
+            </div>
+
+            <div class="info-panel">
+                <h3>📊 Polygon Information</h3>
+                <div id="polygonInfo">
+                    <p>Load a CSV file and select a polygon to see coordinates and modify shapes.</p>
+                </div>
+                <div id="sharedInfo"></div>
+                <div class="coordinates" id="coordinates"></div>
+            </div>
+        </div>
+
+        <!-- Toolbar (Right Side) -->
+        <div class="controls">
+            <!-- File Operations (Collapsible) -->
+            <!-- Load/Save CSV buttons -->
+            <div class="button-row" style="margin-bottom: 8px;">
+                <button id="loadCsvBtn" class="btn-primary">📂 Load CSV</button>
+                <button id="saveCsvBtn" class="btn-secondary">💾 Save CSV</button>
+            </div>
+
+            <div id="csvModalBackdrop" class="csv-modal-backdrop">
+                <div class="csv-modal">
+                    <div class="csv-modal-header">
+                        <strong>Available CSV files in ./csv_input</strong>
+                        <button id="csvModalClose" class="btn-secondary small" style="font-size: 11px;">✕</button>
+                    </div>
+                    <ul id="csvModalList" class="csv-modal-list"></ul>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;">
+                        <button id="csvModalRefresh" class="btn-primary small" style="font-size: 11px;">Refresh</button>
+                        <button id="csvModalCancel" class="btn-secondary small" style="font-size: 11px;">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="csvStatus" style="font-size:11px; color:#666; margin-bottom: 10px;">Click 'Load CSV' to browse available files</div>
+
+            <!-- Mode Buttons (Same Line) -->
+            <div class="button-row">
+                <button id="editMode" class="btn-secondary">✏️ Edit</button>
+                <button id="viewMode" class="btn-primary active">👁️ View</button>
+            </div>
+
+            <!-- Layer Panel (Collapsible) -->
+            <div class="collapsible-section">
+                <div class="collapsible-header" onclick="toggleLayerSection()">
+                    <span>🗂️ Layer</span>
+                    <span class="collapsible-toggle" id="layerToggle">+</span>
+                </div>
+                <div class="collapsible-content" id="layerContent">
+                    <div class="button-row">
+                        <button id="layerCounty" class="btn-secondary">County</button>
+                        <button id="layerSubCounty" class="btn-secondary active">Sub-County</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Select County -->
+            <div class="control-group">
+                <label for="polygonSelect">🗃️ Select County</label>
+                <select id="polygonSelect">
+                    <option value="">Choose a polygon to edit...</option>
+                </select>
+            </div>
+
+            <!-- Undo/Redo (Same Line, Smaller) -->
+            <div class="button-row">
+                <button id="undoBtn" class="btn-secondary small" disabled>↶ Undo</button>
+                <button id="redoBtn" class="btn-secondary small" disabled>↷ Redo</button>
+            </div>
+
+            <!-- Polygon Operations -->
+            <div class="section-title">Polygon</div>
+            <button id="combineBtn" class="btn-secondary" disabled>🔗 Combine Polygons</button>
+
+            <!-- Split Polygon Controls -->
+            <div class="section-title">Split Polygon</div>
+
+            <div class="split-controls">
+                <input type="number" id="numDistricts" min="2" max="20" value="8" placeholder="# Districts" style="flex: 1;" />
+                <button id="regenerateBtn" class="btn-secondary small" disabled style="flex: 0 0 auto; padding: 2px 4px; font-size: 12px; width: 26px; height: 26px;">🔄</button>
+            </div>
+
+            <button id="splitBtn" class="btn-secondary" disabled>✂️ Split</button>
+
+            <!-- Vertices Section -->
+            <div class="section-title">Vertices</div>
+
+            <!-- Vertex Selection Info -->
+            <div id="vertexInfo" style="font-size: 11px; color: #666; margin-bottom: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px; min-height: 60px;">
+                <div style="font-weight: bold; margin-bottom: 4px;">No vertex selected</div>
+                <div style="font-size: 10px; color: #999;">Shift+Click on a vertex to select</div>
+            </div>
+
+            <!-- Vertex Operations Buttons -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <!-- Replace Vertex -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <button id="replaceVertexBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
+                        🔄 Replace (1=Prev / 2=Next)
+                    </button>
+                </div>
+
+                <!-- Delete Vertex -->
+                <button id="deleteVertexBtn" class="btn-danger" disabled style="font-size: 10px; padding: 5px;">
+                    🗑️ Delete Vertex (Del)
+                </button>
+
+                <!-- Midpoint Creation -->
+                <button id="midpointBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
+                    ➕ Create Midpoint (M)
+                </button>
+
+                <!-- Split by Vertices -->
+                <button id="splitByVerticesBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
+                    ✂️ Split by Vertices (C)
+                </button>
+
+                <!-- Clear Selection -->
+                <button id="clearVertexSelectionBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
+                    ❌ Clear Selection
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Module Scripts -->
+    <script src="js/DataManager.js"></script>
+    <script src="js/GeometryOps.js"></script>
+    <script src="js/SharedVertices.js"></script>
+    <script src="js/VertexSync.js"></script>
+    <script src="js/OverlapDetection.js"></script>
+    <script src="js/AdjacencyGraph.js"></script>
+    <script src="js/PolygonCombiner.js"></script>
+    <script src="js/PolygonSplitter.js"></script>
+    <script src="js/HistoryManager.js"></script>
+    <script src="js/LayerManager.js"></script>
+    <script src="js/FixedCountyVertices.js"></script>
+    <script src="js/VertexSelection.js"></script>
+    <script src="js/VertexDeletion.js"></script>
+    <script src="js/VertexReplacement.js"></script>
+    <script src="js/MidpointCreation.js"></script>
+    <script src="js/VertexSplitter.js"></script>
+    <script src="js/UIController.js"></script>
+    <script src="js/MouseHandler.js"></script>
+    <script src="js/Renderer.js"></script>
+    <script src="js/PolygonEditor.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- Load/Save CSV safety bridge -->
+    <script>
+        async function safeLoadCsv() {
+            console.log('safeLoadCsv called');
+            if (typeof onLoadCsvClick === 'function') {
+                return onLoadCsvClick();
+            }
+
+            const statusEl = document.getElementById('csvStatus');
+            if (statusEl) statusEl.textContent = 'Using fallback CSV loader...';
+
+            try {
+                const response = await fetch('/shapefile/csv_input/');
+                if (!response.ok) throw new Error('Directory fetch failed: ' + response.status);
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const links = Array.from(doc.querySelectorAll('a[href$=".csv"]'));
+
+                const fileList = document.getElementById('csvFileList');
+                const fileContainer = document.getElementById('csvFileListContainer');
+
+                if (fileList && fileContainer) {
+                    fileList.innerHTML = '';
+                    links.forEach(link => {
+                        const li = document.createElement('li');
+                        const button = document.createElement('button');
+                        button.textContent = link.textContent.trim();
+                        button.onclick = async () => {
+                            statusEl.textContent = 'Loading ' + button.textContent;
+                            const fileUrl = new URL(link.getAttribute('href'), window.location.href).href;
+                            if (typeof window.polygonEditor?.handleFileSelect === 'function') {
+                                await window.polygonEditor.handleFileSelect({ target: { value: fileUrl } });
+                                statusEl.textContent = 'Loaded ' + button.textContent;
+                            }
+                        };
+                        li.appendChild(button);
+                        fileList.appendChild(li);
+                    });
+                    fileContainer.classList.remove('hidden');
+                    fileContainer.style.display = 'block';
+                    statusEl.textContent = `Found ${links.length} files`;
+                }
+            } catch (err) {
+                console.error('safeLoadCsv error', err);
+                if (statusEl) statusEl.textContent = 'Failed to load CSV list: ' + err.message;
+            }
+        }
+
+        async function safeSaveCsv() {
+            console.log('safeSaveCsv called');
+            if (typeof onSaveCsvClick === 'function') {
+                return onSaveCsvClick();
+            }
+            alert('Save handler not available.');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadBtn = document.getElementById('loadCsvBtn');
+            const saveBtn = document.getElementById('saveCsvBtn');
+            if (loadBtn) loadBtn.addEventListener('click', safeLoadCsv);
+            if (saveBtn) saveBtn.addEventListener('click', safeSaveCsv);
+        });
+    </script>
+
+    <!-- Collapsible Section Script -->
+    <script>
+        function toggleFileSection() {
+            const content = document.getElementById('fileContent');
+            const toggle = document.getElementById('fileToggle');
+
+            content.classList.toggle('active');
+            toggle.classList.toggle('active');
+        }
+
+        function toggleLayerSection() {
+            const content = document.getElementById('layerContent');
+            const toggle = document.getElementById('layerToggle');
+
+            content.classList.toggle('active');
+            toggle.classList.toggle('active');
+        }
+
+        // Auto-update number of districts based on mode when polygon is selected
+        document.addEventListener('DOMContentLoaded', function() {
+            const splitMode = document.getElementById('splitMode');
+            const numDistricts = document.getElementById('numDistricts');
+
+            // Only set up listener if splitMode element exists
+            if (splitMode && numDistricts) {
+                // Update suggested districts when mode changes
+                splitMode.addEventListener('change', function() {
+                    if (window.polygonEditor && window.polygonEditor.selectedPolygonIndex !== null) {
+                        const polygon = window.polygonEditor.polygons[window.polygonEditor.selectedPolygonIndex];
+                        const suggested = window.polygonEditor.polygonSplitter.calculateSuggestedDistricts(polygon, this.value);
+                        numDistricts.value = suggested;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

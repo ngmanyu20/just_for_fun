@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(python test_vertex_sync.py:*)",
+      "Bash(python:*)",
+      "Bash(E:StorePythonvenvScriptspython.exe \"e:\\\\Election\\\\Shapefile_Create\\\\shapefile\\\\analyze_modified_polygons.py\")",
+      "Bash(\"E:/Store/Python/venv/Scripts/python.exe\" \"e:/Election/Shapefile_Create/shapefile/analyze_modified_polygons.py\")",
+      "Bash(\"E:\\\\Store\\\\Python\\\\venv\\\\Scripts\\\\python.exe\" \"e:\\\\Election\\\\Shapefile_Create\\\\shapefile\\\\create_county_layer.py\")",
+      "Bash(\"E:\\\\Store\\\\Python\\\\venv\\\\Scripts\\\\python.exe\" create_county_layer.py)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill /F /PID 70856)",
+      "Bash(taskkill //F //PID 70856)",
+      "Bash(pip install:*)",
+      "Bash(\"E:\\\\Store\\\\Python\\\\venv\\\\Scripts\\\\python.exe\" merge_server.py)",
+      "Bash(timeout /t 3 /nobreak)"
+    ]
+  }
+}
