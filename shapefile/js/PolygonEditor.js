@@ -404,17 +404,25 @@ class PolygonEditor {
      * @param {Event} e - Select change event
      */
     async handleFileSelect(e) {
-        const url = e.target.value;
-        if (!url) {
+        let source = e.target.value;
+
+        // Support file upload through Add Files mode by providing a File object
+        if (!source && e.target.files && e.target.files.length > 0) {
+            source = e.target.files[0];
+        }
+
+        if (!source) {
             console.warn('handleFileSelect: empty selection');
             return;
         }
 
         this.uiController.setLoadingState(true);
-        console.log(`handleFileSelect: loading URL ${url}`);
+
+        const sourceLabel = source instanceof File ? source.name : source;
+        console.log(`handleFileSelect: loading ${sourceLabel}`);
 
         try {
-            const result = await this.dataManager.loadCSV(url);
+            const result = await this.dataManager.loadCSV(source);
 
             // Load sub-county data and automatically generate county layer in memory
             console.log(`Loaded ${result.count} sub-county polygons`);

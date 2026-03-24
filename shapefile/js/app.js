@@ -251,39 +251,28 @@ async function onAddCsvClick() {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.csv';
-    fileInput.multiple = true;
+    fileInput.multiple = false;
     fileInput.style.display = 'none';
 
     fileInput.addEventListener('change', async (event) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) {
+        const file = event.target.files?.[0];
+        if (!file) {
             if (statusEl) statusEl.textContent = 'No file selected.';
             document.body.removeChild(fileInput);
             return;
         }
 
-        for (const file of Array.from(files)) {
-            try {
-                const text = await file.text();
-                const response = await fetch('/save_csv', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename: file.name, content: text })
-                });
-                if (!response.ok) {
-                    throw new Error(`Upload failed (${response.status})`);
-                }
-                const result = await response.json();
-                console.log('Uploaded', file.name, result);
-                if (statusEl) statusEl.textContent = `Uploaded ${file.name}`;
-            } catch (error) {
-                console.error('Error uploading CSV', file.name, error);
-                if (statusEl) statusEl.textContent = `Failed to upload ${file.name}: ${error.message}`;
+        try {
+            if (statusEl) statusEl.textContent = `Loading ${file.name}...`;
+            if (window.polygonEditor && typeof window.polygonEditor.handleFileSelect === 'function') {
+                await window.polygonEditor.handleFileSelect({ target: { value: file, files: [file] } });
             }
+            if (statusEl) statusEl.textContent = `Loaded ${file.name}`;
+        } catch (error) {
+            console.error('Error loading local CSV', file.name, error);
+            if (statusEl) statusEl.textContent = `Failed to load ${file.name}: ${error.message}`;
         }
 
-        // refresh list after upload
-        await onLoadCsvClick();
         document.body.removeChild(fileInput);
     });
 
