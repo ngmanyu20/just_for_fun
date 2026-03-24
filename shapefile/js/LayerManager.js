@@ -65,8 +65,7 @@ class LayerManager {
 
         const countyPolygons = [];
         const requestedMergeUrls = [
-            `${this.serviceUrl}/merge-county`,
-            'http://localhost:8000/merge-county'
+            `${this.serviceUrl}/merge-county`
         ];
 
         // Process each county
