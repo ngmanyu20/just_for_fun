@@ -182,6 +182,8 @@ async function onLoadCsvClick() {
     const statusEl = document.getElementById('csvStatus');
     if (statusEl) statusEl.textContent = 'Loading CSV file list...';
 
+    const addCsvBtn = document.getElementById('addCsvBtn');
+
     const files = await getCsvFiles();
     console.log('onLoadCsvClick: got files', files);
 
@@ -189,9 +191,9 @@ async function onLoadCsvClick() {
 
     if (files.length === 0) {
         alert('No CSV files found in ./csv_input, or directory not accessible.');
-    } else {
-        document.getElementById('csvStatus').textContent = `Loaded ${files.length} file(s)`;
     }
+
+    if (addCsvBtn) addCsvBtn.style.display = 'inline-flex';
 }
 
 
@@ -242,6 +244,53 @@ function hideCsvModal() {
     if (modalBackdrop) modalBackdrop.classList.remove('open');
 }
 
+async function onAddCsvClick() {
+    const statusEl = document.getElementById('csvStatus');
+    if (statusEl) statusEl.textContent = 'Select one or more CSV file(s) to upload...';
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.csv';
+    fileInput.multiple = true;
+    fileInput.style.display = 'none';
+
+    fileInput.addEventListener('change', async (event) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) {
+            if (statusEl) statusEl.textContent = 'No file selected.';
+            document.body.removeChild(fileInput);
+            return;
+        }
+
+        for (const file of Array.from(files)) {
+            try {
+                const text = await file.text();
+                const response = await fetch('/save_csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: file.name, content: text })
+                });
+                if (!response.ok) {
+                    throw new Error(`Upload failed (${response.status})`);
+                }
+                const result = await response.json();
+                console.log('Uploaded', file.name, result);
+                if (statusEl) statusEl.textContent = `Uploaded ${file.name}`;
+            } catch (error) {
+                console.error('Error uploading CSV', file.name, error);
+                if (statusEl) statusEl.textContent = `Failed to upload ${file.name}: ${error.message}`;
+            }
+        }
+
+        // refresh list after upload
+        await onLoadCsvClick();
+        document.body.removeChild(fileInput);
+    });
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+}
+
 /**
  * Initialize the application when DOM is loaded
  */
@@ -258,19 +307,17 @@ document.addEventListener('DOMContentLoaded', function() {
         // Setup layer buttons
         setupLayerButtons();
 
-        // Bind Load/Save CSV buttons
-        const loadCsvBtn = document.getElementById('loadCsvBtn');
-        const saveCsvBtn = document.getElementById('saveCsvBtn');
+        // No direct Load/Save click handlers here (safe script handles binding to avoid double invocation)
         const csvFileListClose = document.getElementById('csvFileListClose');
 
-        if (loadCsvBtn) {
-            loadCsvBtn.addEventListener('click', onLoadCsvClick);
-            loadCsvBtn.addEventListener('click', () => console.log('loadCsvBtn clicked'));
+        const addCsvBtn = document.getElementById('addCsvBtn');
+        if (addCsvBtn) {
+            addCsvBtn.addEventListener('click', async () => {
+                console.log('addCsvBtn clicked');
+                await onAddCsvClick();
+            });
         }
-        if (saveCsvBtn) {
-            saveCsvBtn.addEventListener('click', onSaveCsvClick);
-            saveCsvBtn.addEventListener('click', () => console.log('saveCsvBtn clicked'));
-        }
+
         const csvModalClose = document.getElementById('csvModalClose');
         const csvModalCancel = document.getElementById('csvModalCancel');
         const csvModalRefresh = document.getElementById('csvModalRefresh');
