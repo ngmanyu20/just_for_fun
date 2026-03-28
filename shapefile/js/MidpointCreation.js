@@ -3,8 +3,8 @@
  * Works with multiple selected vertices that form a contiguous sequence
  */
 class MidpointCreation {
-    constructor(fixedCountyVertices) {
-        this.fixedCountyVertices = fixedCountyVertices;
+    constructor(classifier) {
+        this.classifier = classifier;
         this.tolerance = 0.000001; // Coordinate matching tolerance
     }
 
@@ -51,7 +51,19 @@ class MidpointCreation {
             }
         }
 
-        // REMOVED: Fixed county vertex check - now allowed to create midpoints adjacent to fixed vertices
+        // Block midpoint creation if any selected vertex is protected (fixed or cross-county).
+        // A new midpoint between two protected vertices would itself be unprotected and
+        // could then be dragged, corrupting the county boundary.
+        for (const v of selectedVertices) {
+            if (this.classifier.isProtected(v.x, v.y, polygons)) {
+                const type = this.classifier.classify(v.x, v.y, polygons);
+                return {
+                    success: false,
+                    polygons: originalPolygons,
+                    message: `Cannot insert midpoint on ${this.classifier.label(type)} vertex`
+                };
+            }
+        }
 
         let totalMidpointsCreated = 0;
         const affectedPolygonIds = new Set();

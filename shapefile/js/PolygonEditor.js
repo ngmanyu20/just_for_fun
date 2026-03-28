@@ -24,11 +24,12 @@ class PolygonEditor {
         this.vertexSync = new VertexSync(0.001);
         this.layerManager = new LayerManager(backendUrl);
         this.fixedCountyVertices = new FixedCountyVertices();
+        this.vertexClassifier = new VertexClassifier(this.fixedCountyVertices);
         this.vertexSelection = new VertexSelection();
-        this.vertexDeletion = new VertexDeletion(this.fixedCountyVertices);
-        this.vertexReplacement = new VertexReplacement(this.fixedCountyVertices);
-        this.midpointCreation = new MidpointCreation(this.fixedCountyVertices);
-        this.vertexSplitter = new VertexSplitter(this.fixedCountyVertices);
+        this.vertexDeletion = new VertexDeletion(this.vertexClassifier);
+        this.vertexReplacement = new VertexReplacement(this.vertexClassifier);
+        this.midpointCreation = new MidpointCreation(this.vertexClassifier);
+        this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
 
         // Application state
         this.polygons = [];
@@ -512,10 +513,10 @@ class PolygonEditor {
                 );
 
                 if (distance < tolerance) {
-                    // CRITICAL: Check if this is a fixed county vertex - prevent dragging
-                    if (this.fixedCountyVertices.isFixedVertex(vertex.x, vertex.y)) {
-                        console.log('Cannot select fixed county vertex for dragging (simplified boundary)');
-                        // Return false so cursor doesn't change to drag cursor
+                    // CRITICAL: Block protected vertices (fixed or cross-county) from dragging
+                    if (this.vertexClassifier.isProtected(vertex.x, vertex.y, this.polygons)) {
+                        const type = this.vertexClassifier.classify(vertex.x, vertex.y, this.polygons);
+                        console.log(`Cannot select ${this.vertexClassifier.label(type)} vertex for dragging`);
                         return { vertexFound: false, isFixed: true };
                     }
 
@@ -553,10 +554,11 @@ class PolygonEditor {
         const oldX = vertexObj.x;
         const oldY = vertexObj.y;
 
-        // CRITICAL: Check if this is a fixed county vertex - prevent dragging
-        if (this.fixedCountyVertices.isFixedVertex(oldX, oldY)) {
-            console.log('Cannot drag fixed county vertex (simplified boundary)');
-            this.uiController.showError('Cannot move fixed county vertex (county boundary)');
+        // CRITICAL: Block protected vertices (fixed or cross-county) from dragging
+        if (this.vertexClassifier.isProtected(oldX, oldY, this.polygons)) {
+            const type = this.vertexClassifier.classify(oldX, oldY, this.polygons);
+            console.log(`Cannot drag ${this.vertexClassifier.label(type)} vertex`);
+            this.uiController.showError(`Cannot move ${this.vertexClassifier.label(type)} vertex`);
             return;
         }
 
@@ -885,10 +887,11 @@ class PolygonEditor {
         const polygon = this.polygons[sourceInfo.polygonIndex];
         const ring = polygon.rings[sourceInfo.ringIndex];
 
-        // Check if source vertex is fixed
-        if (this.fixedCountyVertices.isFixedVertex(sourceInfo.x, sourceInfo.y)) {
-            console.log('Cannot replace fixed county vertex');
-            this.uiController.showError('Cannot replace fixed county vertex (county boundary)');
+        // Check if source vertex is protected
+        if (this.vertexClassifier.isProtected(sourceInfo.x, sourceInfo.y, this.polygons)) {
+            const type = this.vertexClassifier.classify(sourceInfo.x, sourceInfo.y, this.polygons);
+            console.log(`Cannot replace ${this.vertexClassifier.label(type)} vertex`);
+            this.uiController.showError(`Cannot replace ${this.vertexClassifier.label(type)} vertex`);
             return;
         }
 
@@ -1198,7 +1201,7 @@ class PolygonEditor {
 
         if (selectedInfo.length > 0) {
             selectedInfo.forEach(v => {
-                if (this.fixedCountyVertices.isFixedVertex(v.x, v.y)) {
+                if (this.vertexClassifier.isProtected(v.x, v.y, this.polygons)) {
                     hasFixedVertex = true;
                 }
                 // Check county consistency

@@ -3,8 +3,8 @@
  * Replaces all occurrences of source vertex with target vertex across all polygons
  */
 class VertexReplacement {
-    constructor(fixedCountyVertices) {
-        this.fixedCountyVertices = fixedCountyVertices;
+    constructor(classifier) {
+        this.classifier = classifier;
         this.tolerance = 0.000001; // Coordinate matching tolerance
     }
 
@@ -31,64 +31,51 @@ class VertexReplacement {
         const srcVertex = polygons[srcPolyIdx].rings[srcRingIdx][srcVertIdx];
         const tgtVertex = polygons[tgtPolyIdx].rings[tgtRingIdx][tgtVertIdx];
 
-        // Check if source vertex is a fixed county vertex
-        if (this.fixedCountyVertices.isFixedVertex(srcVertex.x, srcVertex.y)) {
+        const srcType = this.classifier.classify(srcVertex.x, srcVertex.y, polygons);
+        const tgtType = this.classifier.classify(tgtVertex.x, tgtVertex.y, polygons);
+
+        // Fixed vertices are always blocked — no exceptions
+        if (srcType === VertexClassifier.FIXED) {
             return {
                 success: false,
                 polygons,
-                message: 'Cannot replace fixed county vertex (simplified boundary)'
+                message: `Cannot replace ${this.classifier.label(srcType)} vertex`
             };
         }
-
-        // Check if target vertex is a fixed county vertex
-        if (this.fixedCountyVertices.isFixedVertex(tgtVertex.x, tgtVertex.y)) {
+        if (tgtType === VertexClassifier.FIXED) {
             return {
                 success: false,
                 polygons,
-                message: 'Cannot replace to fixed county vertex (would modify county boundary)'
+                message: `Cannot replace to ${this.classifier.label(tgtType)} vertex`
             };
         }
 
-        // CRITICAL: Check if source vertex is shared between different counties (county boundary)
-        const srcCounties = this.getCountiesForVertex(polygons, srcVertex);
-        const tgtCounties = this.getCountiesForVertex(polygons, tgtVertex);
-
-        // If source is on county boundary (shared between multiple counties)
-        if (srcCounties.size > 1) {
-            // ALLOW replacement ONLY if target is also on the SAME county boundary
-            // This preserves the county boundary while allowing vertex simplification
-            if (tgtCounties.size > 1) {
-                // Check if both vertices share the same set of counties
+        // Cross-county vertices: allow only when both source and target are cross-county
+        // on the exact same county boundary (safe simplification along the border)
+        if (srcType === VertexClassifier.CROSS_COUNTY || tgtType === VertexClassifier.CROSS_COUNTY) {
+            if (srcType === VertexClassifier.CROSS_COUNTY && tgtType === VertexClassifier.CROSS_COUNTY) {
+                const srcCounties = this.classifier.getCountiesAtVertex(srcVertex.x, srcVertex.y, polygons);
+                const tgtCounties = this.classifier.getCountiesAtVertex(tgtVertex.x, tgtVertex.y, polygons);
                 const srcCountySet = Array.from(srcCounties).sort().join(',');
                 const tgtCountySet = Array.from(tgtCounties).sort().join(',');
-
                 if (srcCountySet === tgtCountySet) {
-                    console.log(`✓ Allowing replacement: both vertices on same county boundary (${srcCountySet})`);
-                    // ALLOWED: Both are on the same county boundary - safe to replace
+                    console.log(`✓ Allowing replacement: both vertices on same cross-county boundary (${srcCountySet})`);
+                    // fall through — allowed
                 } else {
                     return {
                         success: false,
                         polygons,
-                        message: `Cannot replace vertex: different county boundaries. Source: ${srcCountySet}, Target: ${tgtCountySet}`
+                        message: `Cannot replace across different county boundaries (${srcCountySet} → ${tgtCountySet})`
                     };
                 }
             } else {
-                // Source is on county boundary, but target is NOT - would modify boundary
+                // One is cross-county, the other is not — would corrupt the boundary
                 return {
                     success: false,
                     polygons,
-                    message: `Cannot replace vertex: source is on county boundary between ${Array.from(srcCounties).join(', ')}, but target is not`
+                    message: `Cannot mix ${this.classifier.label(srcType)} and ${this.classifier.label(tgtType)} vertices in replacement`
                 };
             }
-        }
-
-        // If target is on county boundary but source is not - would modify boundary
-        if (tgtCounties.size > 1 && srcCounties.size === 1) {
-            return {
-                success: false,
-                polygons,
-                message: `Cannot replace to vertex: target is on county boundary between ${Array.from(tgtCounties).join(', ')}, but source is not`
-            };
         }
 
         // Verify target is adjacent to source in at least one polygon

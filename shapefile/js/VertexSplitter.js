@@ -3,8 +3,8 @@
  * Creates new polygons from selected vertices while ensuring no gaps
  */
 class VertexSplitter {
-    constructor(fixedCountyVertices) {
-        this.fixedCountyVertices = fixedCountyVertices;
+    constructor(classifier) {
+        this.classifier = classifier;
         this.tolerance = 0.000001;
     }
 
@@ -40,6 +40,19 @@ class VertexSplitter {
         }
 
         const county = Array.from(counties)[0];
+
+        // Block vertex-split if any selected vertex is protected (fixed or cross-county).
+        // Splitting along a county boundary would break topology.
+        for (const v of selectedVertices) {
+            if (this.classifier.isProtected(v.x, v.y, polygons)) {
+                const type = this.classifier.classify(v.x, v.y, polygons);
+                return {
+                    success: false,
+                    polygons,
+                    message: `Cannot split on ${this.classifier.label(type)} vertex`
+                };
+            }
+        }
 
         // Check for collinearity
         if (this.areCollinear(selectedVertices)) {

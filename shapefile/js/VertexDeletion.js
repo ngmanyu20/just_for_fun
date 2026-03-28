@@ -3,8 +3,8 @@
  * Implements the vertex deletion algorithm with crucial vertex checks
  */
 class VertexDeletion {
-    constructor(fixedCountyVertices) {
-        this.fixedCountyVertices = fixedCountyVertices;
+    constructor(classifier) {
+        this.classifier = classifier;
         this.tolerance = 0.000001; // Coordinate matching tolerance
         this.areaTolerance = 0.0001; // Area difference tolerance for validation
     }
@@ -26,12 +26,13 @@ class VertexDeletion {
         const vertex = polygon.rings[ringIndex][vertexIndex];
         const d = { x: vertex.x, y: vertex.y };
 
-        // Check if vertex is a fixed county vertex
-        if (this.fixedCountyVertices.isFixedVertex(d.x, d.y)) {
+        // Block deletion of protected vertices (fixed or cross-county)
+        if (this.classifier.isProtected(d.x, d.y, polygons)) {
+            const type = this.classifier.classify(d.x, d.y, polygons);
             return {
                 success: false,
                 polygons,
-                message: 'Cannot delete fixed county vertex (simplified boundary)'
+                message: `Cannot delete ${this.classifier.label(type)} vertex`
             };
         }
 
