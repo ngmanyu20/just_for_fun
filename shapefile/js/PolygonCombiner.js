@@ -106,10 +106,14 @@ class PolygonCombiner {
         const combinedCounties = [...new Set(sourcePolygons.map(p => p.county).filter(c => c))].join('+');
         const basePolygon = sourcePolygons[0];
 
+        // Use shared parent if all source polygons have the same parent, else fall back to first
+        const parentValues = [...new Set(sourcePolygons.map(p => p.parent).filter(p => p))];
+        const combinedParent = parentValues.length === 1 ? parentValues[0] : (basePolygon.parent || '');
+
         return {
             id: combinedIds,
             county: combinedCounties || combinedIds,
-            parent: basePolygon.parent || '',
+            parent: combinedParent,
             rings: [ring],
             originalWKT: '',
             isCombined: true,

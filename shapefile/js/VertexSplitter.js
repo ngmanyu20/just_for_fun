@@ -236,7 +236,7 @@ class VertexSplitter {
                 newPolygons.push({
                     id: `${sourcePolygon.id}_split_${Date.now()}_0`,
                     county: county,
-                    parent: county,
+                    parent: sourcePolygon.parent || county,
                     rings: [selectedRing],
                     originalWKT: '',
                     layerType: sourcePolygon.layerType || 'subCounty',
@@ -335,7 +335,7 @@ class VertexSplitter {
                     newPolygons.push({
                         id: `${sourcePolygon.id}_split_${Date.now()}_${i + 1}`,
                         county: county,
-                        parent: county,
+                        parent: sourcePolygon.parent || county,
                         rings: [cleanedRing],
                         originalWKT: '',
                         layerType: sourcePolygon.layerType || 'subCounty',
