@@ -351,7 +351,10 @@
         }
 
         #canvas {
-            border: 2px solid #e9ecef;
+            /* Use box-shadow instead of border so the element has no border-box offset.
+               getBoundingClientRect().width then equals canvas.width exactly, making
+               mouse-to-canvas coordinate mapping pixel-perfect on all screen sizes. */
+            box-shadow: 0 0 0 2px #e9ecef, 0 2px 8px rgba(0,0,0,0.08);
             border-radius: 8px;
             cursor: grab;
             width: 100%;

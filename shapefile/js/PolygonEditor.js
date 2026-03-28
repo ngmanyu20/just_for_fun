@@ -1841,9 +1841,18 @@ class PolygonEditor {
      */
     resizeCanvas() {
         const container = this.canvas.parentElement;
-        const newWidth = container.clientWidth - 40;
-        const newHeight = Math.max(600, window.innerHeight * 0.6);
-        
+
+        // Measure the exact container padding via getComputedStyle so this works on
+        // every screen size, display scaling, and browser zoom level — no magic numbers.
+        // The canvas uses box-shadow (not border) so getBoundingClientRect() == canvas.width,
+        // meaning no border offset needs to be subtracted here or in getCanvasPos().
+        const cs   = getComputedStyle(container);
+        const padH = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const padV = parseFloat(cs.paddingTop)  + parseFloat(cs.paddingBottom);
+
+        const newWidth  = Math.max(200, Math.round(container.clientWidth  - padH));
+        const newHeight = Math.max(600, Math.round(container.clientHeight - padV));
+
         this.renderer.setCanvasSize(newWidth, newHeight);
         this.draw();
     }
