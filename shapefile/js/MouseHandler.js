@@ -47,6 +47,22 @@ class MouseHandler {
     }
 
     /**
+     * Convert a mouse event's client coordinates to canvas-intrinsic pixel coordinates.
+     * This corrects for any mismatch between the canvas's CSS display size (e.g. width:100%)
+     * and its intrinsic drawing-buffer size (canvas.width / canvas.height).
+     * Without this correction, hits become increasingly inaccurate at high zoom levels.
+     * @param {MouseEvent} e
+     * @returns {{ x: number, y: number }}
+     */
+    getCanvasPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+            y: (e.clientY - rect.top)  * (this.canvas.height / rect.height)
+        };
+    }
+
+    /**
      * Setup mouse and keyboard event listeners
      */
     setupEventListeners() {
@@ -66,9 +82,7 @@ class MouseHandler {
      * @param {MouseEvent} e - Mouse event
      */
     handleMouseDown(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        const { x: screenX, y: screenY } = this.getCanvasPos(e);
 
         this.lastMousePos = { x: screenX, y: screenY };
 
@@ -149,9 +163,7 @@ class MouseHandler {
      * @param {MouseEvent} e - Mouse event
      */
     handleMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        const { x: screenX, y: screenY } = this.getCanvasPos(e);
 
         if (this.isDragging && this.selectedVertex !== null) {
             // Dragging existing vertex
@@ -186,9 +198,7 @@ class MouseHandler {
         const wasDragging = this.isDragging;
 
         // Get mouse position for replacement target detection
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        const { x: screenX, y: screenY } = this.getCanvasPos(e);
         const dataPos = this.geometryOps.screenToData(screenX, screenY);
 
         this.isDragging = false;
@@ -213,10 +223,8 @@ class MouseHandler {
      */
     handleWheel(e) {
         e.preventDefault();
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
+        const { x: mouseX, y: mouseY } = this.getCanvasPos(e);
+
         const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const applied = this.geometryOps.applyZoom(mouseX, mouseY, scaleFactor);
         
