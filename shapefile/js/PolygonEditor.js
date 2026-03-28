@@ -1237,53 +1237,33 @@ class PolygonEditor {
         const stats = this.vertexSelection.getStatistics();
         const selectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
 
-        // Check if any selected vertices are fixed
+        // Check if any selected vertices are fixed/orphaned/missing-county.
+        // Same-county is NOT checked here: vertices are always selected in the context
+        // of the currently selected polygon, so they are guaranteed to be in the same
+        // county. A cross-county check would produce false positives for boundary
+        // vertices that appear in multiple counties' polygons.
         let hasFixedVertex = false;
-        let allInSameCounty = true;
-        let hasOrphanedVertex = false;   // vertex coordinate not found in any polygon
-        let hasMissingCounty = false;    // vertex found but all owning polygons lack county data
-        let countyName = null;
+        let hasOrphanedVertex = false;
+        let hasMissingCounty = false;
+
+        // Derive county from the selected polygon — authoritative context for all vertex ops.
+        const selectedPolygon = this.selectedPolygonIndex !== null
+            ? this.polygons[this.selectedPolygonIndex] : null;
+        const allInSameCounty = true; // always true — enforced by polygon-first selection model
 
         if (selectedInfo.length > 0) {
             selectedInfo.forEach(v => {
                 if (this.vertexClassifier.isProtected(v.x, v.y, this.polygons)) {
                     hasFixedVertex = true;
                 }
-
-                // Use resolveVertexInfo to distinguish:
-                //   not found → orphaned vertex (invalid)
-                //   found, no counties → polygon exists but county field is missing/same-as-id
-                //   found, counties → normal case; intersect to check same-county
                 const info = this.vertexClassifier.resolveVertexInfo(v.x, v.y, this.polygons);
-
                 if (!info.found) {
                     hasOrphanedVertex = true;
-                    allInSameCounty = false;
-                    return;
                 }
-                if (info.counties.size === 0) {
+                if (info.found && info.counties.size === 0) {
                     hasMissingCounty = true;
-                    allInSameCounty = false;
-                    return;
-                }
-
-                // Intersect running shared set with this vertex's counties.
-                // Using a single countyName string was wrong for cross-county vertices
-                // (e.g. vertex A = {NC1,NC2}, vertex B = {NC2,NC3} share NC2 but
-                // countyName="NC1" would falsely trigger the mismatch).
-                if (countyName === null) {
-                    countyName = Array.from(info.counties)[0];
-                    // Carry the full set for intersection on subsequent vertices
-                    this._runningSharedCounties = new Set(info.counties);
-                } else {
-                    // Intersect
-                    for (const c of this._runningSharedCounties) {
-                        if (!info.counties.has(c)) this._runningSharedCounties.delete(c);
-                    }
-                    if (this._runningSharedCounties.size === 0) allInSameCounty = false;
                 }
             });
-            this._runningSharedCounties = null;
         }
 
         // Update vertex info display
@@ -1301,12 +1281,11 @@ class PolygonEditor {
             const fixedText = hasFixedVertex ? '<span style="color: #0066FF; font-weight: bold;">⚠️ Contains FIXED vertex</span><br>' : '';
             const orphanText = hasOrphanedVertex ? '<span style="color: #CC0000; font-weight: bold;">⛔ Vertex not in any polygon</span><br>' : '';
             const missingCountyText = hasMissingCounty ? '<span style="color: #FF6600; font-weight: bold;">⚠️ No county data on vertex</span><br>' : '';
-            const crossCountyText = (!hasOrphanedVertex && !hasMissingCounty && !allInSameCounty) ? '<span style="color: #FF6600; font-weight: bold;">⚠️ Vertices span multiple counties</span><br>' : '';
 
             vertexInfo.innerHTML = `
                 <div style="font-weight: bold; margin-bottom: 4px;">${stats.selectedCount} vertex${stats.selectedCount > 1 ? 'es' : ''} selected</div>
                 <div style="font-size: 9px; color: #666; margin-bottom: 4px;">${coordsText}</div>
-                ${orphanText}${missingCountyText}${crossCountyText}${fixedText}
+                ${orphanText}${missingCountyText}${fixedText}
                 <div style="font-size: 9px; color: #999;">${stats.neighboringCount} neighboring vertices</div>
             `;
             vertexInfo.style.color = '#333';
