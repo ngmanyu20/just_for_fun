@@ -316,6 +316,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (csvModalCancel) csvModalCancel.addEventListener('click', hideCsvModal);
         if (csvModalRefresh) csvModalRefresh.addEventListener('click', onLoadCsvClick);
 
+        // Display modal
+        const displayBtn = document.getElementById('displayBtn');
+        const displayModalBackdrop = document.getElementById('displayModalBackdrop');
+        const displayModalClose = document.getElementById('displayModalClose');
+
+        if (displayBtn && displayModalBackdrop) {
+            displayBtn.addEventListener('click', () => displayModalBackdrop.classList.add('open'));
+        }
+        if (displayModalClose && displayModalBackdrop) {
+            displayModalClose.addEventListener('click', () => displayModalBackdrop.classList.remove('open'));
+        }
+        if (displayModalBackdrop) {
+            displayModalBackdrop.addEventListener('click', (e) => {
+                if (e.target === displayModalBackdrop) displayModalBackdrop.classList.remove('open');
+            });
+        }
+
         // Expose for inline handler compatibility (legacy / cache issues)
         window.onLoadCsvClick = onLoadCsvClick;
         window.onSaveCsvClick = onSaveCsvClick;
