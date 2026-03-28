@@ -3,8 +3,9 @@
  * Works with multiple selected vertices that form a contiguous sequence
  */
 class MidpointCreation {
-    constructor(classifier) {
+    constructor(classifier, fixedCountyVertices) {
         this.classifier = classifier;
+        this.fixedCountyVertices = fixedCountyVertices;
         this.tolerance = 0.000001; // Coordinate matching tolerance
     }
 
@@ -27,6 +28,41 @@ class MidpointCreation {
 
         // Deep copy for rollback
         const originalPolygons = JSON.parse(JSON.stringify(polygons));
+
+        // Validate all vertices are valid and share a county before doing any work.
+        // resolveVertexInfo distinguishes: orphaned / missing county / cross-county.
+        const vertexInfos = selectedVertices.map(v => ({
+            v,
+            info: this.classifier.resolveVertexInfo(v.x, v.y, polygons)
+        }));
+
+        for (const { v, info } of vertexInfos) {
+            if (!info.found) {
+                return {
+                    success: false, polygons: originalPolygons,
+                    message: `Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) does not belong to any polygon`
+                };
+            }
+            if (info.counties.size === 0) {
+                return {
+                    success: false, polygons: originalPolygons,
+                    message: `Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) has no county information`
+                };
+            }
+        }
+
+        let sharedCounties = new Set(vertexInfos[0].info.counties);
+        for (let i = 1; i < vertexInfos.length; i++) {
+            for (const c of sharedCounties) {
+                if (!vertexInfos[i].info.counties.has(c)) sharedCounties.delete(c);
+            }
+        }
+        if (sharedCounties.size === 0) {
+            return {
+                success: false, polygons: originalPolygons,
+                message: 'Selected vertices are not in the same county'
+            };
+        }
 
         // Group selected vertices by polygon and ring
         const groups = this.groupVerticesByRing(selectedVertices);
@@ -51,16 +87,63 @@ class MidpointCreation {
             }
         }
 
-        // Block midpoint creation if any selected vertex is protected (fixed or cross-county).
-        // A new midpoint between two protected vertices would itself be unprotected and
-        // could then be dragged, corrupting the county boundary.
-        for (const v of selectedVertices) {
-            if (this.classifier.isProtected(v.x, v.y, polygons)) {
-                const type = this.classifier.classify(v.x, v.y, polygons);
+        // Validate protected vertex combinations for each adjacent pair.
+        //
+        // Rules per pair (v1, v2):
+        //   FIXED   + FIXED        → allowed; midpoint lies on the county boundary line.
+        //                            Must register in FixedCountyVertices so it stays FIXED.
+        //   CC      + CC (same pair) → allowed; propagation inserts midpoint into all sharing
+        //                              polygons → auto-classifies as CROSS_COUNTY.
+        //   CC      + CC (diff pair) → blocked; midpoint is between two different county
+        //                              borders — no valid type exists.
+        //   FIXED   + anything else  → blocked; midpoint lands between boundary and interior.
+        //   CC      + anything else  → same reason.
+        //   SAME_COUNTY/ORDINARY + SAME_COUNTY/ORDINARY → allowed (unchanged behaviour).
+        const pairsToRegisterFixed = []; // { midpointX, midpointY, counties }
+
+        for (const group of this.groupVerticesByRing(selectedVertices)) {
+            const ring = polygons[group.polygonIndex].rings[group.ringIndex];
+            const sorted = group.vertices.slice().sort((a, b) => a.vertexIndex - b.vertexIndex);
+
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const va = ring[sorted[i].vertexIndex];
+                const vb = ring[sorted[i + 1].vertexIndex];
+                const typeA = this.classifier.classify(va.x, va.y, polygons);
+                const typeB = this.classifier.classify(vb.x, vb.y, polygons);
+
+                const aProtected = typeA === VertexClassifier.FIXED || typeA === VertexClassifier.CROSS_COUNTY;
+                const bProtected = typeB === VertexClassifier.FIXED || typeB === VertexClassifier.CROSS_COUNTY;
+
+                if (!aProtected && !bProtected) continue; // ordinary/same-county pair — fine
+
+                if (typeA === VertexClassifier.FIXED && typeB === VertexClassifier.FIXED) {
+                    // Midpoint lies on the county boundary segment — register it as FIXED
+                    const mid = { x: (va.x + vb.x) / 2, y: (va.y + vb.y) / 2 };
+                    const countiesA = this.classifier.getCountiesAtVertex(va.x, va.y, polygons);
+                    const countiesB = this.classifier.getCountiesAtVertex(vb.x, vb.y, polygons);
+                    const sharedCounties = new Set([...countiesA].filter(c => countiesB.has(c)));
+                    pairsToRegisterFixed.push({ x: mid.x, y: mid.y, counties: sharedCounties.size > 0 ? sharedCounties : countiesA });
+                    continue;
+                }
+
+                if (typeA === VertexClassifier.CROSS_COUNTY && typeB === VertexClassifier.CROSS_COUNTY) {
+                    // Both cross-county — only valid if they share the exact same county pair
+                    const countiesA = this.classifier.getCountiesAtVertex(va.x, va.y, polygons);
+                    const countiesB = this.classifier.getCountiesAtVertex(vb.x, vb.y, polygons);
+                    const setA = [...countiesA].sort().join(',');
+                    const setB = [...countiesB].sort().join(',');
+                    if (setA === setB) continue; // same county pair — propagation handles classification
+                    return {
+                        success: false, polygons: originalPolygons,
+                        message: 'Cannot insert midpoint between cross-county vertices on different county boundaries'
+                    };
+                }
+
+                // Mixed protected types or protected + non-protected
+                const protectedType = aProtected ? typeA : typeB;
                 return {
-                    success: false,
-                    polygons: originalPolygons,
-                    message: `Cannot insert midpoint on ${this.classifier.label(type)} vertex`
+                    success: false, polygons: originalPolygons,
+                    message: `Cannot insert midpoint adjacent to a ${this.classifier.label(protectedType)} vertex mixed with a non-boundary vertex`
                 };
             }
         }
@@ -157,6 +240,14 @@ class MidpointCreation {
 
         // Collect all affected polygon IDs from propagation
         const allAffectedIds = Array.from(affectedPolygonIds);
+
+        // Register any FIXED midpoints so VertexClassifier continues to classify them as FIXED.
+        // This must run after insertion so their coordinates are final.
+        if (this.fixedCountyVertices && pairsToRegisterFixed.length > 0) {
+            for (const { x, y, counties } of pairsToRegisterFixed) {
+                this.fixedCountyVertices.addFixedVertex(x, y, counties);
+            }
+        }
 
         console.log(`Created ${totalMidpointsCreated} midpoint(s) across ${allAffectedIds.length} polygon(s)`);
 

@@ -182,6 +182,27 @@ class FixedCountyVertices {
     }
 
     /**
+     * Register a single new fixed vertex (e.g. a midpoint inserted between two fixed vertices).
+     * Unlike initialize(), this adds one entry without triggering the re-initialization guard.
+     * @param {number} x
+     * @param {number} y
+     * @param {Iterable<string>} counties - county names this vertex belongs to
+     */
+    addFixedVertex(x, y, counties) {
+        const key = this.getVertexKey(x, y);
+        if (!this.fixedVertices.has(key)) {
+            this.fixedVertices.set(key, { x, y, counties: new Set() });
+        }
+        const entry = this.fixedVertices.get(key);
+        for (const c of counties) {
+            entry.counties.add(c);
+            const list = this.verticesByCounty.get(c);
+            if (list) list.push({ x, y, key });
+        }
+        console.log(`Fixed vertex registered: (${x}, ${y}) for counties [${[...entry.counties].join(', ')}]`);
+    }
+
+    /**
      * Clear all fixed vertex data
      */
     clear() {

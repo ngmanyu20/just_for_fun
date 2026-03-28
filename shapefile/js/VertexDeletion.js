@@ -45,6 +45,23 @@ class VertexDeletion {
 
         console.log(`Found ${occurrences.length} occurrences of vertex at (${d.x}, ${d.y})`);
 
+        // Record each occurrence's prev/next BEFORE deletion so we can reconstruct
+        // the gap ring directly — the edge-map approach in detectAndFillGaps is
+        // unreliable when outer boundary unmatched edges share a vertex with the
+        // gap triangle, causing the greedy loop builder to go off track.
+        const pNeighborPairs = occurrences.map(occ => {
+            const ring = polygons[occ.polygonIndex].rings[occ.ringIndex];
+            const n = ring.length - 1; // unique vertex count (closing dup excluded)
+            const idx = occ.vertexIndex;
+            const prev = ring[(idx - 1 + n) % n];
+            const next = ring[(idx + 1) % n];
+            return {
+                polyIndex: occ.polygonIndex,
+                prev: { x: prev.x, y: prev.y },
+                next: { x: next.x, y: next.y }
+            };
+        });
+
         // Step 2: Group occurrences by county
         const groups = this.groupByCounty(polygons, occurrences);
 
@@ -137,9 +154,28 @@ class VertexDeletion {
             console.log(`Successfully processed county ${county}`);
         }
 
-        // Step 4: Detect gaps and absorb each into the adjacent polygon with the longest shared boundary
+        // Step 4: Detect gaps and absorb into the adjacent polygon with the longest shared boundary.
+        // When 3+ polygons shared the deleted vertex, build the gap ring directly from the
+        // pre-recorded prev/next neighbors — this is immune to the greedy loop builder going
+        // off track along outer boundary unmatched edges that share a vertex with the gap triangle.
         const affectedPolygonIds = [...new Set(occurrences.map(occ => occ.polygonIndex))];
-        const absorbedIds = this.detectAndFillGaps(polygons, affectedPolygonIds);
+        let absorbedIds = [];
+
+        if (pNeighborPairs.length >= 3) {
+            const gapRing = this.buildGapRingFromNeighbors(pNeighborPairs);
+            if (gapRing && gapRing.length >= 4) {
+                console.log(`Built gap ring directly from pre-deletion neighbors: ${gapRing.length - 1} vertices`);
+                const polyId = this.absorbGapIntoNeighbor(gapRing, polygons, affectedPolygonIds);
+                if (polyId >= 0) absorbedIds = [polyId];
+            }
+            // Fallback to edge-map detection if direct method fails
+            if (absorbedIds.length === 0) {
+                console.log('Direct gap ring failed, falling back to edge-map detection');
+                absorbedIds = this.detectAndFillGaps(polygons, affectedPolygonIds);
+            }
+        } else {
+            absorbedIds = this.detectAndFillGaps(polygons, affectedPolygonIds);
+        }
 
         if (absorbedIds.length > 0) {
             const allSyncIds = [...new Set([...affectedPolygonIds, ...absorbedIds])];
@@ -408,6 +444,47 @@ class VertexDeletion {
      * @param {Array<number>} affectedIds - IDs of polygons affected by deletion
      * @returns {Array<Object>} - New gap polygons to fill detected gaps
      */
+    /**
+     * Build the gap ring directly from the prev/next neighbors recorded before deletion.
+     * Each pair has { prev, next } — the vertices that flanked the deleted point in one polygon.
+     * After deletion, the gap is bounded by the chain: next_0 → next_1 → ... → next_0,
+     * where pair_i is found by matching pair.prev == current next.
+     * @param {Array<{polyIndex, prev, next}>} pairs
+     * @returns {Array<Object>|null} Closed ring (last === first) or null if chain broken
+     */
+    buildGapRingFromNeighbors(pairs) {
+        const ring = [];
+        let current = pairs[0].next;
+        ring.push({ ...current });
+
+        const used = new Set([0]);
+
+        for (let step = 0; step < pairs.length - 1; step++) {
+            let found = false;
+            for (let i = 0; i < pairs.length; i++) {
+                if (used.has(i)) continue;
+                if (this.verticesMatch(pairs[i].prev, current)) {
+                    current = pairs[i].next;
+                    ring.push({ ...current });
+                    used.add(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                console.warn('buildGapRingFromNeighbors: chain broken at step', step);
+                return null;
+            }
+        }
+
+        // Close the ring
+        if (!this.verticesMatch(ring[ring.length - 1], ring[0])) {
+            ring.push({ ...ring[0] });
+        }
+
+        return ring;
+    }
+
     detectAndFillGaps(polygons, affectedIds) {
         console.log('Detecting gaps in affected polygons...');
 

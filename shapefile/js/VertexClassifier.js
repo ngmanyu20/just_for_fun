@@ -84,23 +84,57 @@ class VertexClassifier {
     }
 
     /**
-     * Returns the set of county names that share this vertex.
-     * Needed by VertexReplacement's special same-boundary allowance.
+     * Returns detailed ownership info for a coordinate.
+     *
+     * Distinguishes three cases callers need to handle separately:
+     *   found = false           → vertex is orphaned (not in any polygon) — invalid state
+     *   found = true, counties empty → vertex exists but all owning polygons lack county data
+     *   found = true, counties non-empty → normal case
+     *
+     * County validity rules (both must pass):
+     *   1. polygon.county must be non-null/undefined/empty
+     *   2. polygon.county must NOT equal polygon.id — guards against misconfigured data
+     *      where the county field was set to the polygon's own ID (e.g. "NC1_01" instead of "NC1")
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {Array<Object>} polygons
+     * @returns {{ found: boolean, polygonIds: number[], counties: Set<string> }}
      */
-    getCountiesAtVertex(x, y, polygons) {
+    resolveVertexInfo(x, y, polygons) {
+        const polygonIds = [];
         const counties = new Set();
-        for (const polygon of polygons) {
+
+        for (let i = 0; i < polygons.length; i++) {
+            const polygon = polygons[i];
+            let found = false;
             for (const ring of polygon.rings) {
+                if (found) break;
                 for (const v of ring) {
                     if (Math.abs(v.x - x) < this.tolerance &&
                         Math.abs(v.y - y) < this.tolerance) {
-                        if (polygon.county) counties.add(polygon.county);
+                        found = true;
+                        polygonIds.push(i);
+                        if (polygon.county && polygon.county !== polygon.id) {
+                            counties.add(polygon.county);
+                        }
                         break;
                     }
                 }
             }
         }
-        return counties;
+
+        return { found: polygonIds.length > 0, polygonIds, counties };
+    }
+
+    /**
+     * Returns the set of county names that share this vertex.
+     * Delegates to resolveVertexInfo — only returns valid county names
+     * (non-null, not equal to the polygon's own ID).
+     * Needed by VertexReplacement's special same-boundary allowance.
+     */
+    getCountiesAtVertex(x, y, polygons) {
+        return this.resolveVertexInfo(x, y, polygons).counties;
     }
 
     /**

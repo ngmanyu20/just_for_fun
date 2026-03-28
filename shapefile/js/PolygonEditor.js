@@ -28,7 +28,7 @@ class PolygonEditor {
         this.vertexSelection = new VertexSelection();
         this.vertexDeletion = new VertexDeletion(this.vertexClassifier);
         this.vertexReplacement = new VertexReplacement(this.vertexClassifier);
-        this.midpointCreation = new MidpointCreation(this.vertexClassifier);
+        this.midpointCreation = new MidpointCreation(this.vertexClassifier, this.fixedCountyVertices);
         this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
 
         // Application state
@@ -1095,19 +1095,44 @@ class PolygonEditor {
         // Get selected vertices
         const selectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
 
-        // Verify all vertices are in the same county
-        const counties = new Set(selectedInfo.map(v => this.polygons[v.polygonIndex].county));
-        if (counties.size > 1) {
-            console.log('All selected vertices must be in the same county');
-            this.uiController.showError('All selected vertices must be in the same county');
+        // Verify all vertices are valid and share a county.
+        // resolveVertexInfo distinguishes three distinct failure modes:
+        //   not found   → vertex coordinate is not in any polygon (data integrity problem)
+        //   found, no county → polygon exists but county field is null or set to its own ID
+        //   found, no shared county → vertices exist but belong to different counties
+        const vertexInfos = selectedInfo.map(v => ({
+            v,
+            info: this.vertexClassifier.resolveVertexInfo(v.x, v.y, this.polygons)
+        }));
+
+        for (const { v, info } of vertexInfos) {
+            if (!info.found) {
+                this.uiController.showError(`Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) does not belong to any polygon`);
+                return;
+            }
+            if (info.counties.size === 0) {
+                this.uiController.showError(`Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) has no county information`);
+                return;
+            }
+        }
+
+        let sharedCounties = new Set(vertexInfos[0].info.counties);
+        for (let i = 1; i < vertexInfos.length; i++) {
+            for (const c of sharedCounties) {
+                if (!vertexInfos[i].info.counties.has(c)) sharedCounties.delete(c);
+            }
+        }
+        if (sharedCounties.size === 0) {
+            this.uiController.showError('Selected vertices are not all in the same county');
             return;
         }
+        const recordedCounty = this.polygons[selectedInfo[0].polygonIndex].county;
+        const vertexSplitCounty = sharedCounties.has(recordedCounty)
+            ? recordedCounty
+            : Array.from(sharedCounties)[0];
 
         console.log(`Split by vertices requested with ${selectedInfo.length} vertices`);
         console.log('Vertices:', selectedInfo.map(v => `(${v.x.toFixed(4)}, ${v.y.toFixed(4)})`).join(', '));
-
-        // Capture state before split so we can identify new polygons afterwards
-        const vertexSplitCounty = [...counties][0];
         const existingIds = new Set(this.polygons.map(p => p.id));
 
         // Perform split using VertexSplitter
@@ -1197,6 +1222,8 @@ class PolygonEditor {
         // Check if any selected vertices are fixed
         let hasFixedVertex = false;
         let allInSameCounty = true;
+        let hasOrphanedVertex = false;   // vertex coordinate not found in any polygon
+        let hasMissingCounty = false;    // vertex found but all owning polygons lack county data
         let countyName = null;
 
         if (selectedInfo.length > 0) {
@@ -1204,11 +1231,27 @@ class PolygonEditor {
                 if (this.vertexClassifier.isProtected(v.x, v.y, this.polygons)) {
                     hasFixedVertex = true;
                 }
-                // Check county consistency
-                const polygon = this.polygons[v.polygonIndex];
+
+                // Use resolveVertexInfo to distinguish:
+                //   not found → orphaned vertex (invalid)
+                //   found, no counties → polygon exists but county field is missing/same-as-id
+                //   found, counties → normal case; intersect to check same-county
+                const info = this.vertexClassifier.resolveVertexInfo(v.x, v.y, this.polygons);
+
+                if (!info.found) {
+                    hasOrphanedVertex = true;
+                    allInSameCounty = false;
+                    return;
+                }
+                if (info.counties.size === 0) {
+                    hasMissingCounty = true;
+                    allInSameCounty = false;
+                    return;
+                }
+
                 if (countyName === null) {
-                    countyName = polygon.county;
-                } else if (polygon.county !== countyName) {
+                    countyName = Array.from(info.counties)[0];
+                } else if (!info.counties.has(countyName)) {
                     allInSameCounty = false;
                 }
             });
@@ -1227,11 +1270,14 @@ class PolygonEditor {
             ).join(', ');
 
             const fixedText = hasFixedVertex ? '<span style="color: #0066FF; font-weight: bold;">⚠️ Contains FIXED vertex</span><br>' : '';
+            const orphanText = hasOrphanedVertex ? '<span style="color: #CC0000; font-weight: bold;">⛔ Vertex not in any polygon</span><br>' : '';
+            const missingCountyText = hasMissingCounty ? '<span style="color: #FF6600; font-weight: bold;">⚠️ No county data on vertex</span><br>' : '';
+            const crossCountyText = (!hasOrphanedVertex && !hasMissingCounty && !allInSameCounty) ? '<span style="color: #FF6600; font-weight: bold;">⚠️ Vertices span multiple counties</span><br>' : '';
 
             vertexInfo.innerHTML = `
                 <div style="font-weight: bold; margin-bottom: 4px;">${stats.selectedCount} vertex${stats.selectedCount > 1 ? 'es' : ''} selected</div>
                 <div style="font-size: 9px; color: #666; margin-bottom: 4px;">${coordsText}</div>
-                ${fixedText}
+                ${orphanText}${missingCountyText}${crossCountyText}${fixedText}
                 <div style="font-size: 9px; color: #999;">${stats.neighboringCount} neighboring vertices</div>
             `;
             vertexInfo.style.color = '#333';

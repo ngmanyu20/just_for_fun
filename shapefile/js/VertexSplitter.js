@@ -29,36 +29,50 @@ class VertexSplitter {
             };
         }
 
-        // Check all vertices are in the same county
-        const counties = new Set(selectedVertices.map(v => polygons[v.polygonIndex].county));
-        if (counties.size > 1) {
-            return {
-                success: false,
-                polygons,
-                message: 'All vertices must be in the same county'
-            };
-        }
+        // Validate all vertices are valid and share a county.
+        // resolveVertexInfo distinguishes: orphaned vertex / missing county / cross-county.
+        const vertexInfos = selectedVertices.map(v => ({
+            v,
+            info: this.classifier.resolveVertexInfo(v.x, v.y, polygons)
+        }));
 
-        const county = Array.from(counties)[0];
-
-        // CROSS_COUNTY vertices sit on the inter-county boundary and are shared with
-        // another county's polygons. Using one as a split anchor risks topology mismatches
-        // between counties, so they remain blocked.
-        //
-        // FIXED (county outline) vertices are explicitly allowed: the split algorithm
-        // places every selected vertex as a ring corner in all output polygons, so each
-        // FIXED vertex survives at its original coordinate and the county boundary shape
-        // is fully preserved.
-        for (const v of selectedVertices) {
-            const type = this.classifier.classify(v.x, v.y, polygons);
-            if (type === VertexClassifier.CROSS_COUNTY) {
+        for (const { v, info } of vertexInfos) {
+            if (!info.found) {
                 return {
-                    success: false,
-                    polygons,
-                    message: `Cannot split on ${this.classifier.label(type)} vertex`
+                    success: false, polygons,
+                    message: `Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) does not belong to any polygon`
+                };
+            }
+            if (info.counties.size === 0) {
+                return {
+                    success: false, polygons,
+                    message: `Vertex (${v.x.toFixed(4)}, ${v.y.toFixed(4)}) has no county information`
                 };
             }
         }
+
+        let sharedCounties = new Set(vertexInfos[0].info.counties);
+        for (let i = 1; i < vertexInfos.length; i++) {
+            for (const c of sharedCounties) {
+                if (!vertexInfos[i].info.counties.has(c)) sharedCounties.delete(c);
+            }
+        }
+        if (sharedCounties.size === 0) {
+            return {
+                success: false, polygons,
+                message: 'Selected vertices are not all in the same county'
+            };
+        }
+
+        const recordedCounty = polygons[selectedVertices[0].polygonIndex].county;
+        const county = sharedCounties.has(recordedCounty)
+            ? recordedCounty
+            : Array.from(sharedCounties)[0];
+
+        // All vertex types are safe as split anchors: the split algorithm places every
+        // selected vertex as a ring corner in both output polygons, so FIXED and
+        // CROSS_COUNTY vertices remain at their original coordinates and the county
+        // boundary shape is fully preserved. No vertex type is blocked for splitting.
 
         // Check for collinearity
         if (this.areCollinear(selectedVertices)) {
