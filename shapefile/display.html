@@ -73,16 +73,42 @@
             margin-top: 6px;
         }
 
+        .coords-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            margin-bottom: 4px;
+        }
+
+        .coords-header span {
+            font-size: 11px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .coords-toggle {
+            width: auto;
+            padding: 1px 7px;
+            font-size: 12px;
+            font-weight: 700;
+            background: #e9ecef;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #333;
+            line-height: 1.4;
+        }
+
         #displayCoordinates {
             font-size: 10px;
             font-family: monospace;
             word-break: break-all;
-            margin-top: 8px;
             padding: 6px;
             background: #f8f9fa;
             border-radius: 4px;
             color: #444;
-            max-height: 100px;
+            max-height: 200px;
             overflow-y: auto;
         }
 
@@ -118,7 +144,13 @@
         <h2>📊 Polygon Information</h2>
         <div id="displayPolygonInfo"><p style="color:#999;">Select a polygon to see its information.</p></div>
         <div id="displaySharedInfo"></div>
-        <div id="displayCoordinates"></div>
+        <div class="coords-header">
+            <span>Coordinates</span>
+            <button class="coords-toggle" id="coordsToggleBtn">+</button>
+        </div>
+        <div id="coordsWrapper" style="display:none;">
+            <div id="displayCoordinates"></div>
+        </div>
     </div>
 
     <!-- Vertex Info -->
@@ -139,6 +171,14 @@
         const displayCoords   = document.getElementById('displayCoordinates');
         const displayVertex   = document.getElementById('displayVertexInfo');
         const statusBar       = document.getElementById('statusBar');
+        const coordsWrapper   = document.getElementById('coordsWrapper');
+        const coordsToggleBtn = document.getElementById('coordsToggleBtn');
+
+        coordsToggleBtn.addEventListener('click', () => {
+            const expanded = coordsWrapper.style.display !== 'none';
+            coordsWrapper.style.display = expanded ? 'none' : 'block';
+            coordsToggleBtn.textContent = expanded ? '+' : '−';
+        });
 
         let lastSelectValue = '';
         let suppressChange = false;
