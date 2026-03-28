@@ -136,43 +136,12 @@ class UIController {
             }
         }
 
-        let vertexInfo = '';
-        polygon.rings.forEach((ring, ringIndex) => {
-            const ringType = ringIndex === 0 ? 'Exterior' : `Hole ${ringIndex}`;
-            vertexInfo += `<br><strong>${ringType} Ring:</strong> ${ring.length} vertices`;
-        });
-
-        const modeInstructions = this.currentMode === 'edit'
-            ? 'In edit mode: Click on polygons to select them, drag vertices to edit'
-            : 'In view mode: Pan and zoom to explore. Switch to Edit mode to modify shapes';
-
-        // Build title with both Shape_ID and County if available
-        let title = polygon.id;
-        if (polygon.county && polygon.county !== polygon.id) {
-            title = `${polygon.id} - ${polygon.county}`;
-        }
-
         let infoHTML = `
-            <h4>${title}</h4>
-            <p><strong>Parent:</strong> ${polygon.parent}</p>
-            <p><strong>Type:</strong> ${hasHoles ? 'Polygon with holes' : 'Simple polygon'}</p>
-            <p><strong>Rings:</strong> ${polygon.rings.length} total${vertexInfo}</p>
+            <h4>${polygon.id}</h4>
+            <p><strong>County:</strong> ${polygon.county || '—'}</p>
             <p><strong>Total Vertices:</strong> ${totalVertices}</p>`;
 
-        if (sharedVerticesManager && sharedVerticesManager.isEnabled()) {
-            infoHTML += `<p><strong>Shared Vertices:</strong> ${sharedVerticesCount}</p>`;
-        }
-
-        // Add neighbor information
         infoHTML += neighborInfo;
-
-        infoHTML += `
-            <p><em>${modeInstructions}</em></p>
-            <p><em>Use Ctrl+Z to undo, Ctrl+Y to redo changes</em></p>`;
-
-        if (sharedVerticesManager && sharedVerticesManager.isEnabled()) {
-            infoHTML += `<p><em>Shared vertices (S#) move together across polygons</em></p>`;
-        }
 
         this.elements.polygonInfo.innerHTML = infoHTML;
         
