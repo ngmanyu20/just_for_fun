@@ -421,23 +421,27 @@ class VertexSplitter {
     }
 
     /**
-     * Check if vertices are collinear
+     * Check if ALL selected vertices are collinear (lie on a single straight line).
+     * Tests every vertex against the line defined by the first two — checking only
+     * the first 3 was wrong: [A,B,C,D,E,F] where A/B/C are collinear but D breaks
+     * the line would be falsely rejected.
      * @param {Array<Object>} vertices - Array of vertex objects with x, y
-     * @returns {boolean} - True if collinear
+     * @returns {boolean} - True only if every vertex lies on the same line
      */
     areCollinear(vertices) {
         if (vertices.length < 3) return false;
 
-        // Use first 3 vertices to check
         const v1 = vertices[0];
         const v2 = vertices[1];
-        const v3 = vertices[2];
+        const dx = v2.x - v1.x;
+        const dy = v2.y - v1.y;
 
-        // Calculate cross product
-        const crossProduct = (v2.x - v1.x) * (v3.y - v1.y) - (v2.y - v1.y) * (v3.x - v1.x);
+        for (let i = 2; i < vertices.length; i++) {
+            const crossProduct = dx * (vertices[i].y - v1.y) - dy * (vertices[i].x - v1.x);
+            if (Math.abs(crossProduct) >= this.tolerance) return false;
+        }
 
-        // If cross product is very small, vertices are collinear
-        return Math.abs(crossProduct) < this.tolerance;
+        return true;
     }
 
     /**
