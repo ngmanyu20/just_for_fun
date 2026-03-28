@@ -1153,6 +1153,15 @@ class PolygonEditor {
         console.log('Vertices:', selectedInfo.map(v => `(${v.x.toFixed(4)}, ${v.y.toFixed(4)})`).join(', '));
         const existingIds = new Set(this.polygons.map(p => p.id));
 
+        // Capture source polygon and its current neighbors BEFORE the split so
+        // vertexSync can propagate boundary vertices to those neighbors afterward.
+        const sourcePolygonSnapshot = this.selectedPolygonIndex !== null
+            ? JSON.parse(JSON.stringify(this.polygons[this.selectedPolygonIndex]))
+            : null;
+        const parentNeighborIds = this.selectedPolygonIndex !== null
+            ? this.adjacencyGraph.getNeighbors(this.polygons[this.selectedPolygonIndex].id)
+            : [];
+
         // Perform split using VertexSplitter
         // Pass the currently selected polygon index to resolve ambiguity with shared vertices
         const result = this.vertexSplitter.splitByVertices(
@@ -1180,6 +1189,33 @@ class PolygonEditor {
             this.vertexSelection.clearSelection();
             this.updateVertexSelectionInfo();
 
+            // STEP 1: Rebuild adjacency graph so vertexSync can find neighbors
+            console.log('Rebuilding adjacency graph after vertex split...');
+            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+
+            // STEP 2: Sync new polygon boundary vertices into all neighboring polygons.
+            // Without this, neighbors retain stale shared edges and gaps appear.
+            // Use the same syncAfterSplit path as Voronoi split.
+            if (sourcePolygonSnapshot && newPolygons.length > 0) {
+                const startIndex = this.polygons.indexOf(newPolygons[0]);
+                console.log(`Syncing vertex split polygons with neighbors (startIndex=${startIndex}, count=${newPolygons.length})...`);
+                this.polygons = this.vertexSync.syncAfterSplit(
+                    this.polygons,
+                    this.adjacencyGraph,
+                    startIndex,
+                    newPolygons.length,
+                    sourcePolygonSnapshot,
+                    parentNeighborIds
+                );
+            }
+
+            // STEP 3: Rebuild adjacency graph again with synced vertices
+            console.log('Rebuilding adjacency graph after vertex sync...');
+            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+
+            const stats = this.adjacencyGraph.getStatistics();
+            console.log('Adjacency graph rebuilt:', stats);
+
             // CRITICAL: Validate shared vertices after split
             console.log('Validating shared vertices after split...');
             const validation = this.sharedVertices.validateSharedVertices(this.polygons);
@@ -1189,15 +1225,7 @@ class PolygonEditor {
                 console.log(`✓ Shared vertices validated: ${validation.sharedGroupCount} groups, ${validation.totalSharedVertices} total vertices`);
             }
 
-            // CRITICAL: Rebuild adjacency graph (full rebuild since split creates new polygons)
-            console.log('Rebuilding adjacency graph after split...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
-
-            const stats = this.adjacencyGraph.getStatistics();
-            console.log('Adjacency graph rebuilt:', stats);
-
             // CRITICAL: Sync layer manager with updated polygon state
-            // This ensures the split polygons are visible immediately
             this.layerManager.layers.subCounty.polygons = this.polygons;
 
             // Save to history (after rebuilding shared vertices and adjacency)
