@@ -41,11 +41,17 @@ class VertexSplitter {
 
         const county = Array.from(counties)[0];
 
-        // Block vertex-split if any selected vertex is protected (fixed or cross-county).
-        // Splitting along a county boundary would break topology.
+        // CROSS_COUNTY vertices sit on the inter-county boundary and are shared with
+        // another county's polygons. Using one as a split anchor risks topology mismatches
+        // between counties, so they remain blocked.
+        //
+        // FIXED (county outline) vertices are explicitly allowed: the split algorithm
+        // places every selected vertex as a ring corner in all output polygons, so each
+        // FIXED vertex survives at its original coordinate and the county boundary shape
+        // is fully preserved.
         for (const v of selectedVertices) {
-            if (this.classifier.isProtected(v.x, v.y, polygons)) {
-                const type = this.classifier.classify(v.x, v.y, polygons);
+            const type = this.classifier.classify(v.x, v.y, polygons);
+            if (type === VertexClassifier.CROSS_COUNTY) {
                 return {
                     success: false,
                     polygons,
@@ -172,6 +178,16 @@ class VertexSplitter {
                 success: false,
                 polygons,
                 message: 'Failed to create valid polygons from selection'
+            };
+        }
+
+        // Belt-and-suspenders: confirm every FIXED vertex in the source ring is present
+        // in at least one output polygon. Guarantees the county boundary is intact.
+        if (!this.verifyFixedVerticesPreserved(sourceRing, newPolygons, polygons)) {
+            return {
+                success: false,
+                polygons,
+                message: 'Split would discard a fixed county boundary vertex — aborted'
             };
         }
 
@@ -514,6 +530,31 @@ class VertexSplitter {
         }
 
         return area / 2;
+    }
+
+    /**
+     * Verify that every FIXED vertex in the source ring appears in at least one
+     * output polygon. Guards against any edge case where the split algorithm could
+     * inadvertently drop a county boundary vertex.
+     * @param {Array<Object>} sourceRing - Original ring vertices
+     * @param {Array<Object>} newPolygons - Output polygons produced by the split
+     * @param {Array<Object>} polygons - Full polygon list (used for classification)
+     * @returns {boolean} True if all FIXED vertices are preserved
+     */
+    verifyFixedVerticesPreserved(sourceRing, newPolygons, polygons) {
+        for (const vertex of sourceRing) {
+            if (this.classifier.classify(vertex.x, vertex.y, polygons) !== VertexClassifier.FIXED) continue;
+            const preserved = newPolygons.some(poly =>
+                poly.rings.some(ring =>
+                    ring.some(v => this.verticesMatch(v, vertex))
+                )
+            );
+            if (!preserved) {
+                console.error(`FIXED vertex (${vertex.x}, ${vertex.y}) missing from split output — aborting`);
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
