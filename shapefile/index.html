@@ -415,24 +415,11 @@
                 <canvas id="canvas" width="1200" height="800"></canvas>
             </div>
 
-            <div class="info-panel">
-                <h3>📊 Polygon Information</h3>
-                <div id="polygonInfo">
-                    <p>Load a CSV file and select a polygon to see coordinates and modify shapes.</p>
-                </div>
+            <!-- Hidden elements kept for JS compatibility -->
+            <div style="display:none;">
+                <div id="polygonInfo"></div>
                 <div id="sharedInfo"></div>
-                <div style="margin-top: 8px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                        <span style="font-size:11px; font-weight:600; color:#495057;">Coordinates</span>
-                        <button id="coordsToggleBtn" onclick="toggleCoordinates()"
-                            style="width:auto; padding:1px 7px; font-size:12px; font-weight:700;
-                                   background:#e9ecef; border:1px solid #ccc; border-radius:4px;
-                                   cursor:pointer; color:#333;">+</button>
-                    </div>
-                    <div id="coordinatesWrapper" style="display:none;">
-                        <div class="coordinates" id="coordinates"></div>
-                    </div>
-                </div>
+                <div id="coordinates"></div>
             </div>
         </div>
 
@@ -487,13 +474,10 @@
             <!-- Display Button -->
             <button id="displayBtn" class="btn-secondary" style="width: 100%; margin-bottom: 8px;">🖥️ Display</button>
 
-            <!-- Select County -->
-            <div class="control-group">
-                <label for="polygonSelect">🗃️ Select County</label>
-                <select id="polygonSelect">
-                    <option value="">Choose a polygon to edit...</option>
-                </select>
-            </div>
+            <!-- Select County (hidden, kept for JS compatibility) -->
+            <select id="polygonSelect" style="display:none;">
+                <option value="">Choose a polygon to edit...</option>
+            </select>
 
             <!-- Undo/Redo (Same Line, Smaller) -->
             <div class="button-row">
@@ -515,14 +499,11 @@
 
             <button id="splitBtn" class="btn-secondary" disabled>✂️ Split</button>
 
+            <!-- Vertex Info (hidden, kept for JS compatibility) -->
+            <div id="vertexInfo" style="display:none;"></div>
+
             <!-- Vertices Section -->
             <div class="section-title">Vertices</div>
-
-            <!-- Vertex Selection Info -->
-            <div id="vertexInfo" style="font-size: 11px; color: #666; margin-bottom: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px; min-height: 60px;">
-                <div style="font-weight: bold; margin-bottom: 4px;">No vertex selected</div>
-                <div style="font-size: 10px; color: #999;">Shift+Click on a vertex to select</div>
-            </div>
 
             <!-- Vertex Operations Buttons -->
             <div style="display: flex; flex-direction: column; gap: 6px;">
