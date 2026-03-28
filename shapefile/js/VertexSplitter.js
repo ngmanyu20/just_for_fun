@@ -260,16 +260,13 @@ class VertexSplitter {
         if (selectedRing.length >= 4) {
             let area = this.calculatePolygonArea(selectedRing);
 
-            // If area is negative, reverse the ring to fix winding order
+            // If area is negative, reverse the ring to fix winding order.
+            // Pop the closing vertex first so it doesn't create a duplicate after reversal.
             if (area < 0) {
                 console.log(`Selected vertices polygon: Reversing ring due to negative area (${area})`);
-                const firstVertex = selectedRing[0];
+                selectedRing.pop();      // remove closing duplicate
                 selectedRing.reverse();
-                // Ensure first vertex stays first after reversal (move closing vertex)
-                if (this.verticesMatch(selectedRing[selectedRing.length - 1], firstVertex)) {
-                    const last = selectedRing.pop();
-                    selectedRing.unshift(last);
-                }
+                selectedRing.push({ x: selectedRing[0].x, y: selectedRing[0].y }); // re-close
                 area = -area;
             }
 
@@ -359,17 +356,14 @@ class VertexSplitter {
                 // Check if this ring is not just a line (has area)
                 let area = this.calculatePolygonArea(cleanedRing);
 
-                // If area is negative, reverse the ring to fix winding order
+                // If area is negative, reverse the ring to fix winding order.
+                // Pop the closing vertex first so it doesn't create a duplicate after reversal.
                 if (area < 0) {
                     console.log(`Segment ${i}: Reversing ring due to negative area (${area})`);
-                    const firstVertex = cleanedRing[0];
+                    cleanedRing.pop();      // remove closing duplicate
                     cleanedRing.reverse();
-                    // Ensure first vertex stays first after reversal (move closing vertex)
-                    if (this.verticesMatch(cleanedRing[cleanedRing.length - 1], firstVertex)) {
-                        const last = cleanedRing.pop();
-                        cleanedRing.unshift(last);
-                    }
-                    area = -area; // Update area to positive value
+                    cleanedRing.push({ x: cleanedRing[0].x, y: cleanedRing[0].y }); // re-close
+                    area = -area;
                 }
 
                 console.log(`Segment ${i}: startIdx=${startIdx}, endIdx=${endIdx}, vertices=${cleanedRing.length}, area=${area}`);
