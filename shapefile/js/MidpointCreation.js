@@ -107,9 +107,23 @@ class MidpointCreation {
                 const idx1 = sortedVertices[0].vertexIndex;
                 const idx2 = sortedVertices[1].vertexIndex;
 
-                // Normal case: use the actual vertex indices selected
-                const v1Idx = Math.min(idx1, idx2);
-                const v2Idx = Math.max(idx1, idx2);
+                // Detect wrap-around: indices are not simply consecutive, meaning the
+                // selected edge crosses the ring boundary (last unique vertex → first vertex
+                // via the closing duplicate). e.g. indices [0, 7] in a ring of length 9
+                // means the edge is v7 → v8(closing=v0), NOT v0 → v7.
+                const isWrapAround = Math.abs(idx1 - idx2) !== 1;
+
+                let v1Idx, v2Idx, insertPos;
+                if (isWrapAround) {
+                    // Edge goes from the larger index to the closing vertex.
+                    v1Idx     = Math.max(idx1, idx2);   // last real vertex
+                    v2Idx     = ring.length - 1;          // closing vertex (same coords as ring[0])
+                    insertPos = ring.length - 1;          // insert just before the closing vertex
+                } else {
+                    v1Idx     = Math.min(idx1, idx2);
+                    v2Idx     = Math.max(idx1, idx2);
+                    insertPos = v1Idx + 1;
+                }
 
                 const v1 = ring[v1Idx];
                 const v2 = ring[v2Idx];
@@ -120,13 +134,13 @@ class MidpointCreation {
                 };
 
                 midpoints.push({
-                    position: v1Idx + 1,
+                    position: insertPos,
                     vertex: midpoint,
                     v1Coords: { x: v1.x, y: v1.y },
                     v2Coords: { x: v2.x, y: v2.y }
                 });
 
-                console.log(`Midpoint between vertex ${v1Idx} (${v1.x}, ${v1.y}) and vertex ${v2Idx} (${v2.x}, ${v2.y}): (${midpoint.x}, ${midpoint.y})`);
+                console.log(`Midpoint between vertex ${v1Idx} (${v1.x}, ${v1.y}) and vertex ${v2Idx} (${v2.x}, ${v2.y}): (${midpoint.x}, ${midpoint.y}) [wrap-around=${isWrapAround}]`);
             } else {
                 // Multiple consecutive vertices
                 for (let i = 0; i < sortedVertices.length - 1; i++) {
