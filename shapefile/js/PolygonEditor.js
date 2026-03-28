@@ -1267,12 +1267,23 @@ class PolygonEditor {
                     return;
                 }
 
+                // Intersect running shared set with this vertex's counties.
+                // Using a single countyName string was wrong for cross-county vertices
+                // (e.g. vertex A = {NC1,NC2}, vertex B = {NC2,NC3} share NC2 but
+                // countyName="NC1" would falsely trigger the mismatch).
                 if (countyName === null) {
                     countyName = Array.from(info.counties)[0];
-                } else if (!info.counties.has(countyName)) {
-                    allInSameCounty = false;
+                    // Carry the full set for intersection on subsequent vertices
+                    this._runningSharedCounties = new Set(info.counties);
+                } else {
+                    // Intersect
+                    for (const c of this._runningSharedCounties) {
+                        if (!info.counties.has(c)) this._runningSharedCounties.delete(c);
+                    }
+                    if (this._runningSharedCounties.size === 0) allInSameCounty = false;
                 }
             });
+            this._runningSharedCounties = null;
         }
 
         // Update vertex info display
