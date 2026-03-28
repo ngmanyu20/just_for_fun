@@ -137,26 +137,19 @@ class VertexDeletion {
             console.log(`Successfully processed county ${county}`);
         }
 
-        // Step 4: Detect and fill any gaps created by vertex deletion
-        const affectedPolygonIds = [...new Set([...occurrences.map(occ => occ.polygonIndex)])];
-        const gapPolygons = this.detectAndFillGaps(polygons, affectedPolygonIds);
+        // Step 4: Detect gaps and absorb each into the adjacent polygon with the longest shared boundary
+        const affectedPolygonIds = [...new Set(occurrences.map(occ => occ.polygonIndex))];
+        const absorbedIds = this.detectAndFillGaps(polygons, affectedPolygonIds);
 
-        if (gapPolygons.length > 0) {
-            console.log(`Detected ${gapPolygons.length} gap(s), creating fill polygons...`);
-
-            // Add gap polygons to the list
-            gapPolygons.forEach(gap => {
-                polygons.push(gap);
-            });
-
-            // Synchronize all vertices to ensure perfect adjacency
-            this.synchronizeVerticesInPatch(polygons, [...affectedPolygonIds, ...gapPolygons.map((_, idx) => polygons.length - gapPolygons.length + idx)]);
+        if (absorbedIds.length > 0) {
+            const allSyncIds = [...new Set([...affectedPolygonIds, ...absorbedIds])];
+            this.synchronizeVerticesInPatch(polygons, allSyncIds);
         }
 
         return {
             success: true,
             polygons,
-            message: `Vertex deleted successfully (${occurrences.length} occurrences across ${groups.size} counties)${gapPolygons.length > 0 ? ` - Created ${gapPolygons.length} gap fill polygon(s)` : ''}`
+            message: `Vertex deleted successfully (${occurrences.length} occurrences across ${groups.size} counties)${absorbedIds.length > 0 ? ` - Absorbed ${absorbedIds.length} gap(s) into adjacent polygon(s)` : ''}`
         };
     }
 
@@ -172,6 +165,8 @@ class VertexDeletion {
         polygons.forEach((polygon, polyIndex) => {
             polygon.rings.forEach((ring, ringIndex) => {
                 ring.forEach((vertex, vertexIndex) => {
+                    // Skip WKT closing duplicate — last vertex is always a repeat of index 0
+                    if (vertexIndex === ring.length - 1 && this.verticesMatch(vertex, ring[0])) return;
                     if (this.verticesMatch(vertex, d)) {
                         occurrences.push({
                             polygonIndex: polyIndex,
@@ -279,6 +274,16 @@ class VertexDeletion {
      */
     removeVertexFromRing(ring, idx) {
         const newRing = ring.filter((_, i) => i !== idx);
+        // Fix stale closing point when the first vertex was removed:
+        // the old closing duplicate (copy of the former index 0) is now at the tail
+        // but no longer matches the new first vertex.
+        if (newRing.length > 1) {
+            const first = newRing[0];
+            const last  = newRing[newRing.length - 1];
+            if (!this.verticesMatch(first, last)) {
+                newRing[newRing.length - 1] = { ...first };
+            }
+        }
         return this.cleanupRing(newRing);
     }
 
@@ -462,35 +467,83 @@ class VertexDeletion {
             return [];
         }
 
-        // Create gap polygon objects
-        const gapPolygons = gapLoops.map((loop, idx) => {
-            // Determine neighbors and county assignment
-            const neighbors = this.findGapNeighbors(loop, polygons, affectedIds);
-            const assignedCounty = this.assignGapCounty(loop, neighbors, polygons);
+        // Absorb each gap into the neighbor with the longest shared boundary
+        const absorbedPolyIds = [];
+        for (const loop of gapLoops) {
+            const polyId = this.absorbGapIntoNeighbor(loop, polygons, affectedIds);
+            if (polyId >= 0) {
+                absorbedPolyIds.push(polyId);
+            } else {
+                console.log('Gap could not be absorbed — no shared edge found with any affected polygon');
+            }
+        }
 
-            const gapId = `gap_${Date.now()}_${idx}`;
+        return absorbedPolyIds;
+    }
 
-            console.log(`Creating gap polygon ${gapId} for county ${assignedCounty}`);
+    /**
+     * Absorb a gap ring into the adjacent polygon with the longest shared boundary.
+     * Finds the shared edge (same direction in both rings), then inserts the gap's
+     * remaining vertices into the neighbor ring at that position.
+     * @param {Array<Object>} gapRing  - Closed ring of the gap (last vertex == first)
+     * @param {Array<Object>} polygons - All polygons
+     * @param {Array<number>} affectedIds - Candidate polygon indices
+     * @returns {number} Index of the polygon that absorbed the gap, or -1 if none found
+     */
+    absorbGapIntoNeighbor(gapRing, polygons, affectedIds) {
+        let bestPolyId = -1;
+        let bestLength = 0;
+        let bestEdgeI  = -1;
+        let bestGapJ   = -1;
 
-            return {
-                id: gapId,
-                county: assignedCounty,
-                parent: neighbors.map(n => n.id).join(','),
-                rings: [loop],
-                originalWKT: '',
-                layerType: 'subCounty',
-                isGap: true,
-                gapMetadata: {
-                    createdBy: 'vertex_deletion',
-                    timestamp: Date.now(),
-                    neighbors: neighbors.map(n => n.id),
-                    neighborCounties: [...new Set(neighbors.map(n => n.county))],
-                    assignedCounty: assignedCounty
+        for (const polyId of affectedIds) {
+            const ring = polygons[polyId].rings[0];
+            let totalLen = 0;
+            let firstI = -1;
+            let firstJ = -1;
+
+            for (let i = 0; i < ring.length - 1; i++) {
+                for (let j = 0; j < gapRing.length - 1; j++) {
+                    if (this.verticesMatch(ring[i],     gapRing[j]) &&
+                        this.verticesMatch(ring[i + 1], gapRing[j + 1])) {
+                        totalLen += Math.hypot(ring[i+1].x - ring[i].x, ring[i+1].y - ring[i].y);
+                        if (firstI < 0) { firstI = i; firstJ = j; }
+                    }
                 }
-            };
-        });
+            }
 
-        return gapPolygons;
+            if (totalLen > bestLength) {
+                bestLength = totalLen;
+                bestPolyId = polyId;
+                bestEdgeI  = firstI;
+                bestGapJ   = firstJ;
+            }
+        }
+
+        if (bestPolyId < 0) return -1;
+
+        // Build the interior path: gap vertices going backward from bestGapJ
+        // to (bestGapJ+1)%n, i.e. the "other way" around the gap ring
+        const n = gapRing.length - 1; // unique vertex count (no closing duplicate)
+        const interior = [];
+        const stop = (bestGapJ + 1) % n;
+        let k = (bestGapJ - 1 + n) % n;
+        while (k !== stop) {
+            interior.push({ ...gapRing[k] });
+            k = (k - 1 + n) % n;
+        }
+
+        // Insert interior path into neighbor ring between bestEdgeI and bestEdgeI+1
+        const ring = polygons[bestPolyId].rings[0];
+        polygons[bestPolyId].rings[0] = [
+            ...ring.slice(0, bestEdgeI + 1),
+            ...interior,
+            ...ring.slice(bestEdgeI + 1)
+        ];
+
+        console.log(`Gap absorbed into polygon ${polygons[bestPolyId].id} ` +
+                    `(shared length ${bestLength.toFixed(4)}, ${interior.length} vertex/vertices inserted)`);
+        return bestPolyId;
     }
 
     /**
