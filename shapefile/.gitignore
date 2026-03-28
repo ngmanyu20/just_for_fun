@@ -12,5 +12,3 @@ env/
 # Claude Code local settings
 .claude/
 
-# CSV data files (user-specific, may contain sensitive data)
-csv_input/*.csv
