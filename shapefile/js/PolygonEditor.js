@@ -470,8 +470,7 @@ class PolygonEditor {
             // Draw the scene
             this.draw();
 
-            const layerType = isCountyLayer ? 'County' : 'Sub-County';
-            this.uiController.showSuccess(`${layerType} layer loaded successfully! Found ${result.count} polygons.`);
+            this.uiController.showSuccess(`Sub-County layer loaded successfully! Found ${result.count} polygons.`);
 
         } catch (error) {
             console.error('Failed to load CSV:', error);
@@ -1039,6 +1038,44 @@ class PolygonEditor {
     }
 
     /**
+     * Generate N unique polygon IDs for a given county using gap-filling (001–999).
+     * Must be called AFTER source polygons are already removed from this.polygons
+     * so their numbers are available for reuse.
+     * @param {string} county - County name (e.g. "NC1")
+     * @param {number} count  - How many IDs to generate
+     * @returns {string[]} - Array of IDs like ["NC1_003", "NC1_005"]
+     */
+    nextPolygonIds(county, count) {
+        const escaped = county.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`^${escaped}_(\\d+)$`);
+
+        const used = new Set();
+        for (const p of this.polygons) {
+            const m = p.id.match(pattern);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (n >= 1 && n <= 999) used.add(n);
+            }
+        }
+
+        const ids = [];
+        let candidate = 1;
+        while (ids.length < count && candidate <= 999) {
+            if (!used.has(candidate)) {
+                ids.push(`${county}_${String(candidate).padStart(3, '0')}`);
+                used.add(candidate); // reserve within this batch
+            }
+            candidate++;
+        }
+
+        if (ids.length < count) {
+            console.warn(`nextPolygonIds: could only generate ${ids.length} of ${count} IDs for county "${county}"`);
+        }
+
+        return ids;
+    }
+
+    /**
      * Handle split by vertices (placeholder for future implementation)
      * Split polygon along a path defined by selected vertices
      */
@@ -1066,6 +1103,10 @@ class PolygonEditor {
         console.log(`Split by vertices requested with ${selectedInfo.length} vertices`);
         console.log('Vertices:', selectedInfo.map(v => `(${v.x.toFixed(4)}, ${v.y.toFixed(4)})`).join(', '));
 
+        // Capture state before split so we can identify new polygons afterwards
+        const vertexSplitCounty = [...counties][0];
+        const existingIds = new Set(this.polygons.map(p => p.id));
+
         // Perform split using VertexSplitter
         // Pass the currently selected polygon index to resolve ambiguity with shared vertices
         const result = this.vertexSplitter.splitByVertices(
@@ -1077,6 +1118,12 @@ class PolygonEditor {
         if (result.success) {
             // Update polygons with result
             this.polygons = result.polygons;
+
+            // Rename new polygons with consistent {County}_NNN IDs (gap-filling from 001).
+            // Source polygon is already removed by VertexSplitter, so its number is free.
+            const newPolygons = this.polygons.filter(p => !existingIds.has(p.id));
+            const vertexSplitIds = this.nextPolygonIds(vertexSplitCounty, newPolygons.length);
+            newPolygons.forEach((p, i) => { p.id = vertexSplitIds[i]; });
 
             // CRITICAL: Clear polygon selection since the original polygon was removed
             // The polygon indices have shifted after removing the source polygon
@@ -1475,6 +1522,10 @@ class PolygonEditor {
                 this.polygons.splice(removeIndex, 1);
             }
 
+            // Assign consistent {County}_NNN ID after all source polygons are removed (gap-filling from 001).
+            // firstIndex is still valid since we only removed indices > firstIndex.
+            this.polygons[firstIndex].id = this.nextPolygonIds(result.newPolygon.county, 1)[0];
+
             // STEP 1: Rebuild adjacency graph FIRST (needed for vertex sync)
             console.log('Rebuilding adjacency graph after polygon combination...');
             this.adjacencyGraph.buildAdjacencyList(this.polygons);
@@ -1617,8 +1668,12 @@ class PolygonEditor {
             console.log(`Successfully created ${result.subPolygons.length} sub-polygons`);
 
             // Replace the original polygon with the sub-polygons
-            // Remove original
+            // Remove original first — this frees its number for gap-filling
             this.polygons.splice(index, 1);
+
+            // Assign consistent {County}_NNN IDs (gap-filling from 001)
+            const splitIds = this.nextPolygonIds(polygon.county, result.subPolygons.length);
+            result.subPolygons.forEach((p, i) => { p.id = splitIds[i]; });
 
             // Insert sub-polygons at the same position
             this.polygons.splice(index, 0, ...result.subPolygons);

@@ -130,7 +130,10 @@ def split_polygon_geojson(
     if not isinstance(polygon, Polygon):
         raise ValueError("Only Polygon geometries are supported")
 
-    seed_points = random_points_in_polygon(polygon, num_districts)
+    # Voronoi (via qhull) needs at least 3 seed points in 2D.
+    # Generate extra seeds when num_districts < 3, then merge excess cells back down.
+    num_seeds = max(num_districts, 3)
+    seed_points = random_points_in_polygon(polygon, num_seeds)
     pts = np.array([[p.x, p.y] for p in seed_points])
 
     vor = Voronoi(pts)
@@ -160,23 +163,74 @@ def split_polygon_geojson(
             continue
         cells.append(cell)
 
-    # --- OPTIONAL: add uncovered area ("white area") as new polygon(s) ---
-    gap_geoms = []
-    if include_gaps:
-        covered = unary_union(cells).buffer(0) if cells else Polygon()
-        missing = polygon.difference(covered).buffer(0)
+    # --- Merge excess cells when num_seeds > num_districts (e.g. num_districts=2) ---
+    while len(cells) > num_districts:
+        # Find the pair of cells sharing the longest boundary; merge the smaller into the larger
+        best_i, best_j, best_len = None, None, -1.0
+        for i in range(len(cells)):
+            for j in range(i + 1, len(cells)):
+                try:
+                    shared = cells[i].boundary.intersection(cells[j].boundary)
+                    length = shared.length if not shared.is_empty else 0.0
+                except Exception:
+                    length = 0.0
+                if length > best_len:
+                    best_len, best_i, best_j = length, i, j
+        if best_i is None:
+            # No shared boundary found — just drop the last cell
+            cells.pop()
+        else:
+            merged = cells[best_i].union(cells[best_j]).buffer(0)
+            cells[best_i] = merged
+            cells.pop(best_j)
 
-        # If gap_area_tol not provided, use a tiny relative tolerance
+    # --- Absorb uncovered gap areas into the district with the longest shared boundary ---
+    # Runs in passes: a union that produces a MultiPolygon (gap touches cell only at a
+    # corner) re-queues the disconnected smaller pieces for the next pass so no area
+    # is silently discarded.
+    if include_gaps and cells:
         if gap_area_tol <= 0:
             gap_area_tol = max(1e-12, polygon.area * 1e-10)
 
-        if not missing.is_empty and missing.area > gap_area_tol:
-            gap_geoms = _explode_to_polygons(missing)
+        MAX_PASSES = 5
+        for _pass in range(MAX_PASSES):
+            covered = unary_union(cells).buffer(0)
+            missing = polygon.difference(covered).buffer(0)
+            pending = [g for g in _explode_to_polygons(missing) if g.area > gap_area_tol]
+            if not pending:
+                break
 
-    # --- emit GeoJSON features ---
+            for gap in pending:
+                best_idx = None
+                best_length = -1.0
+                for i, cell in enumerate(cells):
+                    try:
+                        shared = gap.boundary.intersection(cell.boundary)
+                        length = shared.length if not shared.is_empty else 0.0
+                    except Exception:
+                        length = 0.0
+                    if length > best_length:
+                        best_length = length
+                        best_idx = i
+                # Fallback: no shared boundary (gap touches only at a corner) — use nearest centroid
+                if best_idx is None or best_length == 0.0:
+                    gap_centroid = gap.centroid
+                    best_idx = min(
+                        range(len(cells)),
+                        key=lambda i: gap_centroid.distance(cells[i].centroid)
+                    )
+                merged = cells[best_idx].union(gap).buffer(0)
+                if not merged.is_empty and merged.geom_type == "Polygon":
+                    cells[best_idx] = merged
+                elif not merged.is_empty and merged.geom_type == "MultiPolygon":
+                    # Gap only touched this cell at a corner → union is disconnected.
+                    # Keep the largest piece as the updated cell; the smaller pieces will
+                    # be re-queued automatically in the next pass.
+                    cells[best_idx] = max(merged.geoms, key=lambda g: g.area)
+
+    # --- emit GeoJSON features (districts only — no gap features) ---
     features = []
 
-    # districts
     for i, cell in enumerate(cells, start=1):
         features.append({
             "type": "Feature",
@@ -185,18 +239,6 @@ def split_polygon_geojson(
                 "kind": "district"
             },
             "geometry": mapping(cell)
-        })
-
-    # gaps
-    for j, g in enumerate(gap_geoms, start=1):
-        features.append({
-            "type": "Feature",
-            "properties": {
-                "subdivision_id": len(cells) + j,
-                "kind": "gap",
-                "gap_id": j
-            },
-            "geometry": mapping(g)
         })
 
     return {
