@@ -106,7 +106,9 @@ class UIController {
         }
 
         const hasHoles = polygon.rings.length > 1;
-        const totalVertices = polygon.rings.reduce((sum, ring) => sum + ring.length, 0);
+        // Subtract 1 per ring: WKT rings close by repeating the first vertex, so
+        // ring.length = unique vertices + 1. We display only unique vertices.
+        const totalVertices = polygon.rings.reduce((sum, ring) => sum + ring.length - 1, 0);
 
         // Count shared vertices if manager is provided
         let sharedVerticesCount = 0;
