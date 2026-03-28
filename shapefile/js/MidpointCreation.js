@@ -228,35 +228,38 @@ class MidpointCreation {
     areVerticesAdjacent(vertices, ringLength) {
         if (vertices.length < 2) return true;
 
-        // For exactly 2 vertices, check if they're adjacent (including wrap-around)
+        // Unique vertex count excludes the WKT closing duplicate.
+        // e.g. a ring of length 7 has 6 unique vertices (indices 0-5).
+        const uniqueCount = ringLength - 1;
+
+        const indices = vertices.map(v => v.vertexIndex);
+
+        // Normalise: the closing duplicate (index == uniqueCount) is the same
+        // geometric point as index 0, so treat it as 0 for adjacency purposes.
+        const normalised = indices.map(i => (i === uniqueCount ? 0 : i));
+
         if (vertices.length === 2) {
-            const idx1 = vertices[0].vertexIndex;
-            const idx2 = vertices[1].vertexIndex;
+            const a = normalised[0];
+            const b = normalised[1];
 
-            // Regular consecutive check
-            if (Math.abs(idx1 - idx2) === 1) {
+            // Direct consecutive
+            if (Math.abs(a - b) === 1) return true;
+
+            // Wrap-around: indices 0 and uniqueCount-1 are adjacent
+            if ((a === 0 && b === uniqueCount - 1) || (b === 0 && a === uniqueCount - 1)) {
+                console.log(`Vertices adjacent (wrap-around): ${a} ↔ ${b}`);
                 return true;
             }
 
-            // Wrap-around check: first and last vertex are adjacent
-            // The last vertex (ringLength - 1) is the closing vertex, same as vertex 0
-            const maxIdx = ringLength - 1;
-            if ((idx1 === 0 && idx2 === maxIdx) || (idx1 === maxIdx && idx2 === 0)) {
-                console.log(`Vertices ${idx1} and ${idx2} are adjacent (wrap-around/closing vertex)`);
-                return true;
-            }
-
-            console.log(`Vertices ${idx1} and ${idx2} are not adjacent`);
+            console.log(`Vertices ${a} and ${b} are not adjacent (uniqueCount=${uniqueCount})`);
             return false;
         }
 
-        // For more than 2 vertices, check if they form a consecutive sequence
-        const sorted = vertices.slice().sort((a, b) => a.vertexIndex - b.vertexIndex);
-
-        // Check if consecutive
+        // For 3+ vertices: sort and confirm they form a consecutive run
+        const sorted = normalised.slice().sort((a, b) => a - b);
         for (let i = 0; i < sorted.length - 1; i++) {
-            if (sorted[i + 1].vertexIndex !== sorted[i].vertexIndex + 1) {
-                console.log(`Vertices not adjacent: gap between ${sorted[i].vertexIndex} and ${sorted[i + 1].vertexIndex}`);
+            if (sorted[i + 1] !== sorted[i] + 1) {
+                console.log(`Vertices not adjacent: gap between ${sorted[i]} and ${sorted[i + 1]}`);
                 return false;
             }
         }

@@ -595,9 +595,19 @@ class PolygonEditor {
      * @returns {Object} - Selection result
      */
     handleVertexClick(dataX, dataY) {
-        // Find the nearest vertex across all polygons
+        // Find the nearest vertex — prefer the currently selected polygon so that
+        // boundary vertices (which exist in multiple polygons) are always resolved
+        // to the same polygon as previously selected vertices. This prevents
+        // groupVerticesByRing from splitting a pair into separate single-vertex groups,
+        // which would silently produce 0 midpoints or fail the adjacency check.
         let nearestVertex = null;
         let minDistance = Infinity;
+
+        // Already-selected vertices tell us which polygon to prefer
+        const alreadySelectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
+        const preferredPolyIndex = alreadySelectedInfo.length > 0
+            ? alreadySelectedInfo[0].polygonIndex
+            : (this.selectedPolygonIndex !== null ? this.selectedPolygonIndex : -1);
 
         for (let polygonIndex = 0; polygonIndex < this.polygons.length; polygonIndex++) {
             const polygon = this.polygons[polygonIndex];
@@ -607,10 +617,18 @@ class PolygonEditor {
 
                 for (let vertexIndex = 0; vertexIndex < ring.length; vertexIndex++) {
                     const vertex = ring[vertexIndex];
-                    const distance = this.geometryOps.calculateDistance(
+                    let distance = this.geometryOps.calculateDistance(
                         { x: dataX, y: dataY },
                         vertex
                     );
+
+                    // Apply a small preference bias toward the preferred polygon so that
+                    // an equally-close vertex in the preferred polygon always wins.
+                    // Bias is tiny (0.001) — only breaks ties, never overrides a genuinely
+                    // closer vertex in a different polygon.
+                    if (polygonIndex !== preferredPolyIndex) {
+                        distance += 0.001;
+                    }
 
                     if (distance < minDistance) {
                         minDistance = distance;
