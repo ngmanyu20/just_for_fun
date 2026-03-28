@@ -421,7 +421,18 @@
                     <p>Load a CSV file and select a polygon to see coordinates and modify shapes.</p>
                 </div>
                 <div id="sharedInfo"></div>
-                <div class="coordinates" id="coordinates"></div>
+                <div style="margin-top: 8px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                        <span style="font-size:11px; font-weight:600; color:#495057;">Coordinates</span>
+                        <button id="coordsToggleBtn" onclick="toggleCoordinates()"
+                            style="width:auto; padding:1px 7px; font-size:12px; font-weight:700;
+                                   background:#e9ecef; border:1px solid #ccc; border-radius:4px;
+                                   cursor:pointer; color:#333;">+</button>
+                    </div>
+                    <div id="coordinatesWrapper" style="display:none;">
+                        <div class="coordinates" id="coordinates"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -655,6 +666,14 @@
 
             content.classList.toggle('active');
             toggle.classList.toggle('active');
+        }
+
+        function toggleCoordinates() {
+            const wrapper = document.getElementById('coordinatesWrapper');
+            const btn = document.getElementById('coordsToggleBtn');
+            const expanded = wrapper.style.display !== 'none';
+            wrapper.style.display = expanded ? 'none' : 'block';
+            btn.textContent = expanded ? '+' : '−';
         }
 
         // Auto-update number of districts based on mode when polygon is selected
