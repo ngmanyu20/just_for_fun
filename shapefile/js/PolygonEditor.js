@@ -1998,7 +1998,7 @@ class PolygonEditor {
         }
 
         // Snapshot for undo
-        this.historyManager.saveState(this.polygons, 'Before vertex simplification');
+        this.historyManager.saveToHistory(this.polygons, 'Before vertex simplification');
 
         const { polygons, removedCount } = this.polygonSimplifier.simplify(this.polygons);
         this.polygons = polygons;
@@ -2015,11 +2015,12 @@ class PolygonEditor {
 
         // Refresh polygon selector and undo/redo buttons
         this.uiController.populatePolygonSelect(this.polygons);
+        const stats = this.historyManager.getHistoryStats();
         this.uiController.updateUndoRedoButtons(
             this.historyManager.canUndo(),
             this.historyManager.canRedo(),
-            this.historyManager.getHistoryStats().undoCount,
-            this.historyManager.getHistoryStats().redoCount
+            stats.undoableActions,
+            stats.redoableActions
         );
 
         this.draw();
