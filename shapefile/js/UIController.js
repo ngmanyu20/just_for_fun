@@ -138,9 +138,35 @@ class UIController {
             }
         }
 
+        // Calculate polygon area using the Shoelace formula.
+        // Map scale: 8.01 coordinate units = 1000 m, so 1 unit = 1000/8.01 m.
+        // Area in unit² × (1000/8.01)² gives area in m².
+        const METERS_PER_UNIT = 1000 / 8.01;
+        let areaUnits = 0;
+        polygon.rings.forEach((ring, ringIdx) => {
+            let ringArea = 0;
+            for (let i = 0; i < ring.length - 1; i++) {
+                ringArea += ring[i].x * ring[i + 1].y - ring[i + 1].x * ring[i].y;
+            }
+            ringArea = Math.abs(ringArea) / 2;
+            if (ringIdx === 0) areaUnits += ringArea;  // exterior ring
+            else               areaUnits -= ringArea;  // subtract holes
+        });
+        const areaM2  = areaUnits * METERS_PER_UNIT * METERS_PER_UNIT;
+        const areaKm2 = areaM2 / 1_000_000;
+        let areaText;
+        if (areaKm2 >= 1) {
+            areaText = `${areaKm2.toFixed(2)} km²`;
+        } else if (areaM2 >= 10_000) {
+            areaText = `${(areaM2 / 10_000).toFixed(2)} ha`;
+        } else {
+            areaText = `${Math.round(areaM2).toLocaleString()} m²`;
+        }
+
         let infoHTML = `
             <h4>${polygon.id}</h4>
             <p><strong>County:</strong> ${polygon.county || '—'}</p>
+            <p><strong>Area:</strong> ${areaText}</p>
             <p><strong>Total Vertices:</strong> ${totalVertices}</p>`;
 
         infoHTML += neighborInfo;
