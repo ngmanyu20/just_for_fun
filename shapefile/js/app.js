@@ -325,6 +325,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        // Measure Distance tool
+        const measureBtn = document.getElementById('measureBtn');
+        if (measureBtn) {
+            measureBtn.addEventListener('click', () => {
+                if (window.polygonEditor) window.polygonEditor.toggleMeasureMode();
+            });
+        }
+
         // Expose for inline handler compatibility (legacy / cache issues)
         window.onLoadCsvClick = onLoadCsvClick;
         window.onSaveCsvClick = onSaveCsvClick;

@@ -350,6 +350,13 @@
             flex-direction: column;
         }
 
+        /* Measure button active state */
+        #measureBtn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
         #canvas {
             /* Use box-shadow instead of border so the element has no border-box offset.
                getBoundingClientRect().width then equals canvas.width exactly, making
@@ -537,6 +544,16 @@
                     ❌ Clear Selection
                 </button>
             </div>
+
+            <!-- Measure Distance -->
+            <div class="section-title">Measure</div>
+            <button id="measureBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">
+                📏 Measure Dist
+            </button>
+            <div id="measureInfo" style="display:none; margin-top:4px; padding:6px 8px; background:#f0f4ff; border-radius:6px; font-size:10px; color:#333; line-height:1.6;">
+                <div id="measureTotal">Click the map to start measuring</div>
+                <div style="color:#888; margin-top:2px;">Click circle to remove · Drag to move · Esc to exit</div>
+            </div>
         </div>
     </div>
 
@@ -563,6 +580,7 @@
     <script src="js/VertexReplacement.js"></script>
     <script src="js/MidpointCreation.js"></script>
     <script src="js/VertexSplitter.js"></script>
+    <script src="js/MeasureTool.js"></script>
     <script src="js/UIController.js"></script>
     <script src="js/MouseHandler.js"></script>
     <script src="js/Renderer.js"></script>

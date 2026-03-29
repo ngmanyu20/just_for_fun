@@ -7,6 +7,10 @@ class MouseHandler {
         this.canvas = canvas;
         this.geometryOps = geometryOps;
 
+        // When true, all mouse-down/move/up handling is suppressed so another
+        // layer (e.g. MeasureTool) can own the events instead.
+        this.blocked = false;
+
         // Interaction state
         this.isDragging = false;
         this.isPanning = false;
@@ -82,6 +86,7 @@ class MouseHandler {
      * @param {MouseEvent} e - Mouse event
      */
     handleMouseDown(e) {
+        if (this.blocked) return;
         const { x: screenX, y: screenY } = this.getCanvasPos(e);
 
         this.lastMousePos = { x: screenX, y: screenY };
@@ -163,6 +168,7 @@ class MouseHandler {
      * @param {MouseEvent} e - Mouse event
      */
     handleMouseMove(e) {
+        if (this.blocked) return;
         const { x: screenX, y: screenY } = this.getCanvasPos(e);
 
         if (this.isDragging && this.selectedVertex !== null) {
@@ -195,6 +201,7 @@ class MouseHandler {
      * @param {MouseEvent} e - Mouse event
      */
     handleMouseUp(e) {
+        if (this.blocked) return;
         const wasDragging = this.isDragging;
 
         // Get mouse position for replacement target detection

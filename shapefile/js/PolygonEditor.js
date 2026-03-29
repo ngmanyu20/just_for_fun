@@ -30,6 +30,7 @@ class PolygonEditor {
         this.vertexReplacement = new VertexReplacement(this.vertexClassifier);
         this.midpointCreation = new MidpointCreation(this.vertexClassifier, this.fixedCountyVertices);
         this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
+        this.measureTool = new MeasureTool();
 
         // Application state
         this.polygons = [];
@@ -39,6 +40,10 @@ class PolygonEditor {
         this.vertexWasDragged = false;
         this.isDraggingVertex = false; // Track if dragging a shift-selected vertex
         this.draggedVertex = null; // {polygonIndex, ringIndex, vertexIndex, x, y}
+
+        // Measure tool drag state
+        this._measureDragIndex = -1;
+        this._measureDragMoved = false;
 
         // Initialize the application
         this.initialize();
@@ -50,6 +55,7 @@ class PolygonEditor {
     initialize() {
         this.setupEventListeners();
         this.setupMouseCallbacks();
+        this.setupMeasureMouseHandlers();
         this.resizeCanvas();
         
         // Set initial UI state - Start in EDIT mode
@@ -1978,6 +1984,152 @@ class PolygonEditor {
         console.log('Adjacency graph updated:', stats);
     }
 
+    // ─── Measure Tool ────────────────────────────────────────────────────────
+
+    /**
+     * Toggle measure mode on/off from the toolbar button.
+     */
+    toggleMeasureMode() {
+        const nowActive = this.measureTool.toggle();
+        this.mouseHandler.blocked = nowActive;
+        this.canvas.style.cursor  = nowActive ? 'crosshair' : 'grab';
+
+        const btn = document.getElementById('measureBtn');
+        if (btn) btn.classList.toggle('active', nowActive);
+
+        const info = document.getElementById('measureInfo');
+        if (info) info.style.display = nowActive ? 'block' : 'none';
+
+        this.draw();
+    }
+
+    /**
+     * Attach canvas event listeners for measure-mode interactions.
+     * These run independently from MouseHandler (which is blocked when active).
+     */
+    setupMeasureMouseHandlers() {
+        this.canvas.addEventListener('mousedown', (e) => {
+            if (!this.measureTool.active) return;
+            const { x: sx, y: sy } = this.mouseHandler.getCanvasPos(e);
+            const dp = this.geometryOps.screenToData(sx, sy);
+            const hit = this.measureTool.findPointAt(dp.x, dp.y, this.geometryOps.scale);
+            if (hit >= 0) {
+                this._measureDragIndex = hit;
+                this._measureDragMoved = false;
+            } else {
+                // Add new point on click in empty space
+                this.measureTool.addPoint(dp.x, dp.y);
+                this._measureDragIndex = -1;
+                this.draw();
+            }
+        });
+
+        this.canvas.addEventListener('mousemove', (e) => {
+            if (!this.measureTool.active) return;
+            const { x: sx, y: sy } = this.mouseHandler.getCanvasPos(e);
+            const dp = this.geometryOps.screenToData(sx, sy);
+
+            if (this._measureDragIndex >= 0) {
+                this.measureTool.movePoint(this._measureDragIndex, dp.x, dp.y);
+                this._measureDragMoved = true;
+                this.draw();
+            } else {
+                // Cursor hint: pointer over a circle, crosshair otherwise
+                const hit = this.measureTool.findPointAt(dp.x, dp.y, this.geometryOps.scale);
+                this.canvas.style.cursor = hit >= 0 ? 'pointer' : 'crosshair';
+            }
+        });
+
+        this.canvas.addEventListener('mouseup', () => {
+            if (!this.measureTool.active) return;
+            if (this._measureDragIndex >= 0 && !this._measureDragMoved) {
+                // Pure click on an existing circle → remove it
+                this.measureTool.removePoint(this._measureDragIndex);
+                this.draw();
+            }
+            this._measureDragIndex = -1;
+            this._measureDragMoved = false;
+        });
+
+        // Escape key exits measure mode
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.measureTool.active) {
+                this.toggleMeasureMode();
+            }
+        });
+    }
+
+    /**
+     * Draw the measurement overlay (lines, circles, distance labels) on top of the map.
+     */
+    renderMeasureOverlay() {
+        const pts = this.measureTool.points;
+        if (pts.length === 0) return;
+
+        const ctx = this.renderer.ctx;
+        ctx.save();
+
+        // ── Lines ──────────────────────────────────────────────────────────
+        if (pts.length >= 2) {
+            ctx.beginPath();
+            const s0 = this.geometryOps.dataToScreen(pts[0].x, pts[0].y);
+            ctx.moveTo(s0.x, s0.y);
+            for (let i = 1; i < pts.length; i++) {
+                const si = this.geometryOps.dataToScreen(pts[i].x, pts[i].y);
+                ctx.lineTo(si.x, si.y);
+            }
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth   = 2;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            // ── Segment distance labels ─────────────────────────────────
+            ctx.font         = 'bold 11px "Segoe UI", sans-serif';
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            for (let i = 1; i < pts.length; i++) {
+                const sa = this.geometryOps.dataToScreen(pts[i - 1].x, pts[i - 1].y);
+                const sb = this.geometryOps.dataToScreen(pts[i].x, pts[i].y);
+                const mx  = (sa.x + sb.x) / 2;
+                const my  = (sa.y + sb.y) / 2;
+                const label = this.measureTool.formatDistance(this.measureTool.segmentDistanceM(i));
+                const tw = ctx.measureText(label).width;
+                const pad = 4, h = 16;
+                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                ctx.beginPath();
+                ctx.roundRect(mx - tw / 2 - pad, my - h / 2, tw + pad * 2, h, 3);
+                ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.fillText(label, mx, my);
+            }
+        }
+
+        // ── Point circles ───────────────────────────────────────────────
+        for (let i = 0; i < pts.length; i++) {
+            const sp = this.geometryOps.dataToScreen(pts[i].x, pts[i].y);
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, 6, 0, Math.PI * 2);
+            ctx.fillStyle   = 'white';
+            ctx.fill();
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth   = 2;
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // ── Update sidebar total ────────────────────────────────────────
+        const totalEl = document.getElementById('measureTotal');
+        if (totalEl) {
+            const total = this.measureTool.totalDistanceM();
+            totalEl.textContent = pts.length >= 2
+                ? `Total: ${this.measureTool.formatDistance(total)}`
+                : 'Click the map to start measuring';
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
      * Main drawing method
      */
@@ -1994,6 +2146,8 @@ class PolygonEditor {
             this.vertexSelection,  // Pass vertex selection manager
             this.fixedCountyVertices  // Pass fixed county vertices for blue rendering
         );
+
+        this.renderMeasureOverlay();
     }
 
     /**
