@@ -325,6 +325,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        // Vertex Simplification
+        const simplifyBtn = document.getElementById('simplifyBtn');
+        if (simplifyBtn) {
+            simplifyBtn.addEventListener('click', () => {
+                if (window.polygonEditor) window.polygonEditor.handleSimplification();
+            });
+        }
+
         // Measure Distance tool
         const measureBtn = document.getElementById('measureBtn');
         if (measureBtn) {

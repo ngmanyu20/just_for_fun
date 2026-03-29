@@ -30,6 +30,7 @@ class PolygonEditor {
         this.vertexReplacement = new VertexReplacement(this.vertexClassifier);
         this.midpointCreation = new MidpointCreation(this.vertexClassifier, this.fixedCountyVertices);
         this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
+        this.polygonSimplifier = new PolygonSimplifier();
         this.measureTool = new MeasureTool();
 
         // Application state
@@ -1982,6 +1983,49 @@ class PolygonEditor {
 
         const stats = this.adjacencyGraph.getStatistics();
         console.log('Adjacency graph updated:', stats);
+    }
+
+    // ─── Polygon Simplification ──────────────────────────────────────────────
+
+    /**
+     * Remove all degree-2 collinear vertices across every loaded polygon.
+     * Saves an undo snapshot before modifying anything.
+     */
+    handleSimplification() {
+        if (!this.polygons || this.polygons.length === 0) {
+            this.uiController.showError('No polygons loaded');
+            return;
+        }
+
+        // Snapshot for undo
+        this.historyManager.saveState(this.polygons, 'Before vertex simplification');
+
+        const { polygons, removedCount } = this.polygonSimplifier.simplify(this.polygons);
+        this.polygons = polygons;
+
+        if (removedCount === 0) {
+            // Nothing changed — pop the snapshot we just pushed
+            this.historyManager.undo();
+            this.uiController.showStatus('No redundant vertices found', 3000);
+            return;
+        }
+
+        // Rebuild adjacency after structural change
+        this.adjacencyGraph.buildAdjacencyList(this.polygons);
+
+        // Refresh polygon selector and undo/redo buttons
+        this.uiController.populatePolygonSelect(this.polygons);
+        this.uiController.updateUndoRedoButtons(
+            this.historyManager.canUndo(),
+            this.historyManager.canRedo(),
+            this.historyManager.getHistoryStats().undoCount,
+            this.historyManager.getHistoryStats().redoCount
+        );
+
+        this.draw();
+        this.uiController.showSuccess(
+            `Simplification complete: removed ${removedCount} redundant vertex${removedCount !== 1 ? 'es' : ''}`
+        );
     }
 
     // ─── Measure Tool ────────────────────────────────────────────────────────
