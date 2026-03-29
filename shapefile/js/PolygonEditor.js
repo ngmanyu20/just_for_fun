@@ -130,6 +130,10 @@ class PolygonEditor {
      * @param {KeyboardEvent} e - Keyboard event
      */
     handleKeyDown(e) {
+        // Do not intercept shortcuts while the user is typing in a form field
+        const tag = e.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
         // Track which keys are currently pressed
         const isCtrl = e.code === 'ControlLeft' || e.code === 'ControlRight' ||
                        e.key === 'Control' || e.keyCode === 17;
