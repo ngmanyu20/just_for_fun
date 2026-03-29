@@ -154,14 +154,7 @@ class UIController {
         });
         const areaM2  = areaUnits * METERS_PER_UNIT * METERS_PER_UNIT;
         const areaKm2 = areaM2 / 1_000_000;
-        let areaText;
-        if (areaKm2 >= 1) {
-            areaText = `${areaKm2.toFixed(2)} km²`;
-        } else if (areaM2 >= 10_000) {
-            areaText = `${(areaM2 / 10_000).toFixed(2)} ha`;
-        } else {
-            areaText = `${Math.round(areaM2).toLocaleString()} m²`;
-        }
+        const areaText = `${areaKm2.toFixed(4)} km²`;
 
         let infoHTML = `
             <h4>${polygon.id}</h4>
