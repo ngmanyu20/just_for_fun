@@ -108,7 +108,6 @@ class DataManager {
                             location: row.Location || '',
                             polygonType: row.County_Type || '',
                             rings: rings,
-                            originalWKT: row.geometry,
                             rowIndex: i - 1  // Store original row index for export
                         });
                     }

@@ -395,7 +395,6 @@ class VertexReplacement {
                 county: assignedCounty,
                 parent: neighbors.map(n => n.id).join(','),
                 rings: [loop],
-                originalWKT: '',
                 layerType: 'subCounty',
                 isGap: true,
                 gapMetadata: {

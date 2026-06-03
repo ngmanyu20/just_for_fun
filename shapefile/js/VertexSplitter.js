@@ -278,7 +278,6 @@ class VertexSplitter {
                     county: county,
                     parent: sourcePolygon.parent || county,
                     rings: [selectedRing],
-                    originalWKT: '',
                     layerType: sourcePolygon.layerType || 'subCounty',
                     isSplit: true,
                     splitMetadata: {
@@ -374,8 +373,7 @@ class VertexSplitter {
                         county: county,
                         parent: sourcePolygon.parent || county,
                         rings: [cleanedRing],
-                        originalWKT: '',
-                        layerType: sourcePolygon.layerType || 'subCounty',
+                            layerType: sourcePolygon.layerType || 'subCounty',
                         isSplit: true,
                         splitMetadata: {
                             createdBy: 'vertex_split',

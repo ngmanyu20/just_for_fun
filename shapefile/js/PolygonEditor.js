@@ -781,17 +781,35 @@ class PolygonEditor {
             // syncVertices() inserts those missing vertices into each ring so every
             // polygon has all shared boundary vertices explicitly listed.
             console.log('Synchronizing shared T-junction vertices on load...');
+            const preSync = this.polygons;
             this.polygons = this.vertexSync.syncVertices(this.polygons, this.adjacencyGraph);
             // syncVertices returns a new array — keep layer manager in sync so draw()
             // reads from the same objects that all mutation operations write to.
             this.layerManager.layers.subCounty.polygons = this.polygons;
-            // Rebuild adjacency after sync — new vertices can change shared-edge detection
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            // Only rebuild adjacency for polygons that actually changed (reference diff).
+            // This avoids a full O(P²·E²) rebuild — syncVertices only inserts vertices,
+            // never removes polygons or changes topology beyond the affected zone.
+            const affectedIds = this.polygons
+                .filter((p, i) => p !== preSync[i])
+                .map(p => p.id);
+            if (affectedIds.length > 0) {
+                const zoneSet = new Set(affectedIds);
+                affectedIds.forEach(id =>
+                    this.adjacencyGraph.getNeighbors(id).forEach(nId => zoneSet.add(nId))
+                );
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, [...zoneSet]);
+            }
             console.log('Load-time vertex sync complete');
 
             // Update UI
             this.uiController.setExportEnabled(true);
             this.uiController.setEditingEnabled(true);
+
+            // Scale history cap to polygon count: fewer snapshots for larger datasets
+            // to prevent undo stack from consuming hundreds of MB of RAM.
+            const p = this.polygons.length;
+            const histCap = p > 5000 ? 5 : p > 2000 ? 7 : 10;
+            this.historyManager.setMaxHistorySize(histCap);
 
             // Initialize history
             this.historyManager.clearHistory();

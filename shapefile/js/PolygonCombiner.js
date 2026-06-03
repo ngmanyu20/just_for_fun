@@ -115,7 +115,6 @@ class PolygonCombiner {
             county: combinedCounties || combinedIds,
             parent: combinedParent,
             rings: [ring],
-            originalWKT: '',
             isCombined: true,
             sourcePolygons: sourcePolygons.map(p => p.id)
         };

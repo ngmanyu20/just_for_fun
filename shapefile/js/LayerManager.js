@@ -266,41 +266,53 @@ class LayerManager {
     connectEdges(edges) {
         if (edges.length === 0) return [];
 
-        const remainingEdges = [...edges];
+        // Build endpoint → [edgeIndex, ...] map for O(1) lookup (replaces O(E) findIndex+splice)
+        const vKey = p => `${Math.round(p.x * 10000)},${Math.round(p.y * 10000)}`;
+        const endpointMap = new Map();
+        edges.forEach((e, i) => {
+            const k1 = vKey(e.p1);
+            const k2 = vKey(e.p2);
+            if (!endpointMap.has(k1)) endpointMap.set(k1, []);
+            if (!endpointMap.has(k2)) endpointMap.set(k2, []);
+            endpointMap.get(k1).push(i);
+            endpointMap.get(k2).push(i);
+        });
+
+        const used = new Uint8Array(edges.length);
         const allRings = [];
 
-        while (remainingEdges.length > 0) {
-            // Start a new loop with the first remaining edge
-            const loop = [];
-            let startEdge = remainingEdges.shift();
-            loop.push({ ...startEdge.p1 });
-            loop.push({ ...startEdge.p2 });
+        for (let startIdx = 0; startIdx < edges.length; startIdx++) {
+            if (used[startIdx]) continue;
 
-            // Greedily extend the loop
-            while (remainingEdges.length > 0) {
+            used[startIdx] = 1;
+            const startEdge = edges[startIdx];
+            const loop = [{ ...startEdge.p1 }, { ...startEdge.p2 }];
+
+            while (true) {
                 const lastVertex = loop[loop.length - 1];
+                const candidates = endpointMap.get(vKey(lastVertex)) || [];
 
-                const nextIdx = remainingEdges.findIndex(edge =>
-                    this.pointsEqual(edge.p1, lastVertex) ||
-                    this.pointsEqual(edge.p2, lastVertex)
-                );
-
-                if (nextIdx === -1) break; // loop is complete (or data has a gap)
-
-                const nextEdge = remainingEdges.splice(nextIdx, 1)[0];
-                if (this.pointsEqual(nextEdge.p1, lastVertex)) {
-                    loop.push({ ...nextEdge.p2 });
-                } else {
-                    loop.push({ ...nextEdge.p1 });
+                let found = false;
+                for (const idx of candidates) {
+                    if (used[idx]) continue;
+                    used[idx] = 1;
+                    const nextEdge = edges[idx];
+                    if (this.pointsEqual(nextEdge.p1, lastVertex)) {
+                        loop.push({ ...nextEdge.p2 });
+                    } else {
+                        loop.push({ ...nextEdge.p1 });
+                    }
+                    found = true;
+                    break;
                 }
+
+                if (!found) break;
             }
 
-            // Close the loop
             if (loop.length > 0 && !this.pointsEqual(loop[0], loop[loop.length - 1])) {
                 loop.push({ ...loop[0] });
             }
 
-            // Only keep loops with at least 3 unique vertices (a valid polygon)
             if (loop.length >= 4) {
                 allRings.push(loop);
             }

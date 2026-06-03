@@ -89,7 +89,6 @@ class PolygonSplitter {
                 county: baseCounty,  // Use extracted base county (e.g., "NC8" or "AC12")
                 parent: sourcePolygon.parent || '',
                 rings: [ring],
-                originalWKT: '',
                 layerType: 'subCounty',  // Mark as sub-county layer for proper rendering
                 isSplit: true,
                 sourcePolygon: sourcePolygon.id,
