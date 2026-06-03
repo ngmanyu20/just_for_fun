@@ -57,7 +57,19 @@ class DataManager {
         }
 
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        
+
+        // ── Required column validation ────────────────────────────────────────
+        const REQUIRED_COLUMNS = ['County', 'Shape_ID', 'geometry', 'Population_Density', 'County_Type'];
+        const missing = REQUIRED_COLUMNS.filter(col => !headers.includes(col));
+        if (missing.length > 0) {
+            const msg = `CSV is missing required column${missing.length > 1 ? 's' : ''}:\n\n`
+                      + missing.map(c => `  • ${c}`).join('\n')
+                      + '\n\nPlease fix the file and try again.';
+            alert(msg);
+            throw new Error(`Missing required CSV columns: ${missing.join(', ')}`);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         this.originalData = [];
         this.polygons = [];
 
@@ -75,11 +87,26 @@ class DataManager {
                 try {
                     const rings = this.parseWKT(row.geometry);
                     if (rings.length > 0) {
+                        // Parse actual population if present (non-empty, non-NA, non-zero)
+                        const rawPop = (row.Population || '').trim();
+                        const actualPop = (rawPop && rawPop.toUpperCase() !== 'NA')
+                            ? parseFloat(rawPop)
+                            : NaN;
+
                         this.polygons.push({
                             id: row.Shape_ID || row.County || `Polygon ${i}`,
                             county: row.County || '',
+                            district: row.District || '',
+                            districtWard: row.District_Ward || '',
                             parent: row.Parent || '',
                             shape: row.Shape || '',
+                            populationDensity: parseFloat(row.Population_Density) || 0,
+                            // actualPopulation: number if CSV has real data, NaN otherwise
+                            actualPopulation: (isNaN(actualPop) || actualPop === 0) ? NaN : actualPop,
+                            countyType: row.County_Type || '',  // legacy density classification (kept for reference)
+                            region: row.Region || '',
+                            location: row.Location || '',
+                            polygonType: row.County_Type || '',
                             rings: rings,
                             originalWKT: row.geometry,
                             rowIndex: i - 1  // Store original row index for export
@@ -223,11 +250,12 @@ class DataManager {
                 polygon.rowIndex !== undefined && polygon.rowIndex === this.originalData.indexOf(row)
             );
 
-            // If we found an original row, update its geometry
+            // If we found an original row, update its geometry and any runtime-set fields
             if (originalRow) {
                 return {
                     ...originalRow,
-                    geometry: this.ringsToWKT(polygon.rings)
+                    geometry:      this.ringsToWKT(polygon.rings),
+                    District_Ward: polygon.districtWard || originalRow.District_Ward || ''
                 };
             }
 
@@ -248,6 +276,8 @@ class DataManager {
                     newRow[header] = polygon.id;
                 } else if (header === 'County') {
                     newRow[header] = polygon.county || extractCounty(polygon.id);
+                } else if (header === 'District_Ward') {
+                    newRow[header] = polygon.districtWard || '';
                 } else if (polygon[header] !== undefined) {
                     // Copy any other properties from polygon
                     newRow[header] = polygon[header];

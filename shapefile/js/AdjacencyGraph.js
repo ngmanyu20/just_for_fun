@@ -5,7 +5,7 @@
 class AdjacencyGraph {
     constructor() {
         this.adjacencyList = {}; // Maps polygon ID to array of neighbor IDs
-        this.tolerance = 1e-6; // Tolerance for point matching
+        this.tolerance = 0.001; // Tolerance for point matching — must match SharedVertices.tolerance
         this.lengthTolerance = 1e-4; // Minimum shared boundary length to count as adjacency
     }
 
@@ -297,6 +297,84 @@ class AdjacencyGraph {
             // Sort for consistency
             this.adjacencyList[poly1.id].sort();
         });
+    }
+
+    /**
+     * Rebuild adjacency only for affected polygons compared against a known zone.
+     * O(V_zone) via vertex-hash lookup — vastly faster than O(K×Z×E²) edge scan.
+     *
+     * Two polygons are adjacent when they share >= 2 vertices (a shared edge).
+     * A single shared corner point is not counted as adjacency.
+     *
+     * @param {Array}    polygons    - All polygons (used only to resolve IDs to objects)
+     * @param {string[]} affectedIds - IDs whose adjacency entries must be recomputed
+     * @param {string[]} zoneIds     - IDs to compare against (affected + known potential neighbors)
+     */
+    rebuildForAffected(polygons, affectedIds, zoneIds) {
+        const affectedSet = new Set(affectedIds);
+        const zoneSet     = new Set(zoneIds);
+        const idToPolygon = new Map(polygons.map(p => [p.id, p]));
+
+        // Clear affected entries from old neighbors, then wipe own entry
+        affectedIds.forEach(id => {
+            (this.adjacencyList[id] || []).forEach(nId => {
+                if (this.adjacencyList[nId]) {
+                    this.adjacencyList[nId] = this.adjacencyList[nId].filter(x => !affectedSet.has(x));
+                }
+            });
+            this.adjacencyList[id] = [];
+        });
+
+        const zonePolygons = [...zoneSet].map(id => idToPolygon.get(id)).filter(Boolean);
+
+        // Build vertex-key → Set<polygonId> map for all zone polygons.
+        // Using 3-decimal rounding (matches tolerance 0.001).
+        const vertexToPolys = new Map();
+        for (const poly of zonePolygons) {
+            for (const ring of poly.rings) {
+                const len = ring.length - 1;  // skip closing duplicate
+                for (let i = 0; i < len; i++) {
+                    const key = this._vertexKey(ring[i]);
+                    if (!vertexToPolys.has(key)) vertexToPolys.set(key, new Set());
+                    vertexToPolys.get(key).add(poly.id);
+                }
+            }
+        }
+
+        // Count shared vertices per pair; only count pairs involving an affected polygon.
+        const pairCount = new Map();
+        for (const polyIds of vertexToPolys.values()) {
+            if (polyIds.size < 2) continue;
+            const ids = [...polyIds];
+            for (let a = 0; a < ids.length; a++) {
+                for (let b = a + 1; b < ids.length; b++) {
+                    if (!affectedSet.has(ids[a]) && !affectedSet.has(ids[b])) continue;
+                    const pk = ids[a] < ids[b] ? `${ids[a]}|${ids[b]}` : `${ids[b]}|${ids[a]}`;
+                    pairCount.set(pk, (pairCount.get(pk) || 0) + 1);
+                }
+            }
+        }
+
+        // Pairs with >= 2 shared vertices share an edge (not just a corner).
+        for (const [pk, cnt] of pairCount) {
+            if (cnt < 2) continue;
+            const sep = pk.indexOf('|');
+            const id1 = pk.slice(0, sep);
+            const id2 = pk.slice(sep + 1);
+            if (!this.adjacencyList[id1]) this.adjacencyList[id1] = [];
+            if (!this.adjacencyList[id2]) this.adjacencyList[id2] = [];
+            if (!this.adjacencyList[id1].includes(id2)) this.adjacencyList[id1].push(id2);
+            if (!this.adjacencyList[id2].includes(id1)) this.adjacencyList[id2].push(id1);
+        }
+
+        affectedIds.forEach(id => {
+            if (this.adjacencyList[id]) this.adjacencyList[id].sort();
+        });
+    }
+
+    /** Vertex key rounded to 3 decimal places (matches tolerance 0.001). */
+    _vertexKey(v) {
+        return `${Math.round(v.x * 1000)},${Math.round(v.y * 1000)}`;
     }
 
     /**

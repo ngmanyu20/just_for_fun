@@ -1,0 +1,44 @@
+# OSM / Overpass API response cache (auto-generated, can be large)
+cache/
+shapefile/cache/
+
+# Old drafts
+shapefile/csv_input/old_draft/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Claude Code local settings
+.claude/
+
+# Node / npm (city-roads)
+node_modules/
+shapefile/street_data export/city-roads/
+shapefile/street_data export/city-roads/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+stats.html
+
+# Editor
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SVG files
+*.svg

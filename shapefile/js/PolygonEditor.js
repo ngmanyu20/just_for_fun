@@ -32,6 +32,13 @@ class PolygonEditor {
         this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
         this.polygonSimplifier = new PolygonSimplifier();
         this.measureTool = new MeasureTool();
+        this.streetLayer = new StreetLayer();
+        this.renderer.setStreetLayer(this.streetLayer);
+        this.svgLayer = new SvgLayer();
+        this.renderer.setSvgLayer(this.svgLayer);
+        this.virtualNodeManager = new VirtualNodeManager();
+        this.virtualNodeMode = false; // true = placement mode active
+        this._splitSequence  = []; // unified click-order: {type:'ring'|'virtual', ...} for corner split
 
         // Application state
         this.polygons = [];
@@ -45,6 +52,8 @@ class PolygonEditor {
         // Measure tool drag state
         this._measureDragIndex = -1;
         this._measureDragMoved = false;
+
+        this._pendingDensityPolygonIndex = null;
 
         // Initialize the application
         this.initialize();
@@ -113,6 +122,33 @@ class PolygonEditor {
             splitByVerticesBtn.addEventListener('click', () => this.handleSplitByVertices());
         }
 
+        const splitByOsmBtn = document.getElementById('splitByOsmBtn');
+        if (splitByOsmBtn) {
+            splitByOsmBtn.addEventListener('click', () => this.showOsmSplitDialog());
+        }
+
+        const deletePolygonBtn = document.getElementById('deletePolygonBtn');
+        if (deletePolygonBtn) {
+            deletePolygonBtn.addEventListener('click', () => this.deleteSelectedPolygon());
+        }
+
+        const osmSplitCancelBtn = document.getElementById('osmSplitCancelBtn');
+        if (osmSplitCancelBtn) {
+            osmSplitCancelBtn.addEventListener('click', () => {
+                document.getElementById('osmSplitModal').style.display = 'none';
+            });
+        }
+
+        const osmSplitConfirmBtn = document.getElementById('osmSplitConfirmBtn');
+        if (osmSplitConfirmBtn) {
+            osmSplitConfirmBtn.addEventListener('click', () => this.handleOsmSplitConfirm());
+        }
+
+        const virtualNodeModeBtn = document.getElementById('virtualNodeModeBtn');
+        if (virtualNodeModeBtn) {
+            virtualNodeModeBtn.addEventListener('click', () => this.toggleVirtualNodeMode());
+        }
+
         // Window resize handler
         window.addEventListener('resize', () => this.resizeCanvas());
 
@@ -136,9 +172,9 @@ class PolygonEditor {
 
         // Track which keys are currently pressed
         const isCtrl = e.code === 'ControlLeft' || e.code === 'ControlRight' ||
-                       e.key === 'Control' || e.keyCode === 17;
+                       e.key === 'Control';
         const isMeta = e.code === 'MetaLeft' || e.code === 'MetaRight' ||
-                       e.key === 'Meta' || e.keyCode === 91 || e.keyCode === 93;
+                       e.key === 'Meta';
 
         // Add to pressed keys set
         if (isCtrl) {
@@ -175,6 +211,16 @@ class PolygonEditor {
         const hasS = this.keysPressed.has('KeyS');
         const has1 = this.keysPressed.has('Digit1');
         const has2 = this.keysPressed.has('Digit2');
+
+        // Escape: exit virtual-node mode if active
+        if (e.key === 'Escape' && this.virtualNodeMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            this.toggleVirtualNodeMode();
+            this.keysPressed.clear();
+            return false;
+        }
 
         // Ctrl+Z: Undo
         if (hasCtrlOrMeta && hasZ) {
@@ -241,20 +287,20 @@ class PolygonEditor {
             return false;
         }
 
-        // S key: Split polygon
-        if (hasS && !hasCtrlOrMeta) {
+        const inPolygonMode = !window.AppMode || window.AppMode.current === 'polygon';
+
+        // S key: Split polygon (polygon mode only)
+        if (hasS && !hasCtrlOrMeta && inPolygonMode) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
 
             console.log('>>> S: Split polygon triggered');
 
-            // Check if split button is enabled
             const splitBtn = document.getElementById('splitBtn');
             if (splitBtn && !splitBtn.disabled) {
                 this.showSplitDialog();
             } else {
-                console.log('>>> Split not available (button disabled)');
                 this.uiController.showError('Select exactly 1 polygon to split');
             }
 
@@ -262,41 +308,69 @@ class PolygonEditor {
             return false;
         }
 
-        // C key: Split by vertices (without Ctrl/Meta)
+        // C key: redistricting ward actions, density input, or split by vertices
         if (hasC && !hasCtrlOrMeta) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
 
-            console.log('>>> C: Split by vertices triggered');
+            // Redistricting mode: C manages ward create/confirm/edit
+            if (window.AppMode && window.AppMode.current === 'redistricting' && window.WardManager) {
+                if (!window.WardManager.isCreateMode()) {
+                    // C pressed outside create mode: open create panel (or edit selected ward)
+                    window.WardManager.activateCKey();
+                } else {
+                    // C pressed in create mode: confirm the current ward
+                    document.getElementById('wardConfirmBtn')?.click();
+                }
+                this.keysPressed.clear();
+                return false;
+            }
 
-            // Check if split by vertices button is enabled
-            const splitByVerticesBtn = document.getElementById('splitByVerticesBtn');
-            if (splitByVerticesBtn && !splitByVerticesBtn.disabled) {
-                this.handleSplitByVertices();
-            } else {
-                console.log('>>> Split by vertices not available (button disabled)');
-                this.uiController.showError('Select at least 3 vertices in the same county to split');
+            // Density input only in population mode
+            const inPopulationMode = window.AppMode && window.AppMode.current === 'population';
+            if (inPopulationMode && this.selectedPolygonIndex !== null) {
+                this.showDensityInput(this.selectedPolygonIndex);
+                this.keysPressed.clear();
+                return false;
+            }
+
+            if (inPolygonMode) {
+                // Only count VNs that are STILL selected in the manager right now.
+                // Stale entries (deselected after X/Y align, midpoint, etc.) are excluded.
+                const effectiveSeq = this._getEffectiveSplitSequence();
+                const seqVNCount   = effectiveSeq.filter(s => s.type === 'virtual').length;
+                const seqRingCount = effectiveSeq.filter(s => s.type === 'ring').length;
+
+                if (seqVNCount > 0 && seqRingCount >= 2) {
+                    // Corner-based split: unified click-order sequence defines polygon shape.
+                    console.log('>>> C: Corner-based split triggered');
+                    this.handleCornerBasedSplit();
+                } else {
+                    console.log('>>> C: Split by vertices triggered');
+                    const splitByVerticesBtn = document.getElementById('splitByVerticesBtn');
+                    if (splitByVerticesBtn && !splitByVerticesBtn.disabled) {
+                        this.handleSplitByVertices();
+                    } else {
+                        this.uiController.showError('Select at least 3 vertices in the same county to split');
+                    }
+                }
             }
 
             this.keysPressed.clear();
             return false;
         }
 
-        // 1 key: Replace selected vertex with previous vertex (without Ctrl/Meta)
-        if (has1 && !hasCtrlOrMeta) {
+        // 1 key: Replace vertex with previous (polygon mode only)
+        if (has1 && !hasCtrlOrMeta && inPolygonMode) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
 
-            console.log('>>> 1: Replace with previous vertex triggered');
-
-            // Check if replace button is enabled (1 vertex selected, not fixed)
             const replaceBtn = document.getElementById('replaceVertexBtn');
             if (replaceBtn && !replaceBtn.disabled) {
                 this.handleVertexReplaceWithKey('previous');
             } else {
-                console.log('>>> Replace not available (button disabled)');
                 this.uiController.showError('Select exactly 1 non-fixed vertex to replace');
             }
 
@@ -304,25 +378,212 @@ class PolygonEditor {
             return false;
         }
 
-        // 2 key: Replace selected vertex with next vertex (without Ctrl/Meta)
-        if (has2 && !hasCtrlOrMeta) {
+        // 2 key: Replace vertex with next (polygon mode only)
+        if (has2 && !hasCtrlOrMeta && inPolygonMode) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
 
-            console.log('>>> 2: Replace with next vertex triggered');
-
-            // Check if replace button is enabled (1 vertex selected, not fixed)
             const replaceBtn = document.getElementById('replaceVertexBtn');
             if (replaceBtn && !replaceBtn.disabled) {
                 this.handleVertexReplaceWithKey('next');
             } else {
-                console.log('>>> Replace not available (button disabled)');
                 this.uiController.showError('Select exactly 1 non-fixed vertex to replace');
             }
 
             this.keysPressed.clear();
             return false;
+        }
+
+        // 0–5 keys: Quick location assignment in Edit Location mode
+        const inDistrictTypeMode = window.AppMode && window.AppMode.current === 'districtType';
+        const editLocationActive = document.getElementById('editLocationBtn')?.classList.contains('active');
+        if (inDistrictTypeMode && editLocationActive && !hasCtrlOrMeta && this.selectedPolygonIndex !== null) {
+            const LOCATION_KEY_MAP = {
+                '1': 'Inner City',
+                '2': 'Outer City',
+                '3': 'Suburb',
+                '4': 'Town',
+                '5': 'Rural',
+                '0': '',
+            };
+            if (e.key in LOCATION_KEY_MAP) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                const chosenValue = LOCATION_KEY_MAP[e.key];
+                const indices = this.selectedPolygonIndices.size > 0
+                    ? Array.from(this.selectedPolygonIndices)
+                    : [this.selectedPolygonIndex];
+
+                indices.forEach(idx => {
+                    const polygon = this.polygons[idx];
+                    if (!polygon) return;
+                    polygon.location = chosenValue;
+                    if (this.dataManager.originalData &&
+                            this.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                        this.dataManager.originalData[polygon.rowIndex].Location = chosenValue;
+                    }
+                });
+
+                const label = indices.length > 1
+                    ? `Location changed: ${indices.length} polygons`
+                    : `Location changed: ${this.polygons[indices[0]]?.id}`;
+                this.historyManager.saveToHistory(this.polygons, label);
+                this.updateUndoRedoButtons();
+                this.draw();
+                this.updatePolygonInfo();
+
+                this.keysPressed.clear();
+                return false;
+            }
+        }
+
+        // Type shortcuts — only when Edit Type button is active AND in districtType mode
+        const editTypeActive = document.getElementById('editTypeBtn')?.classList.contains('active');
+        if (inDistrictTypeMode && editTypeActive && !hasCtrlOrMeta && this.selectedPolygonIndex !== null) {
+            // Valid codes per Location — must match exactly what the cluster allows
+            const TYPE_CLUSTER = {
+                'Inner City': { S:1, A1:1, A2:1, B1:1, C1:1, C2:1, D1:1, D2:1, E1:1, E2:1, F1:1, F2:1, TECH:1, UNI:1 },
+                'Outer City': { A1:1, A2:1, B1:1, C1:1, C2:1, D1:1, D2:1, E1:1, E2:1, F1:1, F2:1, UNI:1 },
+                'Rural':      { A1:1, C1:1, D1:1, D2:1, F1:1 },
+                'Suburb':     { A1:1, B1:1, C1:1, C2:1, E2:1, F1:1, UNI:1 },
+                'Town':       { B2:1, C1:1, C2:1, D2:1, E1:1, F1:1 },
+            };
+
+            // Returns true if the code is valid for the polygon's location (empty = NA, always valid)
+            const isValidForLocation = (code, location) => {
+                if (code === '') return true;
+                return !!(TYPE_CLUSTER[location] && TYPE_CLUSTER[location][code]);
+            };
+
+            // Digit 1–6 map to letters A–F with per-polygon cycling:
+            //   not starting with letter → {Letter}1
+            //   {Letter}1               → {Letter}2
+            //   {Letter}2 (or other)    → {Letter}1
+            const DIGIT_TO_LETTER = { '1':'A', '2':'B', '3':'C', '4':'D', '5':'E', '6':'F' };
+
+            const cycleLetterCode = (currentType, letter) => {
+                if (!currentType || !currentType.toUpperCase().startsWith(letter)) return letter + '1';
+                if (currentType.toUpperCase() === letter + '1') return letter + '2';
+                return letter + '1';
+            };
+
+            const k = e.key;
+            let simpleCode  = null;   // same code for all selected polygons
+            let cycleLetter = null;   // per-polygon cycle
+
+            if      (k === 's' || k === 'S') simpleCode  = 'S';
+            else if (k === 'u' || k === 'U') simpleCode  = 'UNI';
+            else if (k === 't' || k === 'T') simpleCode  = 'TECH';
+            else if (k === '0')              simpleCode  = '';
+            else if (k in DIGIT_TO_LETTER)   cycleLetter = DIGIT_TO_LETTER[k];
+
+            if (simpleCode !== null || cycleLetter !== null) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                const indices = this.selectedPolygonIndices.size > 0
+                    ? Array.from(this.selectedPolygonIndices)
+                    : [this.selectedPolygonIndex];
+
+                let changed = 0;
+                indices.forEach(idx => {
+                    const polygon = this.polygons[idx];
+                    if (!polygon) return;
+                    const code = cycleLetter !== null
+                        ? cycleLetterCode(polygon.polygonType || '', cycleLetter)
+                        : simpleCode;
+                    // Skip if this code is not valid for the polygon's location
+                    if (!isValidForLocation(code, polygon.location)) return;
+                    polygon.polygonType = code;
+                    if (this.dataManager.originalData &&
+                            this.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                        this.dataManager.originalData[polygon.rowIndex].County_Type = code;
+                    }
+                    changed++;
+                });
+
+                if (changed > 0) {
+                    const label = changed > 1
+                        ? `Type changed: ${changed} polygons`
+                        : `Type changed: ${this.polygons[indices.find(i => this.polygons[i])]?.id}`;
+                    this.historyManager.saveToHistory(this.polygons, label);
+                    this.updateUndoRedoButtons();
+                    this.draw();
+                    this.updatePolygonInfo();
+                }
+
+                this.keysPressed.clear();
+                return false;
+            }
+        }
+
+        // O key: Snap third vertex to be orthogonal to first two (polygon mode only)
+        if ((e.key === 'o' || e.key === 'O') && !hasCtrlOrMeta && inPolygonMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            this.handleOrthogonalSnap();
+            this.keysPressed.clear();
+            return false;
+        }
+
+        // V key: Toggle virtual-node mode (polygon mode only)
+        if ((e.key === 'v' || e.key === 'V') && !hasCtrlOrMeta && inPolygonMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            this.toggleVirtualNodeMode();
+            this.keysPressed.clear();
+            return false;
+        }
+
+        // X key: Align selected virtual nodes (if any selected) OR real vertices
+        if ((e.key === 'x' || e.key === 'X') && !hasCtrlOrMeta && inPolygonMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            if (this.virtualNodeManager.getSelectedCount() >= 2) {
+                this.handleVirtualNodeAlignX();
+            } else {
+                this.handleAlignX();
+            }
+            this.keysPressed.clear();
+            return false;
+        }
+
+        // Y key: Align selected virtual nodes (if any selected) OR real vertices
+        if ((e.key === 'y' || e.key === 'Y') && !hasCtrlOrMeta && inPolygonMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            if (this.virtualNodeManager.getSelectedCount() >= 2) {
+                this.handleVirtualNodeAlignY();
+            } else {
+                this.handleAlignY();
+            }
+            this.keysPressed.clear();
+            return false;
+        }
+
+        // + / - keys: Nudge density of selected polygon(s)
+        const isPlus  = e.key === '+' || e.key === '=' || e.code === 'NumpadAdd';
+        const isMinus = e.key === '-' || e.code === 'NumpadSubtract' || e.code === 'Minus';
+        if ((isPlus || isMinus) && !hasCtrlOrMeta) {
+            const targets = this.selectedPolygonIndices.size > 0
+                ? [...this.selectedPolygonIndices]
+                : (this.selectedPolygonIndex !== null ? [this.selectedPolygonIndex] : []);
+            if (targets.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.nudgeDensity(targets, isPlus ? 1 : -1);
+                this.keysPressed.clear();
+                return false;
+            }
         }
     }
 
@@ -333,9 +594,9 @@ class PolygonEditor {
     handleKeyUp(e) {
         // Remove keys from pressed set when released
         const isCtrl = e.code === 'ControlLeft' || e.code === 'ControlRight' ||
-                       e.key === 'Control' || e.keyCode === 17;
+                       e.key === 'Control';
         const isMeta = e.code === 'MetaLeft' || e.code === 'MetaRight' ||
-                       e.key === 'Meta' || e.keyCode === 91 || e.keyCode === 93;
+                       e.key === 'Meta';
 
         if (isCtrl) {
             this.keysPressed.delete('Control');
@@ -364,21 +625,48 @@ class PolygonEditor {
      * Setup mouse interaction callbacks
      */
     setupMouseCallbacks() {
+        const isVertexEditAllowed = () =>
+            !window.AppMode || window.AppMode.current === 'polygon';
+
         this.mouseHandler.setCallbacks({
             onVertexSelect: (dataX, dataY, cursorCheckOnly = false) => {
+                if (!isVertexEditAllowed()) return { vertexFound: false };
                 return this.handleVertexSelection(dataX, dataY, cursorCheckOnly);
             },
             onVertexClick: (dataX, dataY) => {
+                // Shift+click always checks virtual nodes first (mode-independent)
+                if (this.virtualNodeManager.count > 0) {
+                    const tol = 14 / this.geometryOps.scale;
+                    const hit = this.virtualNodeManager.findNearest(dataX, dataY, tol);
+                    if (hit) {
+                        const wasSelected = hit.selected;
+                        this.virtualNodeManager.toggleSelect(hit.id);
+                        if (wasSelected) {
+                            this._splitSequence = this._splitSequence.filter(
+                                s => !(s.type === 'virtual' && s.id === hit.id)
+                            );
+                        } else {
+                            this._splitSequence.push({ type: 'virtual', id: hit.id, x: hit.x, y: hit.y });
+                        }
+                        this.draw();
+                        return { vertexFound: true };
+                    }
+                }
+                if (!isVertexEditAllowed()) return false;
                 return this.handleVertexClick(dataX, dataY);
             },
             onVertexDrag: (vertex, newX, newY) => {
+                if (!isVertexEditAllowed()) return;
                 this.handleVertexDrag(vertex, newX, newY);
             },
             onPolygonSelect: (dataX, dataY, cursorCheckOnly = false, isCtrlKey = false) => {
+                // Virtual-node mode: intercept real clicks to place/select nodes
+                if (this.virtualNodeMode && !cursorCheckOnly) {
+                    return this.handleVirtualNodeCanvasClick(dataX, dataY);
+                }
                 return this.handlePolygonSelection(dataX, dataY, cursorCheckOnly, isCtrlKey);
             },
             onDeselectPolygon: () => {
-                // Deselect current polygon when clicking on empty area
                 this.selectPolygon(null);
                 this.draw();
             },
@@ -386,27 +674,41 @@ class PolygonEditor {
                 this.draw();
             },
             onVertexDelete: () => {
+                // Selected virtual nodes always take priority regardless of mode flag
+                if (this.virtualNodeManager.getSelectedCount() > 0) {
+                    this.handleVirtualNodeDelete();
+                    return;
+                }
+                if (!isVertexEditAllowed()) return;
+                // If no vertex is selected but a polygon is selected, delete the polygon.
+                if (this.vertexSelection.getSelectionCount() === 0 && this.selectedPolygonIndex !== null) {
+                    this.deleteSelectedPolygon();
+                    return;
+                }
                 this.handleVertexDelete();
             },
             onDragEnd: () => {
-                if (this.vertexWasDragged) {
-                    // Overlap detection is DISABLED - no checking
-                    // Just save to history directly
+                if (this.vertexWasDragged && isVertexEditAllowed()) {
                     this.historyManager.saveToHistory(this.polygons, 'Vertex moved');
                     this.updateUndoRedoButtons();
-
-                    // Update adjacency graph for affected polygons
                     this.updateAdjacencyAfterEdit();
-
+                    this.vertexWasDragged = false;
+                } else {
                     this.vertexWasDragged = false;
                 }
-
                 this.draw();
             },
             onReplacementDragEnd: (sourceVertex, targetX, targetY) => {
+                if (!isVertexEditAllowed()) return;
                 this.handleVertexReplacement(sourceVertex, targetX, targetY);
             },
             onMidpointCreate: () => {
+                // If exactly 2 virtual nodes are selected, midpoint them (mode-independent)
+                if (this.virtualNodeManager.getSelectedCount() === 2) {
+                    this.handleVirtualNodeMidpoint();
+                    return;
+                }
+                if (!isVertexEditAllowed()) return;
                 this.handleMidpointCreate();
             }
         });
@@ -464,11 +766,28 @@ class PolygonEditor {
             this.geometryOps.calculateBounds(this.polygons);
             this.geometryOps.fitToView();
 
+            // Generate street layer for the loaded data's bounding box
+            // this.streetLayer.generate(this.geometryOps.bounds);  // deferred: generated on first toggle-on
+
             // Build adjacency graph
             console.log('Building adjacency graph...');
             this.adjacencyGraph.buildAdjacencyList(this.polygons);
             const stats = this.adjacencyGraph.getStatistics();
             console.log('Adjacency graph built:', stats);
+
+            // Synchronize T-junction vertices on load.
+            // When a vertex of polygon A lies on an edge of polygon B (but B doesn't
+            // have that vertex in its ring), gaps appear at shared boundaries.
+            // syncVertices() inserts those missing vertices into each ring so every
+            // polygon has all shared boundary vertices explicitly listed.
+            console.log('Synchronizing shared T-junction vertices on load...');
+            this.polygons = this.vertexSync.syncVertices(this.polygons, this.adjacencyGraph);
+            // syncVertices returns a new array — keep layer manager in sync so draw()
+            // reads from the same objects that all mutation operations write to.
+            this.layerManager.layers.subCounty.polygons = this.polygons;
+            // Rebuild adjacency after sync — new vertices can change shared-edge detection
+            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            console.log('Load-time vertex sync complete');
 
             // Update UI
             this.uiController.setExportEnabled(true);
@@ -483,6 +802,24 @@ class PolygonEditor {
             this.draw();
 
             this.uiController.showSuccess(`Sub-County layer loaded successfully! Found ${result.count} polygons.`);
+
+            // Update Est Population button label based on actual vs estimated data
+            if (window._updatePopulationBtnLabel) {
+                window._updatePopulationBtnLabel(this.polygons);
+            }
+
+            // Populate council dropdown for Redistricting mode
+            if (window._updateCouncilSelect) {
+                window._updateCouncilSelect(this.polygons);
+            }
+
+            // Reload ward assignments from CSV data
+            if (window.WardManager && window.WardManager.loadFromPolygons) {
+                window.WardManager.loadFromPolygons(this.polygons);
+            }
+
+            // Reset any active district filter from a previous load
+            this.districtFilter = null;
 
         } catch (error) {
             console.error('Failed to load CSV:', error);
@@ -507,6 +844,12 @@ class PolygonEditor {
 
         const polygon = this.polygons[this.selectedPolygonIndex];
 
+        // Guard: index may be stale if polygons were reloaded without resetting selection
+        if (!polygon) {
+            this.selectedPolygonIndex = null;
+            return { vertexFound: false };
+        }
+
         // Prevent editing county layer polygons
         if (polygon.layerType === 'county') {
             return { vertexFound: false };
@@ -524,10 +867,18 @@ class PolygonEditor {
                 );
 
                 if (distance < tolerance) {
-                    // CRITICAL: Block protected vertices (fixed or cross-county) from dragging
-                    if (this.vertexClassifier.isProtected(vertex.x, vertex.y, this.polygons)) {
-                        const type = this.vertexClassifier.classify(vertex.x, vertex.y, this.polygons);
-                        console.log(`Cannot select ${this.vertexClassifier.label(type)} vertex for dragging`);
+                    // CRITICAL: Block protected vertices (fixed or cross-county) from dragging.
+                    // For cursor-hover checks use the O(1) fixed-vertex lookup; only pay the full
+                    // O(N×V) classify() cost on an actual click attempt.
+                    const isProtected = cursorCheckOnly
+                        ? this.fixedCountyVertices.isFixedVertex(vertex.x, vertex.y)
+                        : this.vertexClassifier.isProtected(vertex.x, vertex.y, this.polygons);
+
+                    if (isProtected) {
+                        if (!cursorCheckOnly) {
+                            const type = this.vertexClassifier.classify(vertex.x, vertex.y, this.polygons);
+                            console.log(`Cannot select ${this.vertexClassifier.label(type)} vertex for dragging`);
+                        }
                         return { vertexFound: false, isFixed: true };
                     }
 
@@ -626,7 +977,9 @@ class PolygonEditor {
             for (let ringIndex = 0; ringIndex < polygon.rings.length; ringIndex++) {
                 const ring = polygon.rings[ringIndex];
 
-                for (let vertexIndex = 0; vertexIndex < ring.length; vertexIndex++) {
+                // ring.length - 1: skip the closing duplicate (same coords as index 0)
+                // so shift-click at the first vertex always resolves to index 0, not index N
+                for (let vertexIndex = 0; vertexIndex < ring.length - 1; vertexIndex++) {
                     const vertex = ring[vertexIndex];
                     let distance = this.geometryOps.calculateDistance(
                         { x: dataX, y: dataY },
@@ -666,6 +1019,22 @@ class PolygonEditor {
 
             console.log(`Nearest vertex ${isSelected ? 'selected' : 'deselected'}: polygon=${nearestVertex.polygonIndex}, ring=${nearestVertex.ringIndex}, vertex=${nearestVertex.vertexIndex}, distance=${nearestVertex.distance.toFixed(4)}`);
 
+            // Maintain unified split sequence in click order
+            const seqKey = `${nearestVertex.polygonIndex}:${nearestVertex.ringIndex}:${nearestVertex.vertexIndex}`;
+            if (isSelected) {
+                this._splitSequence.push({
+                    type: 'ring',
+                    key: seqKey,
+                    polygonIndex: nearestVertex.polygonIndex,
+                    ringIndex:    nearestVertex.ringIndex,
+                    vertexIndex:  nearestVertex.vertexIndex,
+                    x: nearestVertex.vertex.x,
+                    y: nearestVertex.vertex.y
+                });
+            } else {
+                this._splitSequence = this._splitSequence.filter(s => s.key !== seqKey);
+            }
+
             if (isSelected) {
                 this.draggedVertex = {
                     polygonIndex: nearestVertex.polygonIndex,
@@ -692,6 +1061,8 @@ class PolygonEditor {
      */
     clearVertexSelection() {
         this.vertexSelection.clearSelection();
+        this._splitSequence = [];
+        this.virtualNodeManager.clearSelection();
         this.updateVertexSelectionInfo();
         this.draw();
     }
@@ -732,25 +1103,34 @@ class PolygonEditor {
         });
 
         if (result.success) {
-            // Update polygons with result
+            // deleteVertex mutates polygons in place and returns the same reference.
+            // The adjacency graph still holds the PRE-deletion neighbor lists here,
+            // which is exactly what we need to compute the zone for rebuildForAffected.
             this.polygons = result.polygons;
 
             // Clear vertex selection
             this.vertexSelection.clearSelection();
             this.updateVertexSelectionInfo();
 
-            // CRITICAL: Validate shared vertices after deletion
-            console.log('Validating shared vertices after deletion...');
-            const validation = this.sharedVertices.validateSharedVertices(this.polygons);
-            if (!validation.isValid) {
-                console.warn('Shared vertex validation found issues:', validation.issues);
-            } else {
-                console.log(`✓ Shared vertices validated: ${validation.sharedGroupCount} groups, ${validation.totalSharedVertices} total vertices`);
-            }
-
-            // CRITICAL: Rebuild adjacency graph (full rebuild since deletion affects multiple polygons)
+            // CRITICAL: Targeted adjacency rebuild — O(Z²·V²) instead of O(P²·V²).
+            // affectedIndices = polygons whose rings were mutated (shared-vertex holders
+            // + the gap-absorber if one was needed).  Their OLD neighbors are read from
+            // the stale adjacency graph before it is updated, forming the zone.
             console.log('Rebuilding adjacency graph after deletion...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            const affectedIds = (result.affectedIndices || [])
+                .map(i => this.polygons[i]?.id)
+                .filter(Boolean);
+
+            if (affectedIds.length > 0) {
+                const zoneIds = [...new Set([
+                    ...affectedIds,
+                    ...affectedIds.flatMap(id => this.adjacencyGraph.getNeighbors(id))
+                ])];
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, zoneIds);
+            } else {
+                // Fallback: affectedIndices missing (shouldn't happen), do full rebuild
+                this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            }
 
             const stats = this.adjacencyGraph.getStatistics();
             console.log('Adjacency graph rebuilt:', stats);
@@ -1035,21 +1415,36 @@ class PolygonEditor {
             this.vertexSelection.clearSelection();
             this.updateVertexSelectionInfo();
 
-            // CRITICAL: Validate shared vertices after midpoint creation
-            console.log('Validating shared vertices after midpoint creation...');
-            const validation = this.sharedVertices.validateSharedVertices(this.polygons);
-            if (!validation.isValid) {
-                console.warn('Shared vertex validation found issues:', validation.issues);
-            } else {
-                console.log(`✓ Shared vertices validated: ${validation.sharedGroupCount} groups, ${validation.totalSharedVertices} total vertices`);
+            // Build ID→index map once — replaces all O(N) findIndex calls below
+            const idToIndex = new Map(this.polygons.map((p, i) => [p.id, i]));
+
+            if (result.affectedPolygonIds && result.affectedPolygonIds.length > 0) {
+                // Expand to affected + their immediate neighbors
+                const affectedSet = new Set(result.affectedPolygonIds);
+                const affectedIds = result.affectedPolygonIds.map(idx => this.polygons[idx]?.id).filter(Boolean);
+
+                affectedIds.forEach(id => {
+                    this.adjacencyGraph.getNeighbors(id).forEach(neighborId => {
+                        const nIdx = idToIndex.get(neighborId);
+                        if (nIdx !== undefined) affectedSet.add(nIdx);
+                    });
+                });
+
+                // Rebuild adjacency scoped to the affected zone only (not the full N² rebuild)
+                const zoneIds = [...affectedSet].map(i => this.polygons[i]?.id).filter(Boolean);
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, zoneIds);
+
+                // Safety-net sync: catches residual T-junctions missed by propagateMidpointsToSharedEdges
+                console.log(`Syncing ${affectedSet.size} affected + neighbor polygons after midpoint...`);
+                this.polygons = this.vertexSync.syncVertices(this.polygons, this.adjacencyGraph, affectedSet, idToIndex);
+
+                // Final scoped rebuild after sync
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, zoneIds);
+
+                // Sync layer manager — syncVertices returns a new array so the layer
+                // manager's reference is now stale; draw() reads from it, not this.polygons
+                this.layerManager.layers.subCounty.polygons = this.polygons;
             }
-
-            // CRITICAL: Rebuild adjacency graph (full rebuild since midpoint affects multiple polygons)
-            console.log('Rebuilding adjacency graph after midpoint creation...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
-
-            const stats = this.adjacencyGraph.getStatistics();
-            console.log('Adjacency graph rebuilt:', stats);
 
             // Save to history (after rebuilding shared vertices and adjacency)
             this.historyManager.saveToHistory(this.polygons, result.message);
@@ -1067,6 +1462,587 @@ class PolygonEditor {
             console.log('Midpoint creation failed:', result.message);
             alert('Cannot create midpoints: ' + result.message);
         }
+    }
+
+    /**
+     * Snap the third shift-selected vertex to be orthogonal to the first two.
+     * Selection order determines which coordinates are inherited:
+     *   v1=(x1,y1), v2=(x2,y2), v3=(a,b) → v3 becomes (x1, y2)
+     * All polygons sharing v3's coordinate are updated together.
+     */
+    handleOrthogonalSnap() {
+        const selectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
+
+        if (selectedInfo.length !== 3) {
+            this.uiController.showError('Select exactly 3 vertices (Shift+Click) then press O');
+            return;
+        }
+
+        const [v1, v2, v3] = selectedInfo;
+        const newX = v1.x;
+        const newY = v2.y;
+
+        if (Math.abs(newX - v3.x) < 1e-9 && Math.abs(newY - v3.y) < 1e-9) {
+            this.uiController.showStatus('Vertex is already orthogonal — no change needed');
+            return;
+        }
+
+        this.historyManager.saveToHistory(this.polygons, `Orthogonal snap: ${v3.polygonId}`);
+
+        // Move v3 and all polygons that share its coordinate
+        this.sharedVertices.updateSharedVertices(v3.x, v3.y, newX, newY, this.polygons);
+
+        this.vertexSelection.clearSelection();
+        this.updateVertexSelectionInfo();
+        this.draw();
+
+        this.uiController.showSuccess(
+            `Vertex snapped to (${newX.toFixed(4)}, ${newY.toFixed(4)})`
+        );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // Virtual-node mode
+    // ═════════════════════════════════════════════════════════════════════
+
+    /**
+     * Toggle virtual-node placement mode on/off.
+     * Entering the mode shows a status hint; exiting clears all virtual nodes.
+     */
+    toggleVirtualNodeMode() {
+        this.virtualNodeMode = !this.virtualNodeMode;
+        const btn = document.getElementById('virtualNodeModeBtn');
+
+        if (this.virtualNodeMode) {
+            if (btn) btn.classList.add('active');
+            this.uiController.showStatus(
+                '◈ Virtual-node mode ON — click inside the selected polygon to place nodes · ' +
+                'Shift+click to select · Del delete · M midpoint · X/Y align · C split · V/Esc to exit (nodes stay)'
+            );
+        } else {
+            if (btn) btn.classList.remove('active');
+            // Nodes are NOT cleared — they persist until C (split) or manual Del.
+            // Virtual-node mode only controls whether regular clicks place new nodes.
+            const n = this.virtualNodeManager.count;
+            this.uiController.showStatus(
+                n > 0
+                    ? `Virtual-node mode OFF — ${n} node${n > 1 ? 's' : ''} kept · press C to split or Del to remove`
+                    : 'Virtual-node mode OFF'
+            );
+        }
+        this.draw();
+    }
+
+    /**
+     * Handle a regular canvas click while virtual-node mode is active.
+     * Priority: (1) hit-test existing virtual node → toggle select,
+     *           (2) inside selected polygon → place new node,
+     *           (3) click a different polygon → switch to it & clear nodes.
+     */
+    handleVirtualNodeCanvasClick(dataX, dataY) {
+        // (1) Hit-test existing virtual nodes (14 px tolerance in data units)
+        const tol = 14 / this.geometryOps.scale;
+        const hit = this.virtualNodeManager.findNearest(dataX, dataY, tol);
+        if (hit) {
+            this.virtualNodeManager.toggleSelect(hit.id);
+            this.draw();
+            // Return polygonSelected:true so MouseHandler does NOT deselect or pan
+            return { polygonSelected: true };
+        }
+
+        // (2) Click inside a polygon to place a new node.
+        //     If that polygon is already selected, place immediately.
+        //     If no polygon is selected yet (or a different one is selected), auto-select it
+        //     and place the node in the same click — no second click needed.
+        const clickedIdx = this.geometryOps.findPolygonAtPosition(dataX, dataY, this.polygons);
+        if (clickedIdx !== null) {
+            if (clickedIdx !== this.selectedPolygonIndex) {
+                this.selectPolygon(clickedIdx);
+            }
+            this.historyManager.saveToHistory(this.polygons, 'Virtual node placed', this.virtualNodeManager.getSnapshot());
+            this.updateUndoRedoButtons();
+            this.virtualNodeManager.add(dataX, dataY);
+            this.virtualNodeManager.clearSelection();
+            this.draw();
+            return { polygonSelected: true };
+        }
+
+        // (4) Clicked empty space — let normal deselect flow run
+        if (this.selectedPolygonIndex === null) {
+            this.uiController.showStatus('Select a polygon first, then activate virtual-node mode (V) to place nodes');
+        }
+        return { polygonFound: false }; // triggers onDeselectPolygon normally
+    }
+
+    /** Del key — remove all currently selected virtual nodes. */
+    handleVirtualNodeDelete() {
+        if (this.virtualNodeManager.getSelectedCount() === 0) return;
+        this.historyManager.saveToHistory(this.polygons, 'Virtual node deleted', this.virtualNodeManager.getSnapshot());
+        this.updateUndoRedoButtons();
+        const removed = this.virtualNodeManager.removeSelected();
+        if (removed > 0) {
+            // Prune deleted VN IDs from split sequence so stale entries don't accumulate
+            const remainingIds = new Set(this.virtualNodeManager.nodes.map(n => n.id));
+            this._splitSequence = this._splitSequence.filter(
+                s => s.type !== 'virtual' || remainingIds.has(s.id)
+            );
+            this.uiController.showStatus(`Deleted ${removed} virtual node${removed > 1 ? 's' : ''}`);
+            this.draw();
+        }
+    }
+
+    /** M key — create a midpoint virtual node between the two selected virtual nodes. */
+    handleVirtualNodeMidpoint() {
+        if (this.virtualNodeManager.getSelectedCount() !== 2) {
+            this.uiController.showError('Select exactly 2 virtual nodes, then press M');
+            return;
+        }
+        this.historyManager.saveToHistory(this.polygons, 'Virtual node midpoint', this.virtualNodeManager.getSnapshot());
+        this.updateUndoRedoButtons();
+        const mid = this.virtualNodeManager.createMidpointBetweenSelected();
+        if (mid) {
+            this.virtualNodeManager.clearSelection();
+            this.uiController.showStatus(`Virtual midpoint created at (${mid.x.toFixed(4)}, ${mid.y.toFixed(4)})`);
+            this.draw();
+        } else {
+            this.uiController.showError('Select exactly 2 virtual nodes, then press M');
+        }
+    }
+
+    /** X key — align selected virtual nodes to the X of the first selected. */
+    handleVirtualNodeAlignX() {
+        if (this.virtualNodeManager.getSelectedCount() < 2) {
+            this.uiController.showError('Select at least 2 virtual nodes then press X');
+            return;
+        }
+        this.historyManager.saveToHistory(this.polygons, 'Virtual nodes align X', this.virtualNodeManager.getSnapshot());
+        this.updateUndoRedoButtons();
+        if (this.virtualNodeManager.alignX()) {
+            this.uiController.showStatus(`Virtual nodes aligned on X = ${this.virtualNodeManager.getSelected()[0].x.toFixed(4)}`);
+            this.draw();
+        }
+    }
+
+    /** Y key — align selected virtual nodes to the Y of the first selected. */
+    handleVirtualNodeAlignY() {
+        if (this.virtualNodeManager.getSelectedCount() < 2) {
+            this.uiController.showError('Select at least 2 virtual nodes then press Y');
+            return;
+        }
+        this.historyManager.saveToHistory(this.polygons, 'Virtual nodes align Y', this.virtualNodeManager.getSnapshot());
+        this.updateUndoRedoButtons();
+        if (this.virtualNodeManager.alignY()) {
+            this.uiController.showStatus(`Virtual nodes aligned on Y = ${this.virtualNodeManager.getSelected()[0].y.toFixed(4)}`);
+            this.draw();
+        }
+    }
+
+    // ─── Split execution ──────────────────────────────────────────────────
+
+    /**
+     * C key (combined mode) — corner-based split using unified selection sequence.
+     *
+     * The user shift-clicks nodes in the desired polygon order (both virtual nodes and
+     * ring vertices, interleaved in any order). _splitSequence preserves this click order.
+     * Virtual nodes must form one contiguous group in the sequence, flanked by ring vertices.
+     *
+     * Result:
+     *   ring1 (new polygon) = sequence points, with ring arcs inserted between consecutive
+     *                         ring vertices (taking the arc that avoids the other seq ring vertices)
+     *   ring2 (remainder)   = original ring with the enclosed arc replaced by the VN cut path
+     */
+    handleCornerBasedSplit() {
+        // Resolve to currently-selected VNs with fresh coordinates (filters stale entries)
+        const seq = this._getEffectiveSplitSequence();
+
+        // ── Validate ────────────────────────────────────────────────────────
+        const ringItems = seq.filter(s => s.type === 'ring');
+        const vnItems   = seq.filter(s => s.type === 'virtual');
+
+        if (ringItems.length < 2) {
+            this.uiController.showError('Shift-click at least 2 ring vertices and 1 virtual node, then press C');
+            return;
+        }
+        if (vnItems.length === 0) {
+            this.uiController.showError('Shift-click at least 1 virtual node (orange +), then press C');
+            return;
+        }
+
+        const polyIdx = ringItems[0].polygonIndex;
+        if (!ringItems.every(v => v.polygonIndex === polyIdx && v.ringIndex === 0)) {
+            this.uiController.showError('All selected vertices must be on the same polygon exterior ring');
+            return;
+        }
+
+        const polygon = this.polygons[polyIdx];
+        const ring    = polygon.rings[0];
+        const N       = ring.length - 1; // distinct vertices (ring[0] === ring[N])
+
+        // Virtual nodes must form ONE contiguous group in the sequence
+        const vnPositions = seq.map((s, i) => s.type === 'virtual' ? i : -1).filter(i => i >= 0);
+        for (let j = 0; j < vnPositions.length - 1; j++) {
+            if (vnPositions[j + 1] !== vnPositions[j] + 1) {
+                this.uiController.showError(
+                    'Virtual nodes must be a contiguous block in the selection order ' +
+                    '(e.g. ring → VN1 → VN2 → ring). Re-select in the correct sequence.'
+                );
+                return;
+            }
+        }
+
+        const vnGroupStart = vnPositions[0];
+        const vnGroupEnd   = vnPositions[vnPositions.length - 1];
+        const seqLen       = seq.length;
+
+        // Anchors: ring vertices immediately flanking the VN group (wrap-safe)
+        const leftAnchorIdx  = (vnGroupStart - 1 + seqLen) % seqLen;
+        const rightAnchorIdx = (vnGroupEnd   + 1         ) % seqLen;
+        const leftAnchor     = seq[leftAnchorIdx];
+        const rightAnchor    = seq[rightAnchorIdx];
+
+        if (!leftAnchor || leftAnchor.type !== 'ring' ||
+            !rightAnchor || rightAnchor.type !== 'ring') {
+            this.uiController.showError('Virtual nodes must have ring vertices on both sides in the sequence');
+            return;
+        }
+        const leftVtxIdx  = leftAnchor.vertexIndex;
+        const rightVtxIdx = rightAnchor.vertexIndex;
+        if (leftVtxIdx === rightVtxIdx) {
+            this.uiController.showError('Left and right anchor vertices must be different ring vertices');
+            return;
+        }
+
+        // "Enclosed" ring vertices = all ring items that are NOT the two anchors
+        const anchorKeys     = new Set([leftAnchor.key, rightAnchor.key]);
+        const enclosedIdxSet = new Set(
+            ringItems.filter(s => !anchorKeys.has(s.key)).map(s => s.vertexIndex)
+        );
+
+        const round4 = v => Math.round(v * 10000) / 10000;
+        const pt     = p => ({ x: round4(p.x), y: round4(p.y) });
+
+        // ── Build ring1 (new polygon from the unified sequence) ─────────────
+        // For consecutive ring-vertex pairs, insert the ring arc that avoids other sequence ring vertices.
+        const seqRingIdxSet = new Set(ringItems.map(s => s.vertexIndex));
+        const ring1 = [];
+
+        for (let i = 0; i < seqLen; i++) {
+            const curr = seq[i];
+            const next = seq[(i + 1) % seqLen];
+            ring1.push({ x: round4(curr.x), y: round4(curr.y) });
+
+            if (curr.type === 'ring' && next.type === 'ring') {
+                const otherIdxs = new Set(seqRingIdxSet);
+                otherIdxs.delete(curr.vertexIndex);
+                otherIdxs.delete(next.vertexIndex);
+                const goFwd = this._arcAvoidOthers(N, curr.vertexIndex, next.vertexIndex, otherIdxs);
+                const step  = goFwd ? 1 : -1;
+                let ri = ((curr.vertexIndex + step) % N + N) % N;
+                while (ri !== next.vertexIndex) {
+                    ring1.push(pt(ring[ri]));
+                    ri = ((ri + step) % N + N) % N;
+                }
+            }
+        }
+        ring1.push({ x: round4(seq[0].x), y: round4(seq[0].y) }); // close
+
+        // ── Build ring2 (remainder) ─────────────────────────────────────────
+        // Determine which direction from leftAnchor to rightAnchor contains the enclosed vertices
+        let enclosedArcFwd;
+        if (enclosedIdxSet.size === 0) {
+            const fwdSteps = (rightVtxIdx - leftVtxIdx + N) % N;
+            enclosedArcFwd = fwdSteps <= N / 2; // enclosed = shorter arc
+        } else {
+            enclosedArcFwd = this._arcContainsAll(N, leftVtxIdx, rightVtxIdx, enclosedIdxSet, true);
+            if (!enclosedArcFwd &&
+                !this._arcContainsAll(N, leftVtxIdx, rightVtxIdx, enclosedIdxSet, false)) {
+                this.uiController.showError('Cannot find enclosed ring arc — selected vertices may not all lie on the same ring');
+                return;
+            }
+        }
+
+        // ring2: leftAnchor → complement arc → rightAnchor → VNs reversed → leftAnchor
+        const step2 = enclosedArcFwd ? -1 : 1; // complement = opposite of enclosed direction
+        const ring2 = [pt(ring[leftVtxIdx])];
+        let ri2 = ((leftVtxIdx + step2) % N + N) % N;
+        while (ri2 !== rightVtxIdx) {
+            ring2.push(pt(ring[ri2]));
+            ri2 = ((ri2 + step2) % N + N) % N;
+        }
+        ring2.push(pt(ring[rightVtxIdx]));
+        for (let k = vnGroupEnd; k >= vnGroupStart; k--) {
+            ring2.push({ x: round4(seq[k].x), y: round4(seq[k].y) });
+        }
+        ring2.push(pt(ring[leftVtxIdx])); // close
+
+        if (ring1.length < 4 || ring2.length < 4) {
+            this.uiController.showError('Split would create a degenerate polygon — adjust selection');
+            return;
+        }
+
+        // ── Snapshot + population split ─────────────────────────────────────
+        const parentNeighborIds = this.adjacencyGraph.getNeighbors(polygon.id);
+        const sourceSnapshot    = JSON.parse(JSON.stringify(polygon));
+        const splitStartIndex   = polyIdx;
+
+        const area1    = this._vnRingArea(ring1);
+        const area2    = this._vnRingArea(ring2);
+        const totalPop = polygon.population || 0;
+        const frac1    = (area1 + area2) > 1e-12 ? area1 / (area1 + area2) : 0.5;
+
+        const newPoly1 = Object.assign(JSON.parse(JSON.stringify(polygon)), {
+            rings:      [ring1, ...polygon.rings.slice(1)],
+            population: Math.round(totalPop * frac1)
+        });
+        const newPoly2 = Object.assign(JSON.parse(JSON.stringify(polygon)), {
+            rings:      [ring2, ...polygon.rings.slice(1)],
+            population: Math.round(totalPop * (1 - frac1))
+        });
+
+        // ── Replace source polygon with the two pieces ──────────────────────
+        const updatedPolygons = [...this.polygons];
+        updatedPolygons.splice(splitStartIndex, 1, newPoly1, newPoly2);
+        this.polygons = updatedPolygons;
+
+        const county   = polygon.county || polygon.id || 'POLY';
+        const splitIds = this.nextPolygonIds(county, 2);
+        newPoly1.id = splitIds[0];
+        newPoly2.id = splitIds[1];
+
+        // ── Clear selections ────────────────────────────────────────────────
+        this.selectedPolygonIndex = null;
+        this.selectedPolygonIndices.clear();
+        this.vertexSelection.clearSelection();
+        this._splitSequence = [];
+        this.updateVertexSelectionInfo();
+
+        // ── Adjacency + vertex sync ─────────────────────────────────────────
+        const splitZoneIds = [...splitIds, ...parentNeighborIds];
+        this.adjacencyGraph.rebuildForAffected(this.polygons, splitIds, splitZoneIds);
+
+        this.polygons = this.vertexSync.syncAfterSplit(
+            this.polygons, this.adjacencyGraph,
+            splitStartIndex, 2, sourceSnapshot, parentNeighborIds
+        );
+
+        this.adjacencyGraph.rebuildForAffected(this.polygons, splitIds, splitZoneIds);
+        this.layerManager.layers.subCounty.polygons = this.polygons;
+
+        // ── History + UI ────────────────────────────────────────────────────
+        this.historyManager.saveToHistory(this.polygons, `Corner split: ${polygon.id}`);
+        this.updateUndoRedoButtons();
+        this.uiController.populatePolygonSelect(this.polygons);
+        this.uiController.setSelectedPolygon(null);
+        this.updateCombineButton();
+        this.updateSplitButton();
+
+        // Remove only the virtual nodes used in this split; unselected nodes stay
+        this.virtualNodeManager.removeSelected();
+
+        this.draw();
+        this.uiController.showStatus(`Split ${polygon.id} → ${splitIds.join(' + ')}`);
+    }
+
+    /**
+     * Returns _splitSequence filtered to only include VNs that are CURRENTLY selected
+     * in virtualNodeManager (deselected after align/midpoint ops are excluded), with VN
+     * coordinates refreshed from the manager's live state.
+     */
+    _getEffectiveSplitSequence() {
+        const seen = new Set();
+        return this._splitSequence.map(s => {
+            if (s.type === 'virtual') {
+                const vn = this.virtualNodeManager.nodes.find(n => n.id === s.id);
+                if (!vn || !vn.selected) return null;       // deselected or deleted
+                if (seen.has(`v:${s.id}`)) return null;     // deduplicate re-selected VNs
+                seen.add(`v:${s.id}`);
+                return { ...s, x: vn.x, y: vn.y };         // refresh live coords
+            } else {
+                if (seen.has(s.key)) return null;           // deduplicate ring vertices
+                seen.add(s.key);
+                return s;
+            }
+        }).filter(Boolean);
+    }
+
+    /**
+     * True if the forward arc (fromIdx → … → toIdx, step +1 mod N) avoids all indices
+     * in otherIdxs. Falls back to the shorter arc when otherIdxs is empty.
+     */
+    _arcAvoidOthers(N, fromIdx, toIdx, otherIdxs) {
+        if (otherIdxs.size === 0) {
+            return (toIdx - fromIdx + N) % N <= N / 2; // shorter arc
+        }
+        let i = (fromIdx + 1) % N;
+        while (i !== toIdx) {
+            if (otherIdxs.has(i)) return false; // forward arc hits another seq vertex → go backward
+            i = (i + 1) % N;
+        }
+        return true;
+    }
+
+    /**
+     * True if the arc from fromIdx to toIdx (direction = goFwd ? +1 : -1, mod N)
+     * contains every index in idxSet.
+     */
+    _arcContainsAll(N, fromIdx, toIdx, idxSet, goFwd) {
+        const step = goFwd ? 1 : -1;
+        let found = 0;
+        let i = ((fromIdx + step) % N + N) % N;
+        while (i !== toIdx) {
+            if (idxSet.has(i)) found++;
+            i = ((i + step) % N + N) % N;
+        }
+        return found === idxSet.size;
+    }
+
+
+    /** Signed area of a closed ring via the shoelace formula (absolute value). */
+    _vnRingArea(ring) {
+        let area = 0;
+        for (let i = 0; i < ring.length - 1; i++) {
+            area += ring[i].x * ring[i + 1].y - ring[i + 1].x * ring[i].y;
+        }
+        return Math.abs(area) / 2;
+    }
+
+    // ─── Rendering ────────────────────────────────────────────────────────
+
+    /**
+     * Draw all virtual nodes and the cut-line preview on top of the canvas.
+     * Called from draw() whenever virtualNodeManager.count > 0.
+     */
+    renderVirtualNodeOverlay() {
+        const nodes = this.virtualNodeManager.nodes;
+        if (nodes.length === 0) return;
+
+        const ctx = this.renderer.ctx;
+        const geo = this.geometryOps;
+        ctx.save();
+
+        // ── Sequence-based polygon preview ─────────────────────────────
+        // Uses effective sequence (only currently-selected VNs, fresh coords).
+        const effectiveSeq = this._getEffectiveSplitSequence();
+        if (effectiveSeq.length >= 2) {
+            const pts = effectiveSeq.map(s => {
+                if (s.type === 'virtual') {
+                    return geo.dataToScreen(s.x, s.y); // coords already resolved by _getEffectiveSplitSequence
+                } else {
+                    const poly = this.polygons[s.polygonIndex];
+                    if (!poly || !poly.rings[s.ringIndex]) return null;
+                    const vtx = poly.rings[s.ringIndex][s.vertexIndex];
+                    return vtx ? geo.dataToScreen(vtx.x, vtx.y) : null;
+                }
+            }).filter(Boolean);
+
+            if (pts.length >= 2) {
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.lineTo(pts[0].x, pts[0].y); // close preview polygon
+                ctx.strokeStyle = 'rgba(255, 140, 0, 0.80)';
+                ctx.lineWidth   = 1.5;
+                ctx.setLineDash([5, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // ── Node circles ───────────────────────────────────────────────
+        for (const node of nodes) {
+            const s = geo.dataToScreen(node.x, node.y);
+
+            // Filled circle
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+            ctx.fillStyle   = node.selected ? '#FF6600' : '#FF8C00';
+            ctx.fill();
+            ctx.strokeStyle = node.selected ? 'white' : 'rgba(0,0,0,0.45)';
+            ctx.lineWidth   = node.selected ? 2.5 : 1.5;
+            ctx.stroke();
+
+            // White cross inside (distinguishes from red real vertices)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth   = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(s.x - 3.5, s.y);  ctx.lineTo(s.x + 3.5, s.y);
+            ctx.moveTo(s.x, s.y - 3.5);  ctx.lineTo(s.x, s.y + 3.5);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * X key — align all selected vertices to the X-coordinate of the first selected vertex.
+     * v1=(x1,y1), v2=(x2,y2), v3=(a,b) → v2 becomes (x1,y2), v3 becomes (x1,b), …
+     * All polygons sharing each moved vertex are updated together.
+     */
+    handleAlignX() {
+        const selectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
+
+        if (selectedInfo.length < 2) {
+            this.uiController.showError('Select at least 2 vertices (Shift+Click) then press X');
+            return;
+        }
+
+        const targetX = selectedInfo[0].x;
+        const toMove  = selectedInfo.slice(1).filter(v => Math.abs(v.x - targetX) > 1e-9);
+
+        if (toMove.length === 0) {
+            this.uiController.showStatus('All vertices already aligned on X — no change needed');
+            return;
+        }
+
+        this.historyManager.saveToHistory(this.polygons, `Align X: ${toMove.length} vertices`);
+
+        for (const v of toMove) {
+            this.sharedVertices.updateSharedVertices(v.x, v.y, targetX, v.y, this.polygons);
+        }
+
+        this.vertexSelection.clearSelection();
+        this.updateVertexSelectionInfo();
+        this.draw();
+
+        this.uiController.showSuccess(
+            `${toMove.length} vertex${toMove.length > 1 ? 'es' : ''} aligned to X = ${targetX.toFixed(4)}`
+        );
+    }
+
+    /**
+     * Y key — align all selected vertices to the Y-coordinate of the first selected vertex.
+     * v1=(x1,y1), v2=(x2,y2), v3=(a,b) → v2 becomes (x2,y1), v3 becomes (a,y1), …
+     * All polygons sharing each moved vertex are updated together.
+     */
+    handleAlignY() {
+        const selectedInfo = this.vertexSelection.getSelectedVertexInfo(this.polygons);
+
+        if (selectedInfo.length < 2) {
+            this.uiController.showError('Select at least 2 vertices (Shift+Click) then press Y');
+            return;
+        }
+
+        const targetY = selectedInfo[0].y;
+        const toMove  = selectedInfo.slice(1).filter(v => Math.abs(v.y - targetY) > 1e-9);
+
+        if (toMove.length === 0) {
+            this.uiController.showStatus('All vertices already aligned on Y — no change needed');
+            return;
+        }
+
+        this.historyManager.saveToHistory(this.polygons, `Align Y: ${toMove.length} vertices`);
+
+        for (const v of toMove) {
+            this.sharedVertices.updateSharedVertices(v.x, v.y, v.x, targetY, this.polygons);
+        }
+
+        this.vertexSelection.clearSelection();
+        this.updateVertexSelectionInfo();
+        this.draw();
+
+        this.uiController.showSuccess(
+            `${toMove.length} vertex${toMove.length > 1 ? 'es' : ''} aligned to Y = ${targetY.toFixed(4)}`
+        );
     }
 
     /**
@@ -1200,9 +2176,10 @@ class PolygonEditor {
             this.vertexSelection.clearSelection();
             this.updateVertexSelectionInfo();
 
-            // STEP 1: Rebuild adjacency graph so vertexSync can find neighbors
+            // STEP 1: Rebuild adjacency for new polygons + their known neighbors only
             console.log('Rebuilding adjacency graph after vertex split...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            const vertexSplitZoneIds = [...vertexSplitIds, ...parentNeighborIds];
+            this.adjacencyGraph.rebuildForAffected(this.polygons, vertexSplitIds, vertexSplitZoneIds);
 
             // STEP 2: Sync new polygon boundary vertices into all neighboring polygons.
             // Without this, neighbors retain stale shared edges and gaps appear.
@@ -1220,9 +2197,9 @@ class PolygonEditor {
                 );
             }
 
-            // STEP 3: Rebuild adjacency graph again with synced vertices
+            // STEP 3: Rebuild adjacency again after vertex sync (same zone)
             console.log('Rebuilding adjacency graph after vertex sync...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            this.adjacencyGraph.rebuildForAffected(this.polygons, vertexSplitIds, vertexSplitZoneIds);
 
             const stats = this.adjacencyGraph.getStatistics();
             console.log('Adjacency graph rebuilt:', stats);
@@ -1285,9 +2262,6 @@ class PolygonEditor {
         let hasOrphanedVertex = false;
         let hasMissingCounty = false;
 
-        // Derive county from the selected polygon — authoritative context for all vertex ops.
-        const selectedPolygon = this.selectedPolygonIndex !== null
-            ? this.polygons[this.selectedPolygonIndex] : null;
         const allInSameCounty = true; // always true — enforced by polygon-first selection model
 
         if (selectedInfo.length > 0) {
@@ -1365,7 +2339,22 @@ class PolygonEditor {
     handlePolygonSelection(dataX, dataY, cursorCheckOnly = false, isCtrlKey = false) {
         // Allow polygon selection in both edit and view modes
         // (View mode needs selection to display polygon info and vertices)
-        const clickedPolygonIndex = this.geometryOps.findPolygonAtPosition(dataX, dataY, this.polygons);
+
+        // In redistricting mode with a district filter, only hit-test visible polygons
+        let candidatePolygons = this.polygons;
+        let indexMap = null; // maps candidate index → this.polygons index
+        if (this.districtFilter && window.AppMode && window.AppMode.current === 'redistricting') {
+            const filtered = [];
+            const map = [];
+            this.polygons.forEach((p, i) => {
+                if (p.district === this.districtFilter) { filtered.push(p); map.push(i); }
+            });
+            candidatePolygons = filtered;
+            indexMap = map;
+        }
+
+        const hitIdx = this.geometryOps.findPolygonAtPosition(dataX, dataY, candidatePolygons);
+        const clickedPolygonIndex = (hitIdx !== null && indexMap) ? indexMap[hitIdx] : hitIdx;
 
         if (clickedPolygonIndex !== null) {
             if (!cursorCheckOnly) {
@@ -1387,6 +2376,104 @@ class PolygonEditor {
         return { polygonFound: false };
     }
 
+    /** Open the density input modal for a given polygon index. */
+    showDensityInput(polygonIndex) {
+        const polygon = this.polygons[polygonIndex];
+        if (!polygon) return;
+
+        this._pendingDensityPolygonIndex = polygonIndex;
+
+        const modal  = document.getElementById('densityInputModal');
+        const label  = document.getElementById('densityInputLabel');
+        const input  = document.getElementById('densityInputValue');
+        const errEl  = document.getElementById('densityInputError');
+        if (!modal) return;
+
+        label.textContent = `Sub-County: ${polygon.id}  ·  Current: ${Math.round(polygon.populationDensity || 0).toLocaleString()} /km²`;
+        input.value = Math.round(polygon.populationDensity || 0);
+        errEl.style.display = 'none';
+        modal.style.display = 'flex';
+        setTimeout(() => { input.focus(); input.select(); }, 50);
+    }
+
+    /** Validate and apply the new density value from the modal. Returns true on success. */
+    applyDensityChange(rawValue) {
+        const idx = this._pendingDensityPolygonIndex;
+        if (idx === null || idx === undefined) return false;
+
+        const num = parseFloat(rawValue);
+        if (!Number.isFinite(num) || num < 0 || num > 30000) {
+            document.getElementById('densityInputError').style.display = 'block';
+            return false;
+        }
+
+        const polygon = this.polygons[idx];
+        polygon.populationDensity = num;
+
+        // Keep DataManager's originalData in sync for CSV export
+        if (this.dataManager.originalData &&
+                this.dataManager.originalData[polygon.rowIndex] !== undefined) {
+            this.dataManager.originalData[polygon.rowIndex].Population_Density = String(num);
+        }
+
+        this.historyManager.saveToHistory(this.polygons, `Density changed: ${polygon.id}`);
+        this.updateUndoRedoButtons();
+        this.draw();
+
+        document.getElementById('densityInputModal').style.display = 'none';
+        this._pendingDensityPolygonIndex = null;
+        return true;
+    }
+
+    /** Close density modal without saving. */
+    closeDensityModal() {
+        const modal = document.getElementById('densityInputModal');
+        if (modal) modal.style.display = 'none';
+        this._pendingDensityPolygonIndex = null;
+    }
+
+    /**
+     * Nudge density of one or more polygons by +1 or -1 step.
+     * Step size is determined by each polygon's own current density.
+     * Only active in population density mode.
+     * @param {number[]} indices - Polygon indices to adjust
+     * @param {1|-1} direction - +1 to increase, -1 to decrease
+     */
+    nudgeDensity(indices, direction) {
+        if (!window.AppMode || window.AppMode.current !== 'population') return;
+
+        const stepFor = (density) => {
+            if (density >= 10000) return 500;
+            if (density >= 5000)  return 250;
+            if (density >= 1500)  return 100;
+            if (density >= 1000)  return 50;
+            if (density >= 100)   return 25;
+            return 5;
+        };
+
+        let changed = false;
+        indices.forEach(idx => {
+            const polygon = this.polygons[idx];
+            if (!polygon) return;
+            const step    = stepFor(polygon.populationDensity || 0);
+            const newVal  = Math.min(30000, Math.max(0, (polygon.populationDensity || 0) + direction * step));
+            if (newVal === polygon.populationDensity) return;
+
+            polygon.populationDensity = newVal;
+            if (this.dataManager.originalData &&
+                    this.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                this.dataManager.originalData[polygon.rowIndex].Population_Density = String(newVal);
+            }
+            changed = true;
+        });
+
+        if (changed) {
+            this.historyManager.saveToHistory(this.polygons, 'Density nudged');
+            this.updateUndoRedoButtons();
+            this.draw();
+        }
+    }
+
     /**
      * Handle polygon selection from dropdown
      * @param {Event} e - Select change event
@@ -1405,11 +2492,27 @@ class PolygonEditor {
      * @param {number|null} index - Index to select or null for none
      */
     selectPolygon(index) {
+        // In Redistricting mode, handle ward selection — then fall through so
+        // display.html still receives the polygon info via updatePolygonInfo()
+        if (window.AppMode && window.AppMode.current === 'redistricting' &&
+            index !== null && window.WardManager) {
+            const polygon = this.polygons[index];
+            if (polygon) {
+                if (window.WardManager.isCreateMode()) {
+                    window.WardManager.togglePolygon(polygon.id);
+                } else {
+                    window.WardManager.selectWardByPolygon(polygon.id);
+                }
+                // fall through — do NOT return; normal selection updates display.html
+            }
+        }
+
         // CRITICAL: Clear vertex selection when switching to a different polygon
         // This ensures all selected vertices always belong to the currently selected polygon
         if (index !== this.selectedPolygonIndex) {
             console.log(`Polygon selection changed from ${this.selectedPolygonIndex} to ${index} - clearing vertex selection`);
             this.vertexSelection.clearSelection();
+            this._splitSequence = [];
             this.updateVertexSelectionInfo();
         }
 
@@ -1477,12 +2580,134 @@ class PolygonEditor {
      * Update split button state based on selection
      */
     updateSplitButton() {
-        const canSplit = this.selectedPolygonIndices.size === 1;
+        const size = this.selectedPolygonIndices.size;
+        const canSplit    = size === 1;
+        const canOsmSplit = size >= 1;
         this.uiController.setSplitEnabled(canSplit);
+        this.uiController.setOsmSplitEnabled(canOsmSplit);
+        this.uiController.setDeletePolygonEnabled(canSplit);
 
         // Disable regenerate if selection changes (unless exactly 1 polygon selected)
         if (!canSplit) {
             this.uiController.setRegenerateEnabled(false);
+        }
+    }
+
+    /**
+     * Check whether all polygons in a Set of indices form a connected subgraph
+     * (every polygon reachable from every other via shared-boundary adjacency).
+     * @param {Set<number>} polygonIndices
+     * @returns {boolean}
+     */
+    _arePolygonsConnected(polygonIndices) {
+        if (polygonIndices.size <= 1) return true;
+        const ids   = [...polygonIndices].map(i => this.polygons[i].id);
+        const idSet = new Set(ids);
+        const visited = new Set();
+        const queue   = [ids[0]];
+        while (queue.length > 0) {
+            const cur = queue.shift();
+            if (visited.has(cur)) continue;
+            visited.add(cur);
+            for (const nb of this.adjacencyGraph.getNeighbors(cur)) {
+                if (idSet.has(nb) && !visited.has(nb)) queue.push(nb);
+            }
+        }
+        return ids.every(id => visited.has(id));
+    }
+
+    /**
+     * Delete the currently selected polygon after user confirmation.
+     * Removes the polygon from this.polygons, updates the adjacency graph,
+     * saves to history (undo/redo supported), auto-saves CSV to the same file,
+     * and redraws.
+     */
+    async deleteSelectedPolygon() {
+        if (this.selectedPolygonIndex === null) return;
+
+        const polygon = this.polygons[this.selectedPolygonIndex];
+        if (!polygon) return;
+
+        const confirmed = confirm(
+            `Delete polygon "${polygon.id}"?\n\nThis will remove it permanently from the CSV. Undo is available.`
+        );
+        if (!confirmed) return;
+
+        const index = this.selectedPolygonIndex;
+
+        // Collect neighbors before removal so we can rebuild their adjacency entries.
+        const neighborIds = this.adjacencyGraph.getNeighbors(polygon.id);
+
+        // Remove from array
+        this.polygons.splice(index, 1);
+
+        // Update adjacency: the deleted polygon is gone; rebuild its former neighbors
+        // so they no longer list it.  The deleted polygon's own entry is intentionally
+        // left stale in the graph — _diffPolygonStates reads it during undo to expand
+        // the zone so rebuildForAffected can correctly restore adjacency on undo/redo.
+        if (neighborIds.length > 0) {
+            this.adjacencyGraph.rebuildForAffected(
+                this.polygons,
+                neighborIds,
+                neighborIds
+            );
+        }
+
+        // Sync layer manager
+        this.layerManager.layers.subCounty.polygons = this.polygons;
+
+        // Deselect
+        this.selectedPolygonIndex = null;
+        this.selectedPolygonIndices.clear();
+        this.vertexSelection.clearSelection();
+
+        // Persist history for undo/redo
+        this.historyManager.saveToHistory(this.polygons, `Delete polygon: ${polygon.id}`);
+        this.updateUndoRedoButtons();
+
+        // Refresh UI
+        this.uiController.populatePolygonSelect(this.polygons);
+        this.updateCombineButton();
+        this.updateSplitButton();
+        this.draw();
+        this.updatePolygonInfo();
+
+        // Auto-save CSV to the same file if we know its name
+        await this._autoSaveCsvAfterDelete(polygon.id);
+    }
+
+    /**
+     * Silently save the current polygons back to the currently-loaded CSV file.
+     * Falls back to a timestamped download if no filename is tracked or the
+     * server write fails.
+     * @param {string} deletedId - Used only for the status message
+     */
+    async _autoSaveCsvAfterDelete(deletedId) {
+        try {
+            const csvContent = this.dataManager.exportToCSV(this.polygons);
+            const filename = window._currentCsvFilename;
+
+            if (filename) {
+                const response = await fetch('/save_csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, content: csvContent })
+                });
+                if (response.ok) {
+                    this.uiController.showSuccess(`Deleted "${deletedId}" and saved to ${filename}`);
+                    return;
+                }
+            }
+
+            // Fallback: browser download
+            const now = new Date();
+            const z = n => String(n).padStart(2, '0');
+            const fallbackName = `${z(now.getMonth() + 1)}${z(now.getDate())}${z(now.getHours())}${z(now.getMinutes())}_modified_shapefile.csv`;
+            this.uiController.downloadCSV(csvContent, filename || fallbackName);
+            this.uiController.showSuccess(`Deleted "${deletedId}". CSV downloaded (place in ./csv_input to reload).`);
+        } catch (err) {
+            console.warn('Auto-save after delete failed:', err);
+            this.uiController.showError(`Deleted "${deletedId}" but CSV save failed: ${err.message}`);
         }
     }
 
@@ -1525,15 +2750,30 @@ class PolygonEditor {
     undo() {
         const previousState = this.historyManager.undo();
         if (previousState) {
+            // Diff BEFORE replacing this.polygons so the adjacency graph still reflects
+            // the current (pre-undo) state — neighbors of removed polygons are readable.
+            const { affectedIds, zoneIds } = this._diffPolygonStates(this.polygons, previousState.polygons);
+
             this.polygons = previousState.polygons;
+
+            // Restore virtual node state if this snapshot includes one
+            if (previousState.vnSnapshot !== null) {
+                this.virtualNodeManager.loadSnapshot(previousState.vnSnapshot);
+                this._splitSequence = [];
+            }
 
             // Clear vertex selection (important for undo after vertex deletion)
             this.vertexSelection.clearSelection();
+            this._splitSequence = [];
             this.updateVertexSelectionInfo();
 
-            // Rebuild adjacency graph with new polygon data
-            console.log('Rebuilding adjacency graph after undo...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            // Targeted adjacency rebuild — O(Z²·V²) instead of O(P²·V²).
+            // affectedIds = [] means no polygon ring data changed (e.g. a pure virtual-node
+            // action was undone).  The adjacency graph is still valid — skip rebuild entirely.
+            console.log(`Rebuilding adjacency after undo: ${affectedIds.length} affected, ${zoneIds.length} zone polygons`);
+            if (affectedIds.length > 0) {
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, zoneIds);
+            }
 
             // CRITICAL: Sync layer manager with restored polygon state
             this.layerManager.layers.subCounty.polygons = this.polygons;
@@ -1553,15 +2793,28 @@ class PolygonEditor {
     redo() {
         const nextState = this.historyManager.redo();
         if (nextState) {
+            // Diff BEFORE replacing this.polygons — same reason as in undo().
+            const { affectedIds, zoneIds } = this._diffPolygonStates(this.polygons, nextState.polygons);
+
             this.polygons = nextState.polygons;
+
+            // Restore virtual node state if this snapshot includes one
+            if (nextState.vnSnapshot !== null) {
+                this.virtualNodeManager.loadSnapshot(nextState.vnSnapshot);
+                this._splitSequence = [];
+            }
 
             // Clear vertex selection (important for redo after vertex deletion)
             this.vertexSelection.clearSelection();
+            this._splitSequence = [];
             this.updateVertexSelectionInfo();
 
-            // Rebuild adjacency graph with new polygon data
-            console.log('Rebuilding adjacency graph after redo...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            // Targeted adjacency rebuild — O(Z²·V²) instead of O(P²·V²).
+            // affectedIds = [] means no polygon ring data changed — skip rebuild entirely.
+            console.log(`Rebuilding adjacency after redo: ${affectedIds.length} affected, ${zoneIds.length} zone polygons`);
+            if (affectedIds.length > 0) {
+                this.adjacencyGraph.rebuildForAffected(this.polygons, affectedIds, zoneIds);
+            }
 
             // CRITICAL: Sync layer manager with restored polygon state
             this.layerManager.layers.subCounty.polygons = this.polygons;
@@ -1574,6 +2827,111 @@ class PolygonEditor {
             this.updateUndoRedoButtons();
             this.uiController.showStatus(`Redo: ${nextState.action}`);
         }
+    }
+
+    // ─── Undo/Redo helpers ────────────────────────────────────────────────────
+
+    /**
+     * Diff two polygon snapshots and return the minimal set of IDs that need
+     * their adjacency recomputed.
+     *
+     * Three categories of change are detected:
+     *   • Removed — ID present in oldPolygons but absent in newPolygons
+     *   • Added   — ID present in newPolygons but absent in oldPolygons
+     *   • Modified — same ID, but ring vertices differ
+     *
+     * The "zone" expands the affected set by one hop: all current (pre-swap)
+     * adjacency-graph neighbors of every affected polygon are included so that
+     * their neighbor lists are refreshed too.
+     *
+     * Complexity: O(P·V) for the diff + O(Z·degree) for the zone expansion,
+     * where Z = |affected| and degree = avg neighbor count.
+     *
+     * @param {Array<Object>} oldPolygons - Polygon array before the state transition
+     * @param {Array<Object>} newPolygons - Polygon array after  the state transition
+     * @returns {{ affectedIds: string[], zoneIds: string[] }}
+     */
+    _diffPolygonStates(oldPolygons, newPolygons) {
+        const affected = new Set();
+
+        // ── Fast path: same count + IDs in same positional order ─────────────────
+        // This is true for every pure virtual-node action (place / delete / midpoint /
+        // alignX / alignY) because those actions never add, remove or re-order polygons.
+        // Skips 4 Map/Set allocations and two O(P) set-difference loops; goes straight
+        // to index-based ring comparison — O(P·V) but with a much lower constant.
+        if (oldPolygons.length === newPolygons.length &&
+            oldPolygons.every((p, i) => p.id === newPolygons[i].id)) {
+
+            for (let i = 0; i < oldPolygons.length; i++) {
+                if (this._polygonRingsChanged(oldPolygons[i], newPolygons[i])) {
+                    affected.add(oldPolygons[i].id);
+                }
+            }
+
+        } else {
+            // ── General path: polygon count or IDs changed (split / combine / load) ──
+            const oldIdSet = new Set(oldPolygons.map(p => p.id));
+            const newIdSet = new Set(newPolygons.map(p => p.id));
+            const oldMap   = new Map(oldPolygons.map(p => [p.id, p]));
+            const newMap   = new Map(newPolygons.map(p => [p.id, p]));
+
+            // Removed: existed before, gone now
+            for (const id of oldIdSet) {
+                if (!newIdSet.has(id)) affected.add(id);
+            }
+
+            // Added: new in the restored state
+            for (const id of newIdSet) {
+                if (!oldIdSet.has(id)) affected.add(id);
+            }
+
+            // Modified: same ID but ring geometry changed
+            for (const id of oldIdSet) {
+                if (newIdSet.has(id) && this._polygonRingsChanged(oldMap.get(id), newMap.get(id))) {
+                    affected.add(id);
+                }
+            }
+        }
+
+        // Zone = affected + their pre-swap neighbors (one adjacency hop).
+        // Reading neighbors before this.polygons is replaced means the adjacency
+        // graph still knows who was adjacent to removed/modified polygons.
+        const zone = new Set(affected);
+        for (const id of affected) {
+            for (const neighborId of this.adjacencyGraph.getNeighbors(id)) {
+                zone.add(neighborId);
+            }
+        }
+
+        return {
+            affectedIds: [...affected],
+            zoneIds:     [...zone]
+        };
+    }
+
+    /**
+     * Returns true if the two polygons have different ring vertex data.
+     * Exits early on the first mismatch — O(V) best/average case.
+     *
+     * Uses exact (===) comparison because both snapshots are produced by the
+     * same JSON.stringify → JSON.parse path and share the same float values.
+     *
+     * @param {Object} polyA
+     * @param {Object} polyB
+     * @returns {boolean}
+     */
+    _polygonRingsChanged(polyA, polyB) {
+        if (!polyA || !polyB) return true;
+        if (polyA.rings.length !== polyB.rings.length) return true;
+        for (let r = 0; r < polyA.rings.length; r++) {
+            const ra = polyA.rings[r];
+            const rb = polyB.rings[r];
+            if (ra.length !== rb.length) return true;
+            for (let v = 0; v < ra.length; v++) {
+                if (ra[v].x !== rb[v].x || ra[v].y !== rb[v].y) return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1596,6 +2954,15 @@ class PolygonEditor {
 
         // Show loading message
         this.uiController.showMessage(`Combining ${indices.length} polygons... Please wait.`);
+
+        // Capture neighbor IDs of all source polygons BEFORE they are removed
+        const combineSourceIds = new Set(indices.map(i => this.polygons[i].id));
+        const combineNeighborIds = new Set();
+        combineSourceIds.forEach(id => {
+            this.adjacencyGraph.getNeighbors(id).forEach(nId => {
+                if (!combineSourceIds.has(nId)) combineNeighborIds.add(nId);
+            });
+        });
 
         try {
             // Perform combination (now async - calls Python service)
@@ -1621,10 +2988,12 @@ class PolygonEditor {
             // Assign consistent {County}_NNN ID after all source polygons are removed (gap-filling from 001).
             // firstIndex is still valid since we only removed indices > firstIndex.
             this.polygons[firstIndex].id = this.nextPolygonIds(result.newPolygon.county, 1)[0];
+            const mergedId = this.polygons[firstIndex].id;
+            const combineZoneIds = [mergedId, ...combineNeighborIds];
 
-            // STEP 1: Rebuild adjacency graph FIRST (needed for vertex sync)
+            // STEP 1: Rebuild adjacency for merged polygon + its known neighbors only
             console.log('Rebuilding adjacency graph after polygon combination...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            this.adjacencyGraph.rebuildForAffected(this.polygons, [mergedId], combineZoneIds);
 
             // STEP 2: Synchronize vertices with neighbors
             console.log('Synchronizing vertices after merge...');
@@ -1639,9 +3008,9 @@ class PolygonEditor {
             const syncStats = this.vertexSync.getStats(originalPolygons, this.polygons);
             console.log('Vertex sync stats after merge:', syncStats);
 
-            // STEP 3: Rebuild adjacency graph AGAIN with synchronized vertices
+            // STEP 3: Rebuild adjacency again after vertex sync (same zone)
             console.log('Rebuilding adjacency graph with synchronized vertices...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            this.adjacencyGraph.rebuildForAffected(this.polygons, [mergedId], combineZoneIds);
 
             // CRITICAL: Sync layer manager with updated polygon list
             this.layerManager.layers.subCounty.polygons = this.polygons;
@@ -1728,6 +3097,337 @@ class PolygonEditor {
         }, 100);
     }
 
+    // ─── OSM-based split ─────────────────────────────────────────────────
+
+    /**
+     * Initialise the Leaflet map inside the OSM split modal.
+     * Called lazily on first open; subsequent calls are no-ops.
+     */
+    _initOsmMap() {
+        if (this._osmMap) return;
+        const mapEl = document.getElementById('osmSplitMap');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        this._osmMap = L.map('osmSplitMap').setView([51.5, -0.1], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+        }).addTo(this._osmMap);
+
+        this._osmBbox = null;
+
+        // Update the fixed frame overlay and bbox on every pan/zoom
+        this._osmMap.on('move zoom', () => this._updateFrameRect());
+    }
+
+    /**
+     * Recompute the green frame overlay position and the live _osmBbox from the
+     * current map center and the stored polygon km size.
+     * Called on every map 'move' and 'zoom' event.
+     */
+    _updateFrameRect() {
+        if (!this._osmMap || !this._polygonKmSize) return;
+
+        const { widthKm, heightKm } = this._polygonKmSize;
+        const center = this._osmMap.getCenter();
+
+        // Convert km half-extents to degrees
+        const KM_PER_DEG_LAT = 111.0;
+        const KM_PER_DEG_LON = 111.0 * Math.cos(center.lat * Math.PI / 180);
+        const halfLatDeg = (heightKm / 2) / KM_PER_DEG_LAT;
+        const halfLonDeg = (widthKm  / 2) / KM_PER_DEG_LON;
+
+        // Screen corners of the bounding box
+        const tl = this._osmMap.latLngToContainerPoint(
+            L.latLng(center.lat + halfLatDeg, center.lng - halfLonDeg)
+        );
+        const br = this._osmMap.latLngToContainerPoint(
+            L.latLng(center.lat - halfLatDeg, center.lng + halfLonDeg)
+        );
+        const screenW = br.x - tl.x;
+        const screenH = br.y - tl.y;
+
+        // ── SVG: draw the actual polygon shape(s) ───────────────────────────
+        const polyEl   = document.getElementById('osmFramePoly');
+        const bboxEl2  = document.getElementById('osmFrameBbox');
+        const svgEl    = document.getElementById('osmFrameSvg');
+        const polyGroup = document.getElementById('osmFramePolyGroup');
+
+        const rings = this._osmPolygonRings || (this._osmPolygonRing ? [this._osmPolygonRing] : null);
+
+        if (svgEl && rings) {
+            const mapSize = this._osmMap.getSize();
+            svgEl.setAttribute('width',  mapSize.x);
+            svgEl.setAttribute('height', mapSize.y);
+
+            // Combined bounds across all rings
+            const allPts = rings.flat();
+            const rxs = allPts.map(p => p.x), rys = allPts.map(p => p.y);
+            const minX = Math.min(...rxs), maxX = Math.max(...rxs);
+            const minY = Math.min(...rys), maxY = Math.max(...rys);
+            const dw = maxX - minX || 1;
+            const dh = maxY - minY || 1;
+
+            // Normalize a ring to SVG screen coordinates (data Y is up → flip)
+            const toSvgPts = ring => ring.map(p => {
+                const sx = tl.x + ((p.x - minX) / dw) * screenW;
+                const sy = tl.y + ((maxY - p.y) / dh) * screenH;
+                return `${sx.toFixed(1)},${sy.toFixed(1)}`;
+            }).join(' ');
+
+            if (rings.length === 1) {
+                // Single polygon: use static element, clear group
+                if (polyEl) polyEl.setAttribute('points', toSvgPts(rings[0]));
+                if (polyGroup) polyGroup.innerHTML = '';
+            } else {
+                // Multiple polygons: hide static element, build group dynamically
+                if (polyEl) polyEl.setAttribute('points', '');
+                if (polyGroup) {
+                    polyGroup.innerHTML = '';
+                    for (const ring of rings) {
+                        const el = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                        el.setAttribute('points', toSvgPts(ring));
+                        el.setAttribute('fill', 'rgba(39,174,96,0.12)');
+                        el.setAttribute('stroke', '#27ae60');
+                        el.setAttribute('stroke-width', '2.5');
+                        el.setAttribute('stroke-linejoin', 'round');
+                        polyGroup.appendChild(el);
+                    }
+                }
+            }
+
+            // Dashed bounding box (shows the OSM download area)
+            if (bboxEl2) {
+                bboxEl2.setAttribute('x',      tl.x.toFixed(1));
+                bboxEl2.setAttribute('y',      tl.y.toFixed(1));
+                bboxEl2.setAttribute('width',  screenW.toFixed(1));
+                bboxEl2.setAttribute('height', screenH.toFixed(1));
+            }
+        }
+
+        // Update live bbox state (always the bounding rectangle for OSM download)
+        this._osmBbox = {
+            north: center.lat + halfLatDeg,
+            south: center.lat - halfLatDeg,
+            east:  center.lng + halfLonDeg,
+            west:  center.lng - halfLonDeg,
+        };
+
+        const bboxEl = document.getElementById('osmBboxDisplay');
+        if (bboxEl) {
+            const b = this._osmBbox;
+            bboxEl.textContent = `N ${b.north.toFixed(4)}  S ${b.south.toFixed(4)}  E ${b.east.toFixed(4)}  W ${b.west.toFixed(4)}`;
+        }
+    }
+
+    /**
+     * Compute the km dimensions of one or more polygons and an initial map center.
+     * Stores _polygonKmSize and _osmPolygonRings for use by _updateFrameRect().
+     *
+     * @param {Object|Array<Object>} polygons - Single polygon or array of polygons with rings
+     * @returns {{ lat, lon }} Initial map center
+     */
+    _setupOsmFrame(polygons) {
+        const polyArray  = Array.isArray(polygons) ? polygons : [polygons];
+        const allPoints  = polyArray.flatMap(p => p.rings[0]);
+        const xs = allPoints.map(p => p.x);
+        const ys = allPoints.map(p => p.y);
+        this._polygonKmSize = {
+            widthKm:  (Math.max(...xs) - Math.min(...xs)) / 8.01,
+            heightKm: (Math.max(...ys) - Math.min(...ys)) / 8.01,
+        };
+        // Store all ring vertex arrays (excluding closing duplicate) for SVG overlay
+        this._osmPolygonRings = polyArray.map(p => {
+            const r = p.rings[0];
+            return r.slice(0, r.length - 1);
+        });
+        // Keep legacy single-ring reference for backward compat
+        this._osmPolygonRing = this._osmPolygonRings[0];
+
+        let center = { lat: 51.5, lon: -0.1 };
+        try {
+            const stored = localStorage.getItem('osmSplitLastCenter');
+            if (stored) center = JSON.parse(stored);
+        } catch (_) {}
+        return center;
+    }
+
+    /**
+     * Open the Split by OSM modal (1 polygon selected, or multiple connected polygons).
+     * The fixed green frame is sized to cover all selected polygons' real-world dimensions.
+     * Pan the map to position the frame over the target geographic area.
+     */
+    showOsmSplitDialog() {
+        const size = this.selectedPolygonIndices.size;
+        if (size === 0) {
+            this.uiController.showError('Select at least 1 polygon to split by OSM');
+            return;
+        }
+        if (size > 1 && !this._arePolygonsConnected(this.selectedPolygonIndices)) {
+            this.uiController.showError('Selected polygons must share a boundary — select only connected (adjacent) polygons for multi-polygon OSM split');
+            return;
+        }
+
+        const modal = document.getElementById('osmSplitModal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+
+        // Update modal title and subtitle for multi-polygon case
+        const titleEl    = document.getElementById('osmSplitTitle');
+        const subtitleEl = document.getElementById('osmSplitSubtitle');
+        if (titleEl) {
+            titleEl.textContent = size === 1
+                ? 'Split Polygon by OSM Districts'
+                : `Split ${size} Connected Polygons by OSM Districts`;
+        }
+        if (subtitleEl) {
+            subtitleEl.textContent = size === 1
+                ? 'Pan and zoom the map to position the green frame over your target area. The frame is sized to match the selected polygon\'s real-world dimensions. OSM road data will be downloaded for the framed area.'
+                : `${size} selected polygons will be merged and re-split using OSM road data. Pan the map to position the combined frame over the target area.`;
+        }
+
+        const selectedPolygons = [...this.selectedPolygonIndices].map(i => this.polygons[i]);
+
+        setTimeout(() => {
+            this._initOsmMap();
+            if (this._osmMap) {
+                this._osmMap.invalidateSize();
+                const center = this._setupOsmFrame(selectedPolygons);
+                this._osmMap.setView([center.lat, center.lon], 11);
+                this._updateFrameRect();
+            }
+        }, 120);
+    }
+
+    /**
+     * Called when the user clicks "Split" inside the OSM split modal.
+     */
+    handleOsmSplitConfirm() {
+        if (!this._osmBbox) {
+            this.uiController.showError('Map is still loading — please wait a moment');
+            return;
+        }
+        const modal = document.getElementById('osmSplitModal');
+        if (modal) modal.style.display = 'none';
+
+        const useSecondary = document.getElementById('osmUseSecondary')?.checked || false;
+        this.splitSelectedPolygonByOsm(this._osmBbox, useSecondary);
+    }
+
+    /**
+     * Core OSM split: sends bbox + selected polygon(s) to the backend, integrates
+     * returned sub-polygons. Supports both single-polygon and multi-polygon (merge
+     * then split) workflows.
+     *
+     * @param {{ north, south, east, west }} bbox - WGS84 bounding box
+     * @param {boolean} useSecondary - Include tertiary roads for subdivision
+     */
+    async splitSelectedPolygonByOsm(bbox, useSecondary = false) {
+        const size = this.selectedPolygonIndices.size;
+        if (size === 0) {
+            this.uiController.showError('Select at least 1 polygon to split');
+            return;
+        }
+
+        // Collect selected polygons sorted by index so we can splice correctly
+        const sortedIndices    = [...this.selectedPolygonIndices].sort((a, b) => a - b);
+        const selectedPolygons = sortedIndices.map(i => this.polygons[i]);
+        const selectedIds      = new Set(selectedPolygons.map(p => p.id));
+
+        // External neighbors: all adjacency neighbors that are NOT being replaced
+        const extNeighborSet = new Set();
+        for (const p of selectedPolygons) {
+            for (const nId of this.adjacencyGraph.getNeighbors(p.id)) {
+                if (!selectedIds.has(nId)) extNeighborSet.add(nId);
+            }
+        }
+        const parentNeighborIds = [...extNeighborSet];
+
+        this.uiController.showMessage(
+            size === 1
+                ? 'Downloading OSM data and generating districts… (30–90 s)'
+                : `Downloading OSM data for ${size} polygons (boundaries preserved)… (30–90 s)`
+        );
+
+        try {
+            const result = size === 1
+                ? await this.polygonSplitter.splitByOsm(
+                    selectedPolygons[0], bbox.north, bbox.south, bbox.east, bbox.west, useSecondary
+                  )
+                : await this.polygonSplitter.splitMultipleByOsm(
+                    selectedPolygons, bbox.north, bbox.south, bbox.east, bbox.west, useSecondary
+                  );
+
+            if (!result.success) {
+                this.uiController.showError(result.message);
+                return;
+            }
+
+            const allNewIds = [];
+
+            if (size === 1) {
+                // ── Single polygon: flat list of sub-polygons ─────────────────
+                const subPolygons = result.subPolygons;
+                console.log(`OSM split produced ${subPolygons.length} sub-polygons`);
+
+                const insertIndex = sortedIndices[0];
+                this.polygons.splice(insertIndex, 1);
+
+                const county   = selectedPolygons[0].county;
+                const splitIds = this.nextPolygonIds(county, subPolygons.length);
+                subPolygons.forEach((p, i) => { p.id = splitIds[i]; });
+                this.polygons.splice(insertIndex, 0, ...subPolygons);
+                allNewIds.push(...splitIds);
+
+            } else {
+                // ── Multi-polygon: boundary-preserving split ──────────────────
+                // result.resultsByIndex is sorted DESCENDING by sourceIndex so
+                // splicing at higher indices first keeps lower indices intact.
+                console.log(`OSM boundary-preserving split for ${size} polygons`);
+
+                for (const { sourceIndex, subPolygons } of result.resultsByIndex) {
+                    const actualIdx = sortedIndices[sourceIndex];
+                    const county    = selectedPolygons[sourceIndex].county;
+
+                    // Remove the original; assign IDs after removal so nextPolygonIds
+                    // sees the freed slot and won't generate duplicates
+                    this.polygons.splice(actualIdx, 1);
+                    const newIds = this.nextPolygonIds(county, subPolygons.length);
+                    subPolygons.forEach((p, i) => { p.id = newIds[i]; });
+                    this.polygons.splice(actualIdx, 0, ...subPolygons);
+                    allNewIds.push(...newIds);
+                }
+            }
+
+            // Persist the geographic center so future splits open at the same location
+            if (this._osmBbox) {
+                try {
+                    localStorage.setItem('osmSplitLastCenter', JSON.stringify({
+                        lat: (this._osmBbox.north + this._osmBbox.south) / 2,
+                        lon: (this._osmBbox.east  + this._osmBbox.west)  / 2,
+                    }));
+                } catch (_) {}
+            }
+
+            const splitZoneIds = [...allNewIds, ...parentNeighborIds];
+            this.adjacencyGraph.rebuildForAffected(this.polygons, allNewIds, splitZoneIds);
+            this.layerManager.layers.subCounty.polygons = this.polygons;
+            this.uiController.populatePolygonSelect(this.polygons);
+            this.selectPolygon(sortedIndices[0]);
+            this.historyManager.saveToHistory(
+                this.polygons,
+                size === 1 ? 'Split polygon by OSM' : `Split ${size} polygons by OSM (boundaries preserved)`
+            );
+            this.updateUndoRedoButtons();
+            this.draw();
+            this.uiController.showSuccess(result.message);
+
+        } catch (error) {
+            console.error('OSM split failed:', error);
+            this.uiController.showError(`OSM split failed: ${error.message}`);
+        }
+    }
+
     /**
      * Split selected polygon into multiple sub-polygons
      * @param {number} numDistricts - Number of districts to create
@@ -1774,9 +3474,10 @@ class PolygonEditor {
             // Insert sub-polygons at the same position
             this.polygons.splice(index, 0, ...result.subPolygons);
 
-            // STEP 1: Rebuild adjacency graph FIRST (needed for vertex sync)
+            // STEP 1: Rebuild adjacency for split polygons + their known neighbors only
             console.log('Rebuilding adjacency graph after polygon split...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            const splitZoneIds = [...splitIds, ...parentNeighborIds];
+            this.adjacencyGraph.rebuildForAffected(this.polygons, splitIds, splitZoneIds);
 
             // STEP 2: Align shared vertices between split polygons and neighboring polygons
             console.log('Aligning shared vertices after split...');
@@ -1798,9 +3499,9 @@ class PolygonEditor {
             const syncStats = this.vertexSync.getStats(originalPolygons, this.polygons);
             console.log('Vertex sync stats:', syncStats);
 
-            // STEP 4: Rebuild adjacency graph AGAIN with synchronized vertices
+            // STEP 4: Rebuild adjacency again after vertex sync (same zone)
             console.log('Rebuilding adjacency graph with synchronized vertices...');
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            this.adjacencyGraph.rebuildForAffected(this.polygons, splitIds, splitZoneIds);
 
             // CRITICAL: Update layer manager with the new polygon list
             // The split polygons need to be registered in the subCounty layer
@@ -1896,8 +3597,8 @@ class PolygonEditor {
             const globalIndex = startIndex + splitIdx;
 
             // For each vertex in the split polygon
-            splitPoly.rings.forEach((ring, ringIdx) => {
-                ring.forEach((vertex, vertexIdx) => {
+            splitPoly.rings.forEach((ring) => {
+                ring.forEach((vertex) => {
                     // Find all vertices near this position across ALL polygons
                     const nearbyVertices = [];
 
@@ -1992,7 +3693,8 @@ class PolygonEditor {
     // ─── Polygon Simplification ──────────────────────────────────────────────
 
     /**
-     * Remove all degree-2 collinear vertices across every loaded polygon.
+     * Simplify vertices of the selected polygon (RDP when tolerance > 0)
+     * or all polygons (exact collinear when tolerance == 0 / no selection).
      * Saves an undo snapshot before modifying anything.
      */
     handleSimplification() {
@@ -2001,23 +3703,54 @@ class PolygonEditor {
             return;
         }
 
-        // Snapshot for undo
+        const tolInput  = document.getElementById('simplifyTolerance');
+        const tolMetres = tolInput ? (parseFloat(tolInput.value) || 0) : 0;
+        // Convert metres → data units (8.01 data units = 1 km)
+        const epsilon   = tolMetres * 8.01 / 1000;
+
+        // ── RDP path: tolerance > 0 with exactly 1 polygon selected ──────────
+        if (epsilon > 0 && this.selectedPolygonIndices.size === 1) {
+            const idx = this.selectedPolygonIndex;
+            this.historyManager.saveToHistory(this.polygons, 'Before RDP simplification');
+
+            const removed = this.polygonSimplifier.simplifyRDP(this.polygons, idx, epsilon);
+
+            if (removed === 0) {
+                this.historyManager.undo();
+                this.uiController.showStatus(
+                    `No vertices removed at ${tolMetres}m — try a higher value`, 3000
+                );
+                return;
+            }
+
+            this.adjacencyGraph.buildAdjacencyList(this.polygons);
+            this.uiController.populatePolygonSelect(this.polygons);
+            this.updateUndoRedoButtons();
+            this.draw();
+            this.uiController.showSuccess(
+                `RDP simplified: removed ${removed} vertices (tolerance ${tolMetres}m)`
+            );
+            return;
+        }
+
+        // ── Exact collinear path: all polygons ────────────────────────────────
+        if (epsilon > 0 && this.selectedPolygonIndices.size !== 1) {
+            this.uiController.showStatus('Select exactly 1 polygon for RDP simplification', 3000);
+            return;
+        }
+
         this.historyManager.saveToHistory(this.polygons, 'Before vertex simplification');
 
         const { polygons, removedCount } = this.polygonSimplifier.simplify(this.polygons);
         this.polygons = polygons;
 
         if (removedCount === 0) {
-            // Nothing changed — pop the snapshot we just pushed
             this.historyManager.undo();
             this.uiController.showStatus('No redundant vertices found', 3000);
             return;
         }
 
-        // Rebuild adjacency after structural change
         this.adjacencyGraph.buildAdjacencyList(this.polygons);
-
-        // Refresh polygon selector and undo/redo buttons
         this.uiController.populatePolygonSelect(this.polygons);
         const stats = this.historyManager.getHistoryStats();
         this.uiController.updateUndoRedoButtons(
@@ -2026,10 +3759,38 @@ class PolygonEditor {
             stats.undoableActions,
             stats.redoableActions
         );
-
         this.draw();
         this.uiController.showSuccess(
             `Simplification complete: removed ${removedCount} redundant vertex${removedCount !== 1 ? 'es' : ''}`
+        );
+    }
+
+    // ─── Update Neighbours ───────────────────────────────────────────────────
+
+    /**
+     * Fully rebuild the adjacency graph from the current polygon set.
+     * Useful after merge/split operations that may leave the graph stale.
+     * Rules applied (same as initialisation):
+     *   - Every polygon pair is compared via shared boundary length.
+     *   - A pair is neighbours iff their shared boundary length > 1e-4.
+     *   - Shared boundary = collinear overlapping edges or fully matching edges.
+     *   - Result is bidirectional and stored as sorted arrays.
+     */
+    handleUpdateNeighbours() {
+        if (!this.polygons || this.polygons.length === 0) {
+            this.uiController.showError('No polygons loaded');
+            return;
+        }
+
+        console.log('Rebuilding adjacency graph (Update Neighbours)...');
+        this.adjacencyGraph.buildAdjacencyList(this.polygons);
+        const stats = this.adjacencyGraph.getStatistics();
+        console.log('Adjacency graph rebuilt:', stats);
+
+        this.draw();
+        this.updatePolygonInfo();
+        this.uiController.showSuccess(
+            `Neighbours updated: ${stats.polygonCount} polygons, ${stats.totalEdges} shared edges`
         );
     }
 
@@ -2184,7 +3945,12 @@ class PolygonEditor {
      */
     draw() {
         // Get visible polygons based on layer settings
-        const visiblePolygons = this.layerManager.getVisiblePolygons();
+        let visiblePolygons = this.layerManager.getVisiblePolygons();
+
+        // Apply district filter only while in Redistricting mode
+        if (this.districtFilter && window.AppMode && window.AppMode.current === 'redistricting') {
+            visiblePolygons = visiblePolygons.filter(p => p.district === this.districtFilter);
+        }
 
         this.renderer.draw(
             visiblePolygons,
@@ -2196,7 +3962,144 @@ class PolygonEditor {
             this.fixedCountyVertices  // Pass fixed county vertices for blue rendering
         );
 
+        // Draw bold county boundaries in all modes
+        this.renderCountyBoundaryOverlay();
+
+        // Draw ward selection highlights in Redistricting mode only
+        if (window.AppMode && window.AppMode.current === 'redistricting') {
+            this.renderWardSelectionOverlay();
+        }
+
         this.renderMeasureOverlay();
+
+        // Draw virtual nodes on top of everything else
+        if (this.virtualNodeManager && this.virtualNodeManager.count > 0) {
+            this.renderVirtualNodeOverlay();
+        }
+    }
+
+    /**
+     * Highlight polygons that are in the current ward draft (Redistricting mode).
+     */
+    renderWardSelectionOverlay() {
+        if (!window.WardManager) return;
+
+        const ctx = this.renderer.ctx;
+        const geo = this.geometryOps;
+
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+
+        // Draw saved wards (each in their own colour); selected ward gets a bolder ring
+        const activeDistrict = this.districtFilter || null;
+        const selectedIds = window.WardManager.getSelectedWardIds ? window.WardManager.getSelectedWardIds() : null;
+        window.WardManager.getSavedWards()
+            .filter(ward => !activeDistrict || ward.district === activeDistrict)
+            .forEach(ward => {
+            const hex = ward.color.hex;
+            const isSelected = selectedIds && ward.polygonIds.some(id => selectedIds.has(id));
+            ctx.fillStyle   = hex + (isSelected ? '55' : '40');
+            ctx.strokeStyle = isSelected ? hex : hex + 'cc';
+            ctx.lineWidth   = isSelected ? 3.5 : 2;
+            if (isSelected) ctx.setLineDash([]);
+            this.polygons
+                .filter(p => ward.polygonIds.includes(p.id))
+                .forEach(p => {
+                    p.rings.forEach(ring => {
+                        if (ring.length < 2) return;
+                        ctx.beginPath();
+                        ring.forEach((pt, i) => {
+                            const s = geo.dataToScreen(pt.x, pt.y);
+                            if (i === 0) ctx.moveTo(s.x, s.y);
+                            else         ctx.lineTo(s.x, s.y);
+                        });
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                });
+        });
+
+        // Draw current draft ward (in the selected creation colour)
+        const wardIds = window.WardManager.getCurrentWardIds();
+        if (wardIds && wardIds.size > 0 && window.WardManager.isCreateMode()) {
+            const color = window.WardManager.getCurrentColor();
+            ctx.fillStyle   = color.hex + '40';
+            ctx.strokeStyle = color.hex + 'ee';
+            ctx.lineWidth   = 2.5;
+
+            this.polygons
+                .filter(p => wardIds.has(p.id))
+                .forEach(p => {
+                    p.rings.forEach(ring => {
+                        if (ring.length < 2) return;
+                        ctx.beginPath();
+                        ring.forEach((pt, i) => {
+                            const s = geo.dataToScreen(pt.x, pt.y);
+                            if (i === 0) ctx.moveTo(s.x, s.y);
+                            else         ctx.lineTo(s.x, s.y);
+                        });
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                });
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * Draw bold county boundary outlines as a purely visual overlay.
+     * No polygon data is modified — this is a rendering-only effect.
+     * When a district filter is active, only draws boundaries for counties
+     * that contain sub-polygons belonging to the selected district.
+     */
+    renderCountyBoundaryOverlay() {
+        const countyPolygons = this.layerManager.layers.county.polygons;
+        if (!countyPolygons || countyPolygons.length === 0) return;
+
+        // Determine which counties to outline
+        let visibleCounties = countyPolygons;
+        if (this.districtFilter) {
+            const relevantCounties = new Set(
+                this.polygons
+                    .filter(p => p.district === this.districtFilter)
+                    .map(p => p.county)
+            );
+            visibleCounties = countyPolygons.filter(c => relevantCounties.has(c.county));
+        }
+
+        if (visibleCounties.length === 0) return;
+
+        const ctx = this.renderer.ctx;
+        const geo = this.geometryOps;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.lineWidth   = 3;
+        ctx.lineJoin    = 'round';
+        ctx.setLineDash([]);
+
+        visibleCounties.forEach(county => {
+            const rings = county.rings;
+            if (!rings || rings.length === 0) return;
+
+            rings.forEach(ring => {
+                if (ring.length < 2) return;
+                ctx.beginPath();
+                ring.forEach((pt, i) => {
+                    const s = geo.dataToScreen(pt.x, pt.y);
+                    if (i === 0) ctx.moveTo(s.x, s.y);
+                    else         ctx.lineTo(s.x, s.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+            });
+        });
+
+        ctx.restore();
     }
 
     /**
@@ -2223,6 +4126,7 @@ class PolygonEditor {
         this.polygons = polygons;
         this.geometryOps.calculateBounds(this.polygons);
         this.geometryOps.fitToView();
+        // this.streetLayer.generate(this.geometryOps.bounds);  // deferred: generated on first toggle-on
 
         // Build adjacency graph
         console.log('Building adjacency graph...');
@@ -2237,6 +4141,9 @@ class PolygonEditor {
         this.historyManager.clearHistory();
         this.historyManager.saveToHistory(this.polygons, 'Polygons loaded programmatically');
         this.updateUndoRedoButtons();
+
+        // Activate the default app mode (Edit Polygon) on every fresh CSV load
+        if (window.AppMode) window.AppMode.initDefault();
 
         this.draw();
     }
@@ -2332,6 +4239,26 @@ class PolygonEditor {
             this.renderer.setOptions(options);
         }
         this.draw();
+    }
+
+    /**
+     * Toggle the procedural street layer on/off and redraw.
+     * @returns {boolean} new visibility state
+     */
+    toggleStreetLayer() {
+        const visible = this.streetLayer.toggle();
+        this.draw();
+        return visible;
+    }
+
+    /**
+     * Toggle the density colour map layer on/off and redraw.
+     * @returns {boolean} new visibility state
+     */
+    toggleDensityColorMap() {
+        const active = this.renderer.toggleDensityColorMap();
+        this.draw();
+        return active;
     }
 
     /**

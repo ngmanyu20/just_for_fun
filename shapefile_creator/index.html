@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zone Shape Creator</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --border: #e0e0e0;
+      --text: #333333;
+      --accent: #4169e1;
+      --accent-light: #eef2ff;
+      --danger: #dc3545;
+      --muted: #888888;
+      --section: #4169e1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f4f6fa; color: var(--text); font-family: 'Segoe UI', Arial, sans-serif;
+           font-size: 13px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Toolbar */
+    #toolbar { background: #fff; border-bottom: 1px solid var(--border);
+               padding: 7px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+               box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    #toolbar h1 { font-size: 14px; font-weight: 700; color: var(--accent); margin-right: 8px; }
+    .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+    button { background: #fff; border: 1px solid var(--border); color: var(--text);
+             padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;
+             font-family: inherit; transition: all 0.15s; }
+    button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.active:hover { background: #3558c0; }
+    button.danger { border-color: var(--danger); color: var(--danger); }
+    button.danger:hover { background: var(--danger); color: #fff; }
+    input[type=file] { display: none; }
+
+    /* Layout */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Sidebar — right side */
+    #sidebar { width: 240px; min-width: 240px; background: #fff;
+               border-left: 1px solid var(--border); display: flex; flex-direction: column;
+               overflow: hidden; order: 2; box-shadow: -2px 0 6px rgba(0,0,0,0.04); }
+
+    /* Section header (like "Layer", "Redistricting" in the reference) */
+    .section-header { padding: 10px 14px 4px; font-size: 12px; font-weight: 700;
+                      color: var(--section); letter-spacing: 0.3px; border-bottom: 1px solid var(--border); }
+
+    #polygon-list { flex: 1; overflow-y: auto; }
+    #polygon-list::-webkit-scrollbar { width: 4px; }
+    #polygon-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+
+    .poly-item { padding: 7px 14px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+                 display: flex; align-items: center; gap: 8px; }
+    .poly-item:hover { background: var(--accent-light); }
+    .poly-item.selected { background: var(--accent-light); border-left: 3px solid var(--accent); padding-left: 11px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+    .poly-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .poly-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+    /* Properties */
+    #properties { border-top: 1px solid var(--border); padding: 12px 14px; flex-shrink: 0; background: #fafafa; }
+    #properties h3 { font-size: 11px; font-weight: 700; color: var(--section); margin-bottom: 10px;
+                     text-transform: uppercase; letter-spacing: 0.5px; }
+    .prop-row { margin-bottom: 8px; }
+    .prop-row label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .prop-row input[type=text] { width: 100%; background: #fff; border: 1px solid var(--border);
+                                  color: var(--text); padding: 4px 8px; border-radius: 4px;
+                                  font-family: inherit; font-size: 12px; }
+    .prop-row input[type=text]:focus { outline: none; border-color: var(--accent);
+                                       box-shadow: 0 0 0 2px rgba(65,105,225,0.15); }
+    .prop-row input[type=color] { width: 100%; height: 30px; padding: 2px; background: #fff;
+                                   border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+    .prop-value { font-size: 12px; color: var(--text); padding: 2px 0; }
+    .prop-value.green { color: #2a9d4e; font-weight: 500; }
+
+    /* Canvas */
+    #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #fff; order: 1; }
+    #canvas { position: absolute; top: 0; left: 0; display: block; cursor: none; }
+
+    /* Vertex count badge */
+    #vhud { position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.92);
+            border: 1px solid var(--border); border-radius: 5px; padding: 4px 10px;
+            font-size: 11px; color: var(--muted); pointer-events: none;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    #vhud span { color: var(--accent); font-weight: 600; }
+
+    /* Status bar */
+    #statusbar { background: #fff; border-top: 1px solid var(--border);
+                 padding: 4px 14px; display: flex; gap: 24px; font-size: 11px;
+                 color: var(--muted); flex-shrink: 0; }
+    #statusbar em { color: var(--text); font-style: normal; }
+
+    /* Modal */
+    #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+                     display: none; align-items: center; justify-content: center; z-index: 200; }
+    #modal-overlay.show { display: flex; }
+    #modal { background: #fff; border: 1px solid var(--border); border-radius: 10px;
+             padding: 24px; width: 300px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    #modal h2 { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 18px; }
+    .mfield { margin-bottom: 13px; }
+    .mfield label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    .mfield input[type=text] { width: 100%; background: #fff; border: 1px solid var(--border);
+                                color: var(--text); padding: 6px 10px; border-radius: 5px;
+                                font-family: inherit; font-size: 13px; }
+    .mfield input[type=text]:focus { outline: none; border-color: var(--accent);
+                                     box-shadow: 0 0 0 2px rgba(65,105,225,0.15); }
+    .mfield input[type=color] { width: 100%; height: 34px; padding: 2px; background: #fff;
+                                 border: 1px solid var(--border); border-radius: 5px; cursor: pointer; }
+    .mbtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>Zone Shape Creator</h1>
+  <div class="sep"></div>
+  <button onclick="document.getElementById('fi-img').click()">Load PNG</button>
+  <button onclick="document.getElementById('fi-csv').click()">Load CSV</button>
+  <div class="sep"></div>
+  <button id="btn-select" onclick="setMode('select')" class="active">Select <span class="key">S</span></button>
+  <button id="btn-draw"   onclick="setMode('draw')">Draw <span class="key">D</span></button>
+  <button id="btn-vertex" onclick="setMode('vertex')">Create Vertex <span class="key">V</span></button>
+  <div class="sep"></div>
+  <button onclick="exportCSV()">Export CSV</button>
+  <div class="sep"></div>
+  <button id="btn-layer-default" onclick="switchLayer('default')" class="active">Default Layer</button>
+  <button id="btn-layer-bg"      onclick="switchLayer('background')">Background Layer</button>
+
+  <input type="file" id="fi-img"    accept="image/*"  onchange="loadImage(this)">
+  <input type="file" id="fi-csv"    accept=".csv"     onchange="loadCSV(this)">
+  <input type="file" id="fi-bg-img" accept="image/*"  onchange="loadBgImage(this)">
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div class="section-header">Polygons &nbsp;<span id="poly-count">0</span></div>
+    <div id="polygon-list"></div>
+    <div id="properties">
+      <h3>Properties</h3>
+      <div id="props-empty" style="color:var(--muted);font-size:11px">No polygon selected.</div>
+      <div id="props-form" style="display:none">
+        <div class="prop-row"><label>Zone</label><input type="text" id="prop-zone" oninput="applyProps()"></div>
+        <div class="prop-row"><label>County</label><input type="text" id="prop-county" oninput="applyProps()"></div>
+        <div class="prop-row"><label>Color</label><input type="color" id="prop-color" oninput="applyProps()"></div>
+        <div class="prop-row"><label>Area</label><div id="prop-area" class="prop-value green">—</div></div>
+        <div class="prop-row"><label>Vertices</label><div id="prop-vcount" class="prop-value">—</div></div>
+        <div class="prop-row" style="margin-top:10px">
+          <button class="danger" onclick="deleteSelected()" style="width:100%">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="vhud">Vertices: <span id="v-count">0</span></div>
+  </div>
+</div>
+
+<div id="statusbar">
+  <span id="sb-msg"><em>Ready</em> — Load PNG then Load Vertices JSON.</span>
+  <span>Zoom: <em id="sb-zoom">100%</em></span>
+  <span>Cursor: <em id="sb-pos">—</em></span>
+</div>
+
+<!-- New polygon modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>Name New Polygon</h2>
+    <div class="mfield"><label>Zone</label><input type="text" id="m-zone" placeholder="e.g. North_Cotham"></div>
+    <div class="mfield"><label>County</label><input type="text" id="m-county" placeholder="e.g. NC1"></div>
+    <div class="mfield"><label>Color</label><input type="color" id="m-color" value="#4488ff"></div>
+    <div class="mbtns">
+      <button onclick="cancelDraw()">Cancel</button>
+      <button class="active" onclick="finalizePolygon()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const PX_PER_KM = 8.01;
+const SNAP_PX   = 16;   // screen-space snap radius
+const PALETTE   = ['#4a90d9','#e05c3a','#3cb87a','#9b5fd4','#d4a017',
+                   '#2fc4c4','#d45f8a','#7ab83c','#e07c3a','#5f6ed4'];
+let palIdx = 0;
+const nextColor = () => PALETTE[palIdx++ % PALETTE.length];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  image:       null,   // Default layer ImageBitmap
+  bgImage:     null,   // Background layer ImageBitmap (null until loaded)
+  activeLayer: 'default',
+  imgW: 0, imgH: 0,
+
+  vertices:        [],  // [{x,y}] — loaded from vertices.json
+  polygons:        [],  // [{zone,county,verts,color,area}]
+  drawVerts:       [],  // in-progress polygon vertices
+  selectedIdx:     -1,
+  vertexSelection: [],  // up to 2 vertices ctrl-clicked in vertex mode
+
+  mode: 'select',
+
+  // Camera
+  camX: 0, camY: 0, camScale: 1,
+
+  // Mouse
+  mouseImg:   { x: 0, y: 0 },
+  snapTarget: null,
+  isPanning:  false,
+  panStart:   { x: 0, y: 0 },
+  camStart:   { x: 0, y: 0 },
+};
+
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('canvas-wrap');
+
+new ResizeObserver(() => { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; draw(); }).observe(wrap);
+canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight;
+
+// ── Coordinate transforms ─────────────────────────────────────────────────────
+const i2s = (ix, iy) => ({ x: ix * S.camScale + S.camX, y: iy * S.camScale + S.camY });
+const s2i = (sx, sy) => ({ x: (sx - S.camX) / S.camScale, y: (sy - S.camY) / S.camScale });
+
+// ── Load image (display only) ─────────────────────────────────────────────────
+async function loadImage(input) {
+  const file = input.files[0]; if (!file) return; input.value = '';
+  S.image = await createImageBitmap(file);
+  S.imgW = S.image.width; S.imgH = S.image.height;
+  fitToView();
+  setStatus(`Loaded "${file.name}" (${S.imgW}×${S.imgH}).`);
+  fetchVertices(); // re-fetch vertices whenever a new PNG is loaded
+}
+
+function fitToView() {
+  if (!S.image) return;
+  S.camScale = Math.min(canvas.width / S.imgW, canvas.height / S.imgH) * 0.92;
+  S.camX = (canvas.width  - S.imgW * S.camScale) / 2;
+  S.camY = (canvas.height - S.imgH * S.camScale) / 2;
+  document.getElementById('sb-zoom').textContent = pct(S.camScale);
+  draw();
+}
+
+// ── Background layer ──────────────────────────────────────────────────────────
+async function loadBgImage(input) {
+  const file = input.files[0]; if (!file) return; input.value = '';
+  S.bgImage = await createImageBitmap(file);
+  switchLayer('background');
+  setStatus(`Background layer loaded: "${file.name}".`);
+}
+
+function switchLayer(layer) {
+  S.activeLayer = layer;
+  document.getElementById('btn-layer-default').classList.toggle('active', layer === 'default');
+  document.getElementById('btn-layer-bg').classList.toggle('active',      layer === 'background');
+
+  if (layer === 'background' && !S.bgImage) {
+    // No background loaded yet — open file picker
+    document.getElementById('fi-bg-img').click();
+    return;
+  }
+  draw();
+}
+
+// ── Load vertices from vertices.json (auto, no user interaction) ──────────────
+async function fetchVertices() {
+  try {
+    let res = await fetch('vertices.json?t=' + Date.now());
+
+    if (res.status === 404) {
+      // vertices.json missing — ask the server to generate it from the PNG
+      console.warn('[vertices.json] not found — running detection on server...');
+      setStatus('vertices.json not found — generating from PNG...');
+      res = await fetch('/detect');
+      if (!res.ok) throw new Error(`Detection failed: HTTP ${res.status}`);
+      console.log('%c[vertices.json] generated by server', 'color:#f0a500;font-weight:bold');
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    S.vertices = raw.map(v => Array.isArray(v) ? { x: v[0], y: v[1] } : v);
+    document.getElementById('v-count').textContent = S.vertices.length;
+    setStatus(`Vertices loaded: ${S.vertices.length}.`);
+    console.log(`%c[vertices.json updated] ${S.vertices.length} vertices loaded`, 'color:#2a9d4e;font-weight:bold');
+    console.log('  first 3:', S.vertices.slice(0, 3));
+    draw();
+  } catch(err) {
+    console.warn('[vertices.json] could not load:', err.message);
+    setStatus('Could not load vertices — check server console.');
+  }
+}
+
+// ── Snap ──────────────────────────────────────────────────────────────────────
+function findSnap(sx, sy) {
+  let best = null, bestD = SNAP_PX * SNAP_PX;
+  const check = v => {
+    const s = i2s(v.x, v.y);
+    const d = (s.x - sx) ** 2 + (s.y - sy) ** 2;
+    if (d < bestD) { bestD = d; best = v; }
+  };
+  S.vertices.forEach(check);
+  S.polygons.forEach(p => p.verts.forEach(check));
+  S.drawVerts.forEach(check);
+  return best;
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Active layer image
+  const displayImg = S.activeLayer === 'background' ? S.bgImage : S.image;
+  if (displayImg) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = S.camScale < 1;
+    ctx.drawImage(displayImg, S.camX, S.camY, S.imgW * S.camScale, S.imgH * S.camScale);
+    ctx.restore();
+  }
+
+  // Completed polygons
+  S.polygons.forEach((poly, i) => drawPoly(poly, i === S.selectedIdx));
+
+  // In-progress polygon
+  if (S.drawVerts.length > 0) drawInProgress();
+
+  // Vertex dots
+  drawVertexDots();
+
+  // Crosshair — drawn last so it sits on top of everything
+  drawCrosshair();
+}
+
+function drawPoly(poly, selected) {
+  const v = poly.verts; if (v.length < 2) return;
+  ctx.beginPath();
+  const f = i2s(v[0].x, v[0].y); ctx.moveTo(f.x, f.y);
+  for (let i = 1; i < v.length; i++) { const s = i2s(v[i].x, v[i].y); ctx.lineTo(s.x, s.y); }
+  ctx.closePath();
+  ctx.fillStyle = poly.color + '38'; ctx.fill();
+  ctx.strokeStyle = selected ? '#fff' : poly.color;
+  ctx.lineWidth = selected ? 2.5 : 1.8; ctx.stroke();
+  if (selected) {
+    v.forEach(pt => {
+      const s = i2s(pt.x, pt.y);
+      ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.strokeStyle = poly.color; ctx.lineWidth = 1.5; ctx.stroke();
+    });
+  }
+}
+
+function drawInProgress() {
+  const v = S.drawVerts;
+  // Preview fill
+  if (v.length >= 3) {
+    ctx.beginPath();
+    const f = i2s(v[0].x, v[0].y); ctx.moveTo(f.x, f.y);
+    for (let i = 1; i < v.length; i++) { const s = i2s(v[i].x, v[i].y); ctx.lineTo(s.x, s.y); }
+    ctx.closePath(); ctx.fillStyle = 'rgba(255,204,68,0.12)'; ctx.fill();
+  }
+  // Dashed path + rubber-band
+  ctx.beginPath();
+  const f = i2s(v[0].x, v[0].y); ctx.moveTo(f.x, f.y);
+  for (let i = 1; i < v.length; i++) { const s = i2s(v[i].x, v[i].y); ctx.lineTo(s.x, s.y); }
+  const tip = S.snapTarget ? i2s(S.snapTarget.x, S.snapTarget.y) : i2s(S.mouseImg.x, S.mouseImg.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.strokeStyle = '#ffcc44'; ctx.lineWidth = 1.6; ctx.setLineDash([5,4]); ctx.stroke(); ctx.setLineDash([]);
+  // Green close-ring around start (≥3 placed)
+  if (v.length >= 3) {
+    const fs = i2s(v[0].x, v[0].y);
+    ctx.beginPath(); ctx.arc(fs.x, fs.y, 10, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(0,255,136,0.65)'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  // Placed vertex dots
+  v.forEach((pt, i) => {
+    const s = i2s(pt.x, pt.y);
+    ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI*2);
+    ctx.fillStyle = i === 0 ? '#00ff88' : '#ffcc44'; ctx.fill();
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.stroke();
+  });
+  // Snap ring
+  if (S.snapTarget) {
+    const ss = i2s(S.snapTarget.x, S.snapTarget.y);
+    ctx.beginPath(); ctx.arc(ss.x, ss.y, SNAP_PX * 0.6, 0, Math.PI*2);
+    ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 1; ctx.stroke();
+  }
+}
+
+function drawCrosshair() {
+  // Highlight the pixel that will actually be used on click (same rounding as placement)
+  const ix = Math.round(S.mouseImg.x);
+  const iy = Math.round(S.mouseImg.y);
+
+  // Top-left corner of that pixel in screen space
+  const topLeft  = i2s(ix,     iy);
+  const botRight = i2s(ix + 1, iy + 1);
+  const pw = botRight.x - topLeft.x;
+  const ph = botRight.y - topLeft.y;
+
+  ctx.save();
+  // Semi-transparent green fill over the single pixel
+  ctx.fillStyle = 'rgba(0, 210, 90, 0.45)';
+  ctx.fillRect(topLeft.x, topLeft.y, pw, ph);
+
+  // Thin green border so the cell is visible even when small
+  ctx.strokeStyle = 'rgba(0, 180, 70, 0.85)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, pw - 1, ph - 1);
+  ctx.restore();
+}
+
+function drawVertexDots() {
+  const r = Math.max(2.5, Math.min(6, 3.5 * S.camScale));
+  S.vertices.forEach(v => {
+    const s = i2s(v.x, v.y);
+    if (s.x < -10 || s.x > canvas.width+10 || s.y < -10 || s.y > canvas.height+10) return;
+    const isSnap     = S.snapTarget && S.snapTarget.x === v.x && S.snapTarget.y === v.y;
+    const isStart    = S.drawVerts.length > 0 && S.drawVerts[0].x === v.x && S.drawVerts[0].y === v.y;
+    const isSelected = S.vertexSelection.some(sel => sel.x === v.x && sel.y === v.y);
+    const selIdx     = S.vertexSelection.findIndex(sel => sel.x === v.x && sel.y === v.y);
+
+    let fill = isStart ? '#00cc66' : (isSnap ? '#ffffff' : '#2299ff');
+    if (isSelected) fill = selIdx === 0 ? '#ff8800' : '#ff4400'; // 1st=orange, 2nd=red-orange
+
+    ctx.beginPath(); ctx.arc(s.x, s.y, (isSnap || isSelected) ? r+2.5 : r, 0, Math.PI*2);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Label selected vertices as ① ②
+    if (isSelected) {
+      const label = selIdx === 0 ? '1' : '2';
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(9, r+2)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, s.x, s.y);
+    }
+  });
+}
+
+// ── Mouse ─────────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const { sx, sy } = sxy(e);
+  if (S.isPanning) {
+    S.camX = S.camStart.x + (sx - S.panStart.x);
+    S.camY = S.camStart.y + (sy - S.panStart.y);
+    document.getElementById('sb-zoom').textContent = pct(S.camScale);
+    draw(); return;
+  }
+  S.mouseImg  = s2i(sx, sy);
+  S.snapTarget = (S.mode === 'draw' || S.mode === 'vertex') ? findSnap(sx, sy) : null;
+  const ix = Math.round(S.mouseImg.x), iy = Math.round(S.mouseImg.y);
+  document.getElementById('sb-pos').textContent = `${ix}, ${iy}`;
+  draw();
+});
+
+canvas.addEventListener('mousedown', e => {
+  const { sx, sy } = sxy(e);
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    e.preventDefault();
+    S.isPanning = true; S.panStart = {x:sx,y:sy}; S.camStart = {x:S.camX,y:S.camY};
+    canvas.style.cursor = 'grabbing'; return; // panning keeps grabbing cursor
+  }
+  if (e.button !== 0) return;
+  if (S.mode === 'draw')   handleDrawClick(sx, sy);
+  else if (S.mode === 'vertex') handleVertexClick(sx, sy, e.ctrlKey);
+  else                     handleSelectClick(sx, sy);
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (S.isPanning) { S.isPanning = false; canvas.style.cursor = 'none'; }
+});
+
+canvas.addEventListener('mouseleave', () => { S.snapTarget = null; draw(); });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const { sx, sy } = sxy(e);
+  const factor = e.deltaY < 0 ? 1.13 : 1/1.13;
+  const ns = Math.max(0.04, Math.min(24, S.camScale * factor));
+  S.camX = sx - (sx - S.camX) * (ns / S.camScale);
+  S.camY = sy - (sy - S.camY) * (ns / S.camScale);
+  S.camScale = ns;
+  document.getElementById('sb-zoom').textContent = pct(S.camScale);
+  draw();
+}, { passive: false });
+
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (S.mode === 'draw' && S.drawVerts.length > 0) { S.drawVerts = []; draw(); setStatus('Cancelled.'); }
+});
+
+const sxy = e => { const r = canvas.getBoundingClientRect(); return { sx: e.clientX-r.left, sy: e.clientY-r.top }; };
+
+// ── Draw mode ─────────────────────────────────────────────────────────────────
+function handleDrawClick(sx, sy) {
+  const snap = S.snapTarget;
+  const target = snap ? { x: snap.x, y: snap.y } : { x: Math.round(S.mouseImg.x), y: Math.round(S.mouseImg.y) };
+
+  if (S.drawVerts.length === 0) {
+    S.drawVerts = [target]; draw(); return;
+  }
+  // Close on start vertex (≥3 placed)
+  const start = S.drawVerts[0];
+  if (snap && snap.x === start.x && snap.y === start.y && S.drawVerts.length >= 3) {
+    showModal(); return;
+  }
+  const last = S.drawVerts[S.drawVerts.length-1];
+  if (target.x === last.x && target.y === last.y) return;
+  S.drawVerts.push(target); draw();
+}
+
+function showModal() {
+  const n = S.polygons.length + 1;
+  document.getElementById('m-zone').value   = `Zone_${n}`;
+  document.getElementById('m-county').value = `County_${n}`;
+  document.getElementById('m-color').value  = nextColor();
+  document.getElementById('modal-overlay').classList.add('show');
+  setTimeout(() => document.getElementById('m-zone').focus(), 50);
+}
+
+function cancelDraw() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  S.drawVerts = []; draw();
+}
+
+function finalizePolygon() {
+  const zone   = document.getElementById('m-zone').value.trim()   || `Zone_${S.polygons.length+1}`;
+  const county = document.getElementById('m-county').value.trim() || '';
+  const color  = document.getElementById('m-color').value;
+  const verts  = [...S.drawVerts];
+  const area   = computeArea(verts);
+  S.polygons.push({ zone, county, verts, color, area });
+  S.drawVerts   = [];
+  S.selectedIdx = S.polygons.length - 1;
+  document.getElementById('modal-overlay').classList.remove('show');
+  refreshList(); refreshProps();
+  draw();
+  setStatus(`Polygon "${zone}" saved — ${area.toFixed(4)} km².`);
+}
+
+document.getElementById('modal').addEventListener('keydown', e => {
+  if (e.key === 'Enter') finalizePolygon();
+  if (e.key === 'Escape') cancelDraw();
+});
+
+// ── Select mode ───────────────────────────────────────────────────────────────
+function handleSelectClick(sx, sy) {
+  const img = s2i(sx, sy);
+  for (let i = S.polygons.length-1; i >= 0; i--) {
+    if (pointInPoly(img, S.polygons[i].verts)) {
+      S.selectedIdx = i; refreshList(); refreshProps(); draw(); return;
+    }
+  }
+  S.selectedIdx = -1; refreshList(); refreshProps(); draw();
+}
+
+function pointInPoly(pt, verts) {
+  let inside = false;
+  for (let i = 0, j = verts.length-1; i < verts.length; j=i++) {
+    const xi=verts[i].x, yi=verts[i].y, xj=verts[j].x, yj=verts[j].y;
+    if ((yi>pt.y) !== (yj>pt.y) && pt.x < (xj-xi)*(pt.y-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+
+// ── Vertex creation mode ──────────────────────────────────────────────────────
+function handleVertexClick(sx, sy, ctrlKey) {
+  const snap = S.snapTarget;
+
+  if (ctrlKey) {
+    // Ctrl+click: select an existing vertex (max 2) for mid/ortho operations
+    if (!snap) return;
+    const existing = S.vertexSelection.findIndex(v => v.x === snap.x && v.y === snap.y);
+    if (existing >= 0) {
+      S.vertexSelection.splice(existing, 1); // deselect
+    } else {
+      if (S.vertexSelection.length >= 2) S.vertexSelection.shift(); // keep last 2
+      S.vertexSelection.push({ x: snap.x, y: snap.y });
+    }
+  } else {
+    // Direct create: place a new vertex at click position
+    const target = snap || { x: Math.round(S.mouseImg.x), y: Math.round(S.mouseImg.y) };
+    const already = S.vertices.some(v => v.x === target.x && v.y === target.y);
+    if (!already) {
+      S.vertices.push(target);
+      document.getElementById('v-count').textContent = S.vertices.length;
+      setStatus(`Vertex (${target.x}, ${target.y}) created. Total: ${S.vertices.length}.`);
+    }
+  }
+  draw();
+}
+
+function createMidpoint() {
+  if (S.vertexSelection.length !== 2) { setStatus('Select exactly 2 vertices with Ctrl+click first.'); return; }
+  const [a, b] = S.vertexSelection;
+  const mx = Math.round((a.x + b.x) / 2);
+  const my = Math.round((a.y + b.y) / 2);
+  if (!S.vertices.some(v => v.x === mx && v.y === my)) {
+    S.vertices.push({ x: mx, y: my });
+    document.getElementById('v-count').textContent = S.vertices.length;
+    setStatus(`Midpoint vertex (${mx}, ${my}) created.`);
+  } else {
+    setStatus(`Midpoint (${mx}, ${my}) already exists.`);
+  }
+  S.vertexSelection = [];
+  draw();
+}
+
+function createOrthogonal() {
+  if (S.vertexSelection.length !== 2) { setStatus('Select exactly 2 vertices with Ctrl+click first.'); return; }
+  const [a, b] = S.vertexSelection; // produces (x2, y1)
+  const ox = b.x, oy = a.y;
+  if (!S.vertices.some(v => v.x === ox && v.y === oy)) {
+    S.vertices.push({ x: ox, y: oy });
+    document.getElementById('v-count').textContent = S.vertices.length;
+    setStatus(`Orthogonal vertex (${ox}, ${oy}) created from (${a.x},${a.y}) and (${b.x},${b.y}).`);
+  } else {
+    setStatus(`Orthogonal (${ox}, ${oy}) already exists.`);
+  }
+  S.vertexSelection = [];
+  draw();
+}
+
+// ── Mode switching ────────────────────────────────────────────────────────────
+function setMode(mode) {
+  S.mode = mode; S.drawVerts = []; S.vertexSelection = [];
+  document.getElementById('btn-select').classList.toggle('active', mode==='select');
+  document.getElementById('btn-draw').classList.toggle('active',   mode==='draw');
+  document.getElementById('btn-vertex').classList.toggle('active', mode==='vertex');
+  canvas.style.cursor = 'none'; // pixel highlight replaces OS cursor
+  draw();
+}
+
+// ── Area ──────────────────────────────────────────────────────────────────────
+function computeArea(verts) {
+  if (verts.length < 3) return 0;
+  let a = 0;
+  for (let i = 0; i < verts.length; i++) {
+    const j = (i+1) % verts.length;
+    a += verts[i].x * verts[j].y - verts[j].x * verts[i].y;
+  }
+  return Math.abs(a) / 2 / (PX_PER_KM * PX_PER_KM);
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function refreshList() {
+  const list = document.getElementById('polygon-list');
+  document.getElementById('poly-count').textContent = S.polygons.length;
+  list.innerHTML = '';
+  S.polygons.forEach((poly, i) => {
+    const div = document.createElement('div');
+    div.className = 'poly-item' + (i===S.selectedIdx ? ' selected' : '');
+    div.innerHTML = `<div class="dot" style="background:${poly.color}"></div>
+      <div class="poly-label" style="flex:1;min-width:0">
+        <div class="poly-name">${esc(poly.zone)}</div>
+        <div class="poly-meta">${esc(poly.county)} · ${poly.area.toFixed(4)} km²</div>
+      </div>`;
+    div.addEventListener('click', () => { S.selectedIdx=i; refreshList(); refreshProps(); draw(); });
+    list.appendChild(div);
+  });
+}
+
+function refreshProps() {
+  const empty = document.getElementById('props-empty');
+  const form  = document.getElementById('props-form');
+  if (S.selectedIdx < 0 || S.selectedIdx >= S.polygons.length) {
+    empty.style.display=''; form.style.display='none'; return;
+  }
+  const poly = S.polygons[S.selectedIdx];
+  empty.style.display='none'; form.style.display='';
+  document.getElementById('prop-zone').value   = poly.zone   || '';
+  document.getElementById('prop-county').value = poly.county || '';
+  document.getElementById('prop-color').value  = poly.color  || '#4488ff';
+  document.getElementById('prop-area').textContent   = `${poly.area.toFixed(4)} km²`;
+  document.getElementById('prop-vcount').textContent = `${poly.verts.length} vertices`;
+}
+
+function applyProps() {
+  if (S.selectedIdx < 0) return;
+  const poly = S.polygons[S.selectedIdx];
+  poly.zone   = document.getElementById('prop-zone').value;
+  poly.county = document.getElementById('prop-county').value;
+  poly.color  = document.getElementById('prop-color').value;
+  refreshList(); draw();
+}
+
+function deleteSelected() {
+  if (S.selectedIdx < 0) return;
+  if (!confirm(`Delete "${S.polygons[S.selectedIdx].zone}"?`)) return;
+  S.polygons.splice(S.selectedIdx, 1); S.selectedIdx=-1;
+  refreshList(); refreshProps(); draw();
+}
+
+// ── CSV load ──────────────────────────────────────────────────────────────────
+function loadCSV(input) {
+  const file = input.files[0]; if (!file) return; input.value='';
+  fetchVertices(); // always sync vertices alongside the CSV
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+    const header = parseCSVLine(lines[0]).map(h=>h.toLowerCase());
+    const gi=header.indexOf('geometry'), zi=header.indexOf('zone'), ci=header.indexOf('county');
+    if (gi<0) { alert('No "geometry" column found.'); return; }
+    S.polygons=[]; S._csvHeader=header; palIdx=0;
+    for (let r=1; r<lines.length; r++) {
+      const row=parseCSVLine(lines[r]), wkt=row[gi]||'';
+      const {verts, holes}=wktToVerts(wkt); if (verts.length<3) continue;
+      S.polygons.push({ zone:row[zi]||'', county:row[ci]||'', verts, _holes:holes, color:nextColor(), area:computeArea(verts), _row:row });
+    }
+    refreshList(); refreshProps(); draw();
+    setStatus(`Loaded ${S.polygons.length} polygons from "${file.name}".`);
+  };
+  reader.readAsText(file);
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!S.polygons.length) { alert('No polygons to export.'); return; }
+  const COLS = ['zone','county','district','shape_id','geometry','area','population_density','region','location','county_type','capacity','population','district_ward'];
+  const HDR  = 'Zone,County,District,Shape_ID,geometry,Area,Population_Density,Region,Location,County_Type,Capacity,Population,District_Ward';
+  // Map of original header → column index (from loaded CSV, if any)
+  const srcH = S._csvHeader || [];
+  const rows = S.polygons.map((poly, i) => {
+    const origShapeIdIdx = srcH.indexOf('shape_id');
+    const origShapeId = origShapeIdIdx >= 0 && poly._row ? (poly._row[origShapeIdIdx]||'').trim() : '';
+    const id = origShapeId || `${poly.county||'Z'}_${String(i+1).padStart(3,'0')}`;
+    const ringWkt = verts => [...verts, verts[0]].map(v=>`${v.x} ${2000-v.y}`).join(', ');
+    const holesPart = (poly._holes||[]).filter(h=>h.length>=3).map(h=>', ('+ringWkt(h)+')').join('');
+    const wkt = `POLYGON ((${ringWkt(poly.verts)})${holesPart})`;
+    // Managed fields override everything else; preserved fields fall back to original row
+    const managed = { zone: cell(poly.zone), county: cell(poly.county), shape_id: cell(id), geometry: cell(wkt), area: poly.area.toFixed(4) };
+    return COLS.map(col => {
+      if (col in managed) return managed[col];
+      const origIdx = srcH.indexOf(col);
+      return origIdx >= 0 && poly._row ? cell(poly._row[origIdx]||'') : '';
+    }).join(',');
+  });
+  const blob = new Blob([[HDR,...rows].join('\n')], {type:'text/csv;charset=utf-8;'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:'zones_output.csv'});
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setStatus(`Exported ${S.polygons.length} polygons → zones_output.csv`);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function parseCSVLine(line) {
+  const out=[]; let cur='', inQ=false;
+  for (let i=0; i<line.length; i++) {
+    const c=line[i];
+    if (c==='"') { if (inQ&&line[i+1]==='"'){cur+='"';i++;} else inQ=!inQ; }
+    else if (c===','&&!inQ) { out.push(cur); cur=''; } else cur+=c;
+  }
+  out.push(cur); return out.map(v=>v.trim());
+}
+
+function _parseRing(ringStr) {
+  const verts = ringStr.split(',').map(pt => {
+    const p = pt.trim().split(/\s+/);
+    return { x: Math.round(parseFloat(p[0])), y: 2000 - Math.round(parseFloat(p[1])) };
+  }).filter(v => !isNaN(v.x));
+  // Remove closing duplicate of the first point
+  if (verts.length > 1 && verts[0].x === verts[verts.length-1].x && verts[0].y === verts[verts.length-1].y)
+    verts.pop();
+  return verts;
+}
+
+function wktToVerts(wkt) {
+  // Extract every ring — each is a (...) group containing no nested parens
+  const rings = [];
+  const re = /\(([^()]+)\)/g;
+  let m;
+  while ((m = re.exec(wkt)) !== null) rings.push(m[1]);
+  if (!rings.length) return { verts: [], holes: [] };
+  return { verts: _parseRing(rings[0]), holes: rings.slice(1).map(_parseRing) };
+}
+
+function cell(v) { const s=String(v||''); return (s.includes(',')||s.includes('"'))?`"${s.replace(/"/g,'""')}"`:s; }
+function pct(s) { return `${Math.round(s*100)}%`; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function setStatus(msg) { document.getElementById('sb-msg').innerHTML = msg; }
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+const PAN_STEP = 80; // pixels to move per arrow key press (hold Shift for 4×)
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='INPUT') return;
+
+  // Arrow keys — pan the view
+  const step = e.shiftKey ? PAN_STEP * 4 : PAN_STEP;
+  if (e.key==='ArrowLeft')  { e.preventDefault(); S.camX += step; draw(); return; }
+  if (e.key==='ArrowRight') { e.preventDefault(); S.camX -= step; draw(); return; }
+  if (e.key==='ArrowUp')    { e.preventDefault(); S.camY += step; draw(); return; }
+  if (e.key==='ArrowDown')  { e.preventDefault(); S.camY -= step; draw(); return; }
+
+  if (e.key==='Escape') {
+    if (S.drawVerts.length||S.vertexSelection.length) { S.drawVerts=[]; S.vertexSelection=[]; draw(); }
+    else setMode('select');
+  }
+  if (e.key==='d'||e.key==='D') setMode('draw');
+  if (e.key==='s'||e.key==='S') setMode('select');
+  if (e.key==='v'||e.key==='V') setMode('vertex');
+  if (e.key==='f'||e.key==='F') fitToView();
+  if ((e.key==='m'||e.key==='M') && S.mode==='vertex') createMidpoint();
+  if ((e.key==='o'||e.key==='O') && S.mode==='vertex') createOrthogonal();
+  if ((e.key==='Delete'||e.key==='Backspace')&&S.selectedIdx>=0) deleteSelected();
+});
+
+// ── Debug (call window.dbg() in F12 console) ──────────────────────────────────
+window.dbg = function() {
+  console.group('%c Zone Shape Creator — Debug Snapshot', 'color:#89b4fa;font-weight:bold');
+
+  // Image
+  if (S.image) {
+    console.log('%c IMAGE', 'color:#a6e3a1;font-weight:bold',
+      `${S.imgW}×${S.imgH}px`, S.image);
+  } else {
+    console.warn('IMAGE: not loaded');
+  }
+
+  // Vertices
+  if (S.vertices.length) {
+    console.log('%c VERTICES', 'color:#a6e3a1;font-weight:bold',
+      `${S.vertices.length} loaded`);
+    console.log('  first 5:', S.vertices.slice(0, 5));
+    console.log('  last  5:', S.vertices.slice(-5));
+  } else {
+    console.warn('VERTICES: none loaded — run detect_vertices.py then Load Vertices JSON');
+  }
+
+  // Polygons
+  if (S.polygons.length) {
+    console.log('%c POLYGONS', 'color:#a6e3a1;font-weight:bold',
+      `${S.polygons.length} saved`);
+    S.polygons.forEach((p, i) =>
+      console.log(`  [${i}] zone="${p.zone}" county="${p.county}" verts=${p.verts.length} area=${p.area.toFixed(4)}km²`));
+  } else {
+    console.log('POLYGONS: none yet');
+  }
+
+  // In-progress draw
+  if (S.drawVerts.length) {
+    console.log('%c IN-PROGRESS', 'color:#f9e2af;font-weight:bold',
+      `${S.drawVerts.length} vertices placed:`, S.drawVerts);
+  }
+
+  // Camera
+  console.log('%c CAMERA', 'color:#cba6f7;font-weight:bold',
+    `scale=${S.camScale.toFixed(3)} offset=(${Math.round(S.camX)}, ${Math.round(S.camY)})`);
+
+  // Snap
+  console.log('SNAP target:', S.snapTarget ?? 'none');
+  console.log('MODE:', S.mode);
+
+  console.groupEnd();
+};
+
+// Also log automatically on key events
+const _origLoadImage = loadImage;
+window.loadImage = async function(input) {
+  await _origLoadImage(input);
+  console.log('[loadImage] image loaded:', S.imgW, '×', S.imgH);
+};
+
+
+const _origFinalize = finalizePolygon;
+window.finalizePolygon = function() {
+  _origFinalize();
+  console.log('[finalizePolygon] polygons now:', S.polygons.length, S.polygons[S.polygons.length-1]);
+};
+
+console.log('%c Zone Shape Creator ready — type dbg() to inspect state', 'color:#89b4fa');
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+setMode('select');
+draw();
+</script>
+</body>
+</html>

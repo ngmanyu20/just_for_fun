@@ -182,9 +182,14 @@ class VertexDeletion {
             this.synchronizeVerticesInPatch(polygons, allSyncIds);
         }
 
+        // Return the indices of every polygon whose ring data was mutated so the
+        // caller can do a targeted adjacency rebuild instead of a full O(P²·V²) one.
+        const allAffectedIndices = [...new Set([...affectedPolygonIds, ...absorbedIds])];
+
         return {
             success: true,
             polygons,
+            affectedIndices: allAffectedIndices,
             message: `Vertex deleted successfully (${occurrences.length} occurrences across ${groups.size} counties)${absorbedIds.length > 0 ? ` - Absorbed ${absorbedIds.length} gap(s) into adjacent polygon(s)` : ''}`
         };
     }

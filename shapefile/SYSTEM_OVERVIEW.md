@@ -2,7 +2,7 @@
 
 ## What This App Does
 
-A browser-based editor for election district shapefiles stored as CSV/WKT. You load a CSV of polygon geometries, view them on a canvas, and use tools to **split**, **combine**, **edit vertices**, and **export** the result back to CSV.
+A browser-based editor for election district shapefiles stored as CSV/WKT. You load a CSV of polygon geometries, view them on a canvas, and use tools to **split**, **combine**, **edit vertices**, **simplify**, **measure distances**, **redistrict**, and **export** the result back to CSV.
 
 ---
 
@@ -86,15 +86,98 @@ Serves the frontend and exposes API endpoints:
 
 ### `index.html` — Main UI
 
-Single-page app with:
-- **Canvas** (left) — renders polygons
-- **Controls panel** (right) — collapsible sections for File, Layer, Polygon, Split, Vertices
-- Loads `VertexClassifier.js` before `FixedCountyVertices.js` (load order matters)
+Single-page app. Layout: canvas fills the left, a 260 px controls panel is fixed on the right.
+
+**Canvas area (left)**
+- `<canvas id="canvas">` — all polygon rendering
+- **Floating Action Button (FAB)** — `+` circle top-left of canvas; expands a menu to switch app mode:
+  - `Edit Polygon` → polygon editing mode (default)
+  - `Edit Population Density` → density colour-map mode
+  - `Edit District Type` → district-type labelling mode
+- Hidden `#polygonInfo`, `#sharedInfo`, `#coordinates` divs — kept for JS/UIController compatibility; actual display is in `display.html`
+
+**Controls panel (right)**
+| Section | Controls |
+|---|---|
+| File | `📂 Load CSV` / `💾 Save CSV` — opens CSV modal picker |
+| CSV modal | Lists `./csv_input` files; `➕ Add Files`, `Refresh`, `Close` |
+| Mode | `✏️ Edit` / `👁️ View` toggle buttons (hidden in Redistricting mode) |
+| Layer (collapsible) | `County` / `Sub-County` layer toggle (hidden in Redistricting mode) |
+| Display | `🖥️ Display` — opens `display.html` popup |
+| Change Density | `✏️ Change Density` — shown only in Population Density mode |
+| **Polygon section** (Edit Polygon mode only) | Undo/Redo · Combine · Split (N districts input + Split button) · Replace Vertex · Delete Vertex · Create Midpoint · Split by Vertices · Clear Selection · Vertices Simplification · Update Neighbours |
+| **Layer section** (non-polygon modes only) | Density Color Map · Display Data · Population Density mode · Est Population mode |
+| **Redistricting section** (Redistricting mode only) | Redistricting Rule · Select Council · Council stats panel · Current ward · Wards list |
+| Measure | `📏 Measure Dist` — toggles distance measurement tool |
+
+**`countySelect` / `polygonSelect`** are hidden `<select>` elements kept for `UIController` internal state (canvas click → both hidden selects sync → `display.html` polls and mirrors them into its own visible dropdowns).
+
+**App mode system (`window.AppMode`)**
+- Modes: `'polygon'` | `'population'` | `'districtType'` | `'redistricting'`
+- `AppMode.set(mode)` shows/hides `#toolbarPolygonSection`, `#toolbarLayerSection`, `#toolbarRedistrictingSection`, `#changeDensityBtn`, the CSV status label, and the Layer+County/Sub-County/Edit/View buttons; highlights the active FAB menu button
+- `AppMode.initDefault()` activates `'polygon'` mode after CSV load
+
+**Redistricting mode** — fourth app mode, accessed via the FAB menu:
+- Hides the Layer section, CSV status label, Edit/View/County/Sub-County buttons, and all colour-map controls
+- Renders all polygons without colour fill (plain outlines) plus a **bold black county boundary overlay**; only polygons in the selected district are visible
+- `#toolbarRedistrictingSection` appears, containing:
+  - **Redistricting Rule** button — opens a modal to set per-tier population quotas (4 tiers: ≤400k, ≤650k, ≤1M, >1M); rules stored in `window.redistrictingRules`
+  - **Select Council** dropdown — populated from unique `District` values in the CSV; filters the canvas to the chosen district
+  - **Council stats panel** (collapsible, closed by default) — shows Total Population, Allocated Seat, Quota, Boundary (±20%), Extra Seat checkbox; header always shows council name + Created/Remaining counts; quota cached in `window._currentCouncilQuota` and `window._currentCouncilSeats`
+  - **Current ward panel** — Create/Cancel/Confirm buttons in the header, colour picker below; stats show Draft electorate and Variance with ✅ tick when within ±20%
+  - **Wards list** (scrollable, max 220 px) — shows each saved ward's colour swatch, name, population, and variance in green/red with ✅ tick when within ±20%; collapsible Edit/Delete row per ward
+
+**Ward management (`window.WardManager` IIFE)**
+- `savedWards[]` — each entry: `{ name, district, color, polygonIds, population }`; `district` scopes wards per council so "Ward 1" in council A and "Ward 1" in council B are independent
+- `createMode` flag — when active, canvas clicks toggle polygons into the draft; C key confirms; clicking outside create mode selects/highlights a saved ward row
+- `selectedWardIdx` — index of the highlighted ward row; C key opens edit mode for it; clicking a ward-assigned polygon also selects its ward
+- `colorIndex` — rotates through `WARD_COLORS` (10 colours) on each new ward; manual picker syncs `colorIndex`
+- `openCreateMode()` / `closeCreateMode()` — show/hide colour picker and Cancel/Confirm buttons
+- `editWard(idx)` — restores draft from saved ward; name is preserved on confirm
+- `deleteWard(idx)` — clears `districtWard` on affected polygons
+- `loadFromPolygons(polygons)` — on CSV reload, scans `districtWard` column and rebuilds `savedWards`, assigning colours by per-district rotation; called automatically after each CSV load
+- `getQuota()` — returns `window._currentCouncilQuota` if set; otherwise computes quota directly from current district's polygon data (self-sufficient fallback so variance never gets stuck at −100%)
+- `renderWardsList()` — filters to current `districtFilter`; exposed as `window.WardManager.renderWardsList()`
+- `activateCKey()` — called by C key in redistricting mode: edits selected ward if one is highlighted, else opens create mode
+- `selectWardByPolygon(polygonId)` — finds the saved ward containing this polygon ID and sets `selectedWardIdx`
+
+**CSV columns used by redistricting**
+- `District` — council/district name; populates the Select Council dropdown
+- `District_Ward` — ward name assigned to the polygon; written on ward confirm, cleared on delete, persisted in CSV export
+
+**Backend URL auto-detection**
+- `localhost` / `127.0.0.1` → `http://localhost:8000`
+- Any other host → `https://testing-josh.onrender.com`
+
+**Script load order** (matters for class inheritance):
+`DataManager` → `GeometryOps` → `SharedVertices` → `VertexSync` → `OverlapDetection` → `AdjacencyGraph` → `PolygonCombiner` → `PolygonSplitter` → `HistoryManager` → `LayerManager` → `VertexClassifier` → `FixedCountyVertices` → `VertexSelection` → `VertexDeletion` → `VertexReplacement` → `MidpointCreation` → `VertexSplitter` → `PolygonSimplifier` → `MeasureTool` → `UIController` → `MouseHandler` → `StreetLayer` → `Renderer` → `PolygonEditor` → `app.js`
+
+---
+
+### `display.html` — Popup Display Window
+
+Opened by the `🖥️ Display` button in `index.html` (`window.open`). Polls the main window every **300 ms** and mirrors state.
+
+**Panels:**
+| Panel | Content |
+|---|---|
+| Select Polygon | **County** dropdown + **Polygon** dropdown (filtered by county, sorted by serial `_NNN`) |
+| Polygon Information | Name, County, Area, Vertices, Neighbors list, Coordinates (collapsible) |
+| Vertex Info | Selected vertex details (updated on Shift+Click) |
+
+**Two-way sync:**
+- Display→Main: county change dispatches `change` on `countySelect`; polygon change dispatches `change` on `polygonSelect` → canvas highlights selection
+- Main→Display: every 300 ms `syncFromOpener()` mirrors `countySelect`, `polygonSelect`, `polygonInfo`, `sharedInfo`, `coordinates`, `vertexInfo`
+
+---
 
 ### `js/app.js` — Application Bootstrap
 - Creates the `PolygonEditor` instance on `DOMContentLoaded`
 - Sets up layer toggle buttons (County / Sub-County)
-- Fetches available CSV files from `/csv_files` endpoint and shows a modal picker
+- Fetches available CSV files from `/csv_files` endpoint and shows a modal picker; falls back to directory scan
+- Handles Add Files (local file upload), Refresh, and Close on the CSV modal
+- Calls `AppMode.initDefault()` after CSV load
+- Wires: Display, Vertices Simplification, Update Neighbours, Measure Distance, Change Density, FAB mode buttons
 - Handles unsaved-changes warning on page unload
 - Exposes `window.PolygonEditorUtils` for browser console debugging
 
@@ -122,9 +205,14 @@ The central class that creates and wires all modules together.
 - `combineSelectedPolygons()` — sends selected polygons to `/merge` API
 - `showSplitDialog()` / `regenerateSplit()` — triggers polygon split via `/split` API
 - `handleVertexDelete()` — deletes selected vertex
-- `handleMidpointCreate()` — inserts midpoint between two selected vertices
+- `handleMidpointCreate()` — inserts midpoint between two selected adjacent vertices
 - `switchToCountyLayer()` / `switchToSubCountyLayer()` — layer switching
 - `nextPolygonIds(county, count)` — generates `count` gap-filling IDs for a county in format `{County}_{NNN}`, scanning current polygons and filling lowest available numbers first
+- `handleSimplification()` — removes all collinear degree-2 vertices across every polygon; saves undo snapshot first
+- `handleUpdateNeighbours()` — rebuilds the adjacency graph and updates each polygon's `neighbours` field
+- `toggleMeasureMode()` — activates/deactivates the Measure Distance tool; blocks `MouseHandler` while active
+- `setupMeasureMouseHandlers()` — attaches independent canvas listeners for measure-mode click/drag/remove interactions; Escape exits measure mode
+- `toggleStreetLayer()` — shows/hides the procedural street map overlay and redraws
 
 ---
 
@@ -176,11 +264,12 @@ Manages two layers:
 
 ### `Renderer.js` — Canvas Drawing
 
-Draws polygons, vertices, and selection highlights on the HTML5 canvas.
+Draws polygons, vertices, and selection highlights on the HTML5 canvas. Also draws the street layer as a background layer (below the grid and polygons) when active.
 
 | Method | Purpose |
 |---|---|
-| `draw(polygons, selected, ...)` | Full canvas redraw |
+| `draw(polygons, selected, ...)` | Full canvas redraw — draws street layer, then grid, then polygons |
+| `setStreetLayer(streetLayer)` | Attaches a `StreetLayer` instance to be drawn as background |
 | `drawPolygon(polygon, style)` | Draws a single polygon with fill and stroke |
 | `drawVertices(polygon)` | Draws vertex dots — colour depends on vertex type: blue with "F" for fixed, red for shared/neighbor, purple for selected |
 | `toggleGrid()` / `toggleVertices()` / `togglePolygonLabels()` | Visual toggles |
@@ -195,6 +284,7 @@ Handles all mouse events on the canvas:
 - **Drag** — pan the view or drag a selected vertex
 - **Scroll** — zoom in/out
 - **Keyboard** — arrow keys for pan, Delete to remove vertex, `M` for midpoint, `C` for vertex split
+- **`blocked` flag** — when `true` (set by `toggleMeasureMode`), `MouseHandler` ignores all events so the measure tool can own the canvas
 
 ---
 
@@ -205,6 +295,69 @@ Stores deep copies of polygon state. Key methods:
 - `undo(currentPolygons)` / `redo(currentPolygons)` — navigate history
 - `createCheckpoint(polygons, name)` — named restore point
 - `getHistoryStats()` — returns total states, current position
+
+---
+
+### `MeasureTool.js` — Distance Measurement
+
+Google-Maps-style polyline distance tool. Scale: **8.01 data units = 1 km**.
+
+| Method | Purpose |
+|---|---|
+| `toggle()` | Activates/deactivates tool; clears points on deactivation |
+| `addPoint(x, y)` | Appends a measurement point in data coordinates |
+| `movePoint(index, x, y)` | Drags an existing measurement point |
+| `removePoint(index)` | Removes a point (clicking its circle) |
+| `findPointAt(dataX, dataY, scale)` | Returns index of nearest point within `HIT_RADIUS_PX` (10 px) |
+| `segmentDistanceM(i)` | Distance in metres for the segment ending at point `i` |
+| `totalDistanceM()` | Accumulated total distance in metres |
+| `formatDistance(metres)` | Human-readable string (`"3.45 km"` or `"340 m"`) |
+
+**Interaction (handled in `PolygonEditor.setupMeasureMouseHandlers`):**
+- Click empty canvas → add point
+- Click circle → remove point
+- Drag circle → move point
+- Escape → exit measure mode
+
+---
+
+### `PolygonSimplifier.js` — Vertex Simplification
+
+Removes geometrically redundant (collinear, degree-2) vertices from all polygons without changing any polygon boundary shape.
+
+**A vertex is removable when all three conditions hold:**
+1. Degree = 2 — exactly two distinct neighbours across all rings
+2. Collinear — lies exactly on the edge `prev → next`
+3. Every ring containing it has ≥ 4 unique vertices (removal leaves a valid polygon)
+
+| Method | Purpose |
+|---|---|
+| `simplify(polygons)` | Removes all removable vertices in-place; returns `{ polygons, removedCount }` |
+
+Triggered from the toolbar via `PolygonEditor.handleSimplification()`, which saves an undo snapshot first.
+
+---
+
+### `StreetLayer.js` — Procedural Street Map Overlay
+
+Generates and renders a procedural Bristol/London-style street network as a canvas background layer. Scale: **8.01 data units = 1 km** (same as `MeasureTool`).
+
+**Algorithm:**
+- Three overlapping irregular grids at independent orientations (`ang0`, `ang0+28..50°`, `ang1+22..40°`)
+- Variable block sizes (tiny / normal / large distribution)
+- Hierarchical node snapping: secondary streets snap to main road nodes; local streets snap to main + secondary nodes — creates T-junctions
+- Catmull-Rom splines with per-layer bend: main (0.018 km), secondary (0.038 km), local (0.060 km)
+- Liang-Barsky clipping to the data bounding box
+- Seeded PRNG (Mulberry32) and bilinear value noise for reproducibility
+
+| Method | Purpose |
+|---|---|
+| `generate(bounds, seed)` | Generates the street network for the given data bounding box |
+| `draw(ctx, geometryOps)` | Renders streets on the canvas (local → secondary → main, light to dark) |
+| `toggle()` | Toggles visibility; returns new state |
+| `isVisible()` | Returns current visibility |
+
+Street widths (screen pixels): main = 2.4, secondary = 1.3, local = 0.7.
 
 ---
 
@@ -354,14 +507,16 @@ The merged polygon receives a `{County}_{NNN}` ID via `PolygonEditor.nextPolygon
 
 ### `AdjacencyGraph.js` — Topology
 
-Builds and queries an adjacency graph from shared edges between polygons.
+Builds and queries an adjacency graph from shared edges between polygons. Two polygons are adjacent if their shared boundary length exceeds `lengthTolerance = 1e-4`.
 
 | Method | Purpose |
 |---|---|
-| `buildGraph(polygons)` | Scans all polygon edges, marks shared edges as adjacencies |
+| `buildAdjacencyList(polygons)` | Scans all polygon pairs, computes shared boundary length, stores adjacencies as sorted arrays |
 | `getNeighbors(id)` | Returns list of adjacent polygon IDs |
 | `areAdjacent(id1, id2)` | Returns true if two polygons share an edge |
 | `getAdjacencyList()` / `getStatistics()` | Inspection utilities |
+
+Used by `PolygonEditor.handleUpdateNeighbours()` to populate each polygon's `neighbours` field.
 
 ---
 
@@ -373,7 +528,7 @@ After edits, checks whether any polygon now overlaps another. Distinguishes true
 
 ### `UIController.js` — UI Wiring
 
-Manages button states (enabled/disabled), status messages, mode labels, and polygon dropdown population.
+Manages button states (enabled/disabled), status messages, mode labels, and polygon dropdown population. County and polygon selectors are hidden elements kept for JS compatibility; visible layer/mode buttons are handled directly in `app.js` and `PolygonEditor.js`.
 
 ---
 
@@ -401,7 +556,8 @@ User loads CSV
     → FixedCountyVertices.initialize() — locks county outline vertices
     → VertexClassifier created (wraps FixedCountyVertices)
     → GeometryOps.calculateBounds() + fitToView()
-    → Renderer draws all polygons on canvas
+    → StreetLayer.generate(bounds) — builds procedural street network
+    → Renderer draws street layer (background) + all polygons on canvas
 
 User selects polygon → clicks Split
     → PolygonSplitter.convertToGeoJSON() → POST /split
@@ -425,8 +581,48 @@ User Ctrl+Clicks polygons → clicks Combine
     → nextPolygonIds() assigns {County}_NNN ID
     → merged polygon replaces originals
 
+User clicks Vertices Simplification
+    → HistoryManager.saveState() (pre-snapshot)
+    → PolygonSimplifier.simplify(polygons) removes all collinear degree-2 vertices
+    → Renderer redraws
+
+User clicks Update Neighbours
+    → AdjacencyGraph.buildAdjacencyList(polygons)
+    → Each polygon's neighbours field updated in-place
+
+User clicks Measure Dist (or presses Escape to exit)
+    → MeasureTool.toggle() activates/deactivates
+    → MouseHandler.blocked = true while active
+    → Click: add point / click circle: remove / drag circle: move
+    → measureInfo panel shows running total distance
+
+User clicks Street Map
+    → StreetLayer.toggle() flips visibility
+    → Renderer redraws (street layer drawn below grid on next frame)
+
 User clicks Export CSV
     → DataManager.exportToCSV(polygons) → triggers file download or POST /save_csv
+    → District_Ward column written from polygon.districtWard for each polygon
+
+User enters Redistricting mode → selects a Council
+    → AppMode.set('redistricting') hides Layer/Edit/View controls, shows redistricting panel
+    → canvas renders plain outlines + bold county boundary overlay
+    → councilSelect change → PolygonEditor.districtFilter set → only district polygons visible
+    → renderStats() computes Total Population, Allocated Seat, Quota, Boundary
+    → window._currentCouncilQuota cached for WardManager.getQuota()
+
+User creates a Ward
+    → presses C (or clicks "Create new ward") → openCreateMode()
+    → clicks polygons on canvas → WardManager.togglePolygon(id) adds/removes from draft
+    → Draft electorate + Variance update live (✅ tick appears when within ±20%)
+    → presses C (or clicks Create) → ward saved with name/district/color/polygonIds
+    → polygon.districtWard set on each assigned polygon
+    → Created/Remaining counts update in council stats header
+
+User reloads a CSV with existing ward assignments
+    → WardManager.loadFromPolygons(polygons) scans districtWard column
+    → Groups by (district, districtWard), assigns colors by per-district rotation
+    → savedWards rebuilt; renderWardsList() shows wards for currently selected district
 ```
 
 ---
@@ -438,6 +634,13 @@ User clicks Export CSV
 - **Cross-county vertices**: Vertices shared between different counties are equally protected — they may not appear in the fixed set if simplified away, but `VertexClassifier` catches them by scanning county membership.
 - **Shared vertex sync**: When a SAME_COUNTY shared vertex is moved, all polygons sharing that vertex are updated simultaneously.
 - **Gap absorption**: Voronoi split gaps are absorbed server-side (Python) into the adjacent district with the longest shared boundary — no gap polygons are ever emitted to the frontend.
-- **Server required**: Split and Combine features require the Python server (`uvicorn`) to be running. Vertex editing works offline.
+- **Server required**: Split and Combine features require the Python server (`uvicorn`) to be running. Vertex editing, simplification, measure, and street layer work offline.
 - **Input format**: CSV must have a `geometry` column (WKT `POLYGON (...)`) and a `County` column. `Shape_ID` and `Parent` columns are preserved and carried through all operations.
 - **ID format**: `{County}_{NNN}` — three-digit zero-padded, gap-filled from 001 per county.
+- **Keyboard guards**: Shortcuts (`Delete`, `M`, `C`, `1`, `2`, arrows) do not fire when an `<input>`, `<textarea>`, or `<select>` element is focused.
+- **Scale constant**: Both `MeasureTool` and `StreetLayer` use `8.01 data units = 1 km`.
+- **Redistricting C key**: In redistricting mode, `C` is intercepted before all other shortcuts. Behaviour: not in create mode + no ward selected → open create panel; not in create mode + ward selected → edit that ward; in create mode → confirm and save the ward.
+- **Ward district scoping**: `savedWards` entries carry a `district` field. `renderWardsList()` and the canvas overlay both filter to the active `districtFilter`, so wards from other councils are never displayed or rendered.
+- **Quota self-sufficiency**: `WardManager.getQuota()` uses `window._currentCouncilQuota` (set by `renderStats`) but falls back to computing the quota directly from the polygon data if the cached value is 0 — variance can never get stuck at −100%.
+- **Ward name preservation**: On edit-confirm, the original ward name is reused (stored in `editingIndex._name`); the auto-numbered `Ward N` logic only runs for newly created wards.
+- **Required CSV columns**: `County`, `Shape_ID`, `geometry`, `Population_Density`, `County_Type` (validated on load). `District` and `District_Ward` are optional but required for redistricting features.

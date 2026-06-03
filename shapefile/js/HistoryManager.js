@@ -13,11 +13,12 @@ class HistoryManager {
      * @param {Array<Object>} polygons - Current polygon data to save
      * @param {string} action - Description of the action being saved
      */
-    saveToHistory(polygons, action = 'Unknown action') {
+    saveToHistory(polygons, action = 'Unknown action', vnSnapshot = null) {
         const currentState = {
-            polygons: JSON.parse(JSON.stringify(polygons)),
-            action: action,
-            timestamp: Date.now()
+            polygons:   JSON.parse(JSON.stringify(polygons)),
+            vnSnapshot: vnSnapshot ? JSON.parse(JSON.stringify(vnSnapshot)) : null,
+            action:     action,
+            timestamp:  Date.now()
         };
         
         // Remove any history after current index (when doing new actions after undo)
@@ -44,13 +45,14 @@ class HistoryManager {
         if (!this.canUndo()) {
             return null;
         }
-        
+
         this.historyIndex--;
         const previousState = this.history[this.historyIndex];
-        
+
         console.log(`Undoing: ${previousState.action}`);
         return {
             polygons: JSON.parse(JSON.stringify(previousState.polygons)),
+            vnSnapshot: previousState.vnSnapshot ? JSON.parse(JSON.stringify(previousState.vnSnapshot)) : null,
             action: previousState.action,
             timestamp: previousState.timestamp
         };
@@ -64,13 +66,14 @@ class HistoryManager {
         if (!this.canRedo()) {
             return null;
         }
-        
+
         this.historyIndex++;
         const nextState = this.history[this.historyIndex];
-        
+
         console.log(`Redoing: ${nextState.action}`);
         return {
             polygons: JSON.parse(JSON.stringify(nextState.polygons)),
+            vnSnapshot: nextState.vnSnapshot ? JSON.parse(JSON.stringify(nextState.vnSnapshot)) : null,
             action: nextState.action,
             timestamp: nextState.timestamp
         };

@@ -34,8 +34,11 @@ class FixedCountyVertices {
             const countyName = polygon.county;
             const countyVertices = [];
 
-            // Process all rings (exterior and holes)
-            polygon.rings.forEach(ring => {
+            // Use fixedRings (Python-simplified exterior) when available — it is the
+            // authoritative county boundary for vertex protection.  Fall back to rings
+            // (JS outer boundary) when Python result is not present.
+            const ringsForFixed = polygon.fixedRings || polygon.rings;
+            ringsForFixed.forEach(ring => {
                 ring.forEach(vertex => {
                     const key = this.getVertexKey(vertex.x, vertex.y);
 
@@ -75,8 +78,8 @@ class FixedCountyVertices {
      * @returns {string} - Unique key
      */
     getVertexKey(x, y) {
-        // Round to 6 decimal places to handle floating point precision
-        return `${x.toFixed(6)},${y.toFixed(6)}`;
+        // Round to 2 decimal places — matches the precision of Python-exported vertices
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
     }
 
     /**

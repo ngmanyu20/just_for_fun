@@ -173,62 +173,57 @@ class VertexSync {
      * @param {Set<number>} affectedIndices - Indices of polygons to sync (optional)
      * @returns {Array<Object>} - Polygons with synchronized vertices
      */
-    syncVertices(polygons, adjacencyGraph, affectedIndices = null) {
+    syncVertices(polygons, adjacencyGraph, affectedIndices = null, idToIndex = null) {
         console.log('Starting vertex synchronization...');
 
-        // If no specific indices provided, sync all
         const indicesToSync = affectedIndices || new Set(polygons.map((_, i) => i));
 
-        // Pre-collect all vertices for each polygon
-        const verticesByIndex = polygons.map(poly => this.collectVertices(poly));
+        // Use caller-supplied map or build one — O(1) lookup replaces O(N) findIndex
+        const indexMap = idToIndex || new Map(polygons.map((p, i) => [p.id, i]));
 
-        // Create updated polygons array
+        // Collect vertices only for affected polygons and their direct neighbors,
+        // not for all N polygons
+        const relevantIndices = new Set(indicesToSync);
+        for (const idx of indicesToSync) {
+            adjacencyGraph.getNeighbors(polygons[idx].id).forEach(nId => {
+                const nIdx = indexMap.get(nId);
+                if (nIdx !== undefined) relevantIndices.add(nIdx);
+            });
+        }
+        const verticesByIndex = new Map();
+        for (const idx of relevantIndices) {
+            verticesByIndex.set(idx, this.collectVertices(polygons[idx]));
+        }
+
         const updatedPolygons = polygons.map((poly, index) => {
-            // Skip if not in affected set
-            if (!indicesToSync.has(index)) {
-                return poly;
-            }
+            if (!indicesToSync.has(index)) return poly;
 
-            // Get neighbor IDs
             const neighborIds = adjacencyGraph.getNeighbors(poly.id);
-            if (neighborIds.length === 0) {
-                return poly;
-            }
+            if (neighborIds.length === 0) return poly;
 
-            // Collect vertices from all neighbors
             const neighborVertices = [];
             neighborIds.forEach(neighborId => {
-                const neighborIndex = polygons.findIndex(p => p.id === neighborId);
-                if (neighborIndex >= 0 && verticesByIndex[neighborIndex]) {
-                    neighborVertices.push(...verticesByIndex[neighborIndex]);
+                const neighborIndex = indexMap.get(neighborId);
+                if (neighborIndex !== undefined && verticesByIndex.has(neighborIndex)) {
+                    neighborVertices.push(...verticesByIndex.get(neighborIndex));
                 }
             });
 
-            if (neighborVertices.length === 0) {
-                return poly;
-            }
+            if (neighborVertices.length === 0) return poly;
 
-            // Deduplicate neighbor vertices
             const uniqueNeighborVertices = this.deduplicatePoints(neighborVertices);
 
-            // Process each ring
             const updatedRings = poly.rings.map(ring => {
                 const originalLength = ring.length;
                 const updatedRing = this.insertVerticesIntoRing(ring, uniqueNeighborVertices);
                 const verticesAdded = updatedRing.length - originalLength;
-
                 if (verticesAdded > 0) {
                     console.log(`  Polygon ${poly.id}: inserted ${verticesAdded} vertices (${originalLength} → ${updatedRing.length})`);
                 }
-
                 return updatedRing;
             });
 
-            // Return updated polygon
-            return {
-                ...poly,
-                rings: updatedRings
-            };
+            return { ...poly, rings: updatedRings };
         });
 
         console.log(`Synchronized vertices for ${indicesToSync.size} polygons`);
@@ -248,22 +243,18 @@ class VertexSync {
     syncAfterSplit(allPolygons, adjacencyGraph, startIndex, count, parentPolygon = null, parentNeighborIds = null) {
         console.log(`Syncing vertices after split: ${count} polygons at index ${startIndex}`);
 
-        // CRITICAL: Collect ALL vertices from ALL split polygons first
-        // This solves the chicken-and-egg problem where polygons need shared vertices
-        // to be detected as neighbors, but need to be neighbors to get shared vertices
+        // Build ID→index map once — replaces all O(N) findIndex calls
+        const idToIndex = new Map(allPolygons.map((p, i) => [p.id, i]));
+
         const splitIndices = new Set();
         const allSplitVertices = [];
 
         for (let i = 0; i < count; i++) {
             const splitIndex = startIndex + i;
             splitIndices.add(splitIndex);
-            const vertices = this.collectVertices(allPolygons[splitIndex]);
-            allSplitVertices.push(...vertices);
+            allSplitVertices.push(...this.collectVertices(allPolygons[splitIndex]));
         }
 
-        // CRITICAL: If parent polygon provided, also collect its vertices
-        // The parent's boundary vertices touched external neighbors before split
-        // Split polygons on the boundary should inherit these vertices
         if (parentPolygon) {
             console.log(`Collecting vertices from parent polygon: ${parentPolygon.id}`);
             const parentVertices = this.collectVertices(parentPolygon);
@@ -274,72 +265,52 @@ class VertexSync {
         const uniqueSplitVertices = this.deduplicatePoints(allSplitVertices);
         console.log(`Collected ${uniqueSplitVertices.length} unique vertices from ${count} split polygons`);
 
-        // Pre-pass: Insert vertices from sibling split polygons into each split polygon
-        // This ensures split polygons share boundaries even if not detected as neighbors yet
+        // Pre-pass: Insert sibling split vertices into each split polygon
         console.log(`Pre-pass: syncing split polygons with ALL sibling vertices`);
         let syncedPolygons = [...allPolygons];
 
         for (let i = 0; i < count; i++) {
             const splitIndex = startIndex + i;
             const poly = syncedPolygons[splitIndex];
-
-            // Insert ALL split vertices (from siblings) into this polygon
             const updatedRings = poly.rings.map(ring => {
                 const originalLength = ring.length;
                 const updatedRing = this.insertVerticesIntoRing(ring, uniqueSplitVertices);
                 const verticesAdded = updatedRing.length - originalLength;
-
                 if (verticesAdded > 0) {
                     console.log(`  Pre-pass: Polygon ${poly.id}: inserted ${verticesAdded} vertices (${originalLength} → ${updatedRing.length})`);
                 }
-
                 return updatedRing;
             });
-
-            syncedPolygons[splitIndex] = {
-                ...poly,
-                rings: updatedRings
-            };
+            syncedPolygons[splitIndex] = { ...poly, rings: updatedRings };
         }
 
-        // CRITICAL: If parent's neighbors provided, collect them FIRST
-        // These neighbors need to be updated even if adjacency graph doesn't detect them yet
+        // Resolve parent's original neighbors by index using the Map (O(1) each)
         const parentOriginalNeighbors = new Set();
         if (parentPolygon && parentNeighborIds && parentNeighborIds.length > 0) {
             console.log(`Parent polygon ${parentPolygon.id} had ${parentNeighborIds.length} neighbors before split`);
-
             parentNeighborIds.forEach(neighborId => {
-                const neighborIndex = syncedPolygons.findIndex(p => p.id === neighborId);
-                if (neighborIndex >= 0) {
+                const neighborIndex = idToIndex.get(neighborId);
+                if (neighborIndex !== undefined) {
                     parentOriginalNeighbors.add(neighborIndex);
                     console.log(`  - Parent's neighbor: ${neighborId} at index ${neighborIndex}`);
                 }
             });
         }
 
-        // CRITICAL: Rebuild adjacency graph after pre-pass to detect newly synchronized boundaries
+        // Rebuild adjacency after pre-pass — scoped to split zone only
         console.log(`Rebuilding adjacency graph after pre-pass...`);
-        adjacencyGraph.buildAdjacencyList(syncedPolygons);
+        const splitIds = [...splitIndices].map(i => syncedPolygons[i].id);
+        adjacencyGraph.rebuildForAffected(syncedPolygons, splitIds, [...splitIds, ...(parentNeighborIds || [])]);
 
-        // Collect external neighbor indices (polygons that touch split polygons but aren't split themselves)
-        const externalNeighborIndices = new Set();
-
-        // FIRST: Add parent's original neighbors to external neighbors
-        // These MUST be included even if not detected by adjacency graph yet
-        parentOriginalNeighbors.forEach(idx => {
-            externalNeighborIndices.add(idx);
-        });
+        // Collect external neighbor indices
+        const externalNeighborIndices = new Set(parentOriginalNeighbors);
         console.log(`Added ${parentOriginalNeighbors.size} parent's original neighbors to external neighbors`);
 
-        // SECOND: Add neighbors detected by adjacency graph
         for (let i = 0; i < count; i++) {
-            const splitIndex = startIndex + i;
-            const splitPoly = syncedPolygons[splitIndex];
-            const neighborIds = adjacencyGraph.getNeighbors(splitPoly.id);
-
-            neighborIds.forEach(neighborId => {
-                const neighborIndex = syncedPolygons.findIndex(p => p.id === neighborId);
-                if (neighborIndex >= 0 && !splitIndices.has(neighborIndex)) {
+            const splitPoly = syncedPolygons[startIndex + i];
+            adjacencyGraph.getNeighbors(splitPoly.id).forEach(neighborId => {
+                const neighborIndex = idToIndex.get(neighborId);
+                if (neighborIndex !== undefined && !splitIndices.has(neighborIndex)) {
                     externalNeighborIndices.add(neighborIndex);
                 }
             });
@@ -347,45 +318,36 @@ class VertexSync {
 
         console.log(`Found ${externalNeighborIndices.size} total external neighbors of split polygons (including parent's neighbors)`);
 
-        // Pass 1: Sync external neighbors - insert split vertices into them
+        // Pass 1: Insert split vertices into external neighbors
         if (externalNeighborIndices.size > 0) {
             console.log(`Pass 1: Syncing ${externalNeighborIndices.size} external neighbors with split vertices`);
 
             for (const neighborIndex of externalNeighborIndices) {
                 const poly = syncedPolygons[neighborIndex];
-
-                // Insert ALL split vertices into this external neighbor
                 const updatedRings = poly.rings.map(ring => {
                     const originalLength = ring.length;
                     const updatedRing = this.insertVerticesIntoRing(ring, uniqueSplitVertices);
                     const verticesAdded = updatedRing.length - originalLength;
-
                     if (verticesAdded > 0) {
                         console.log(`  External neighbor ${poly.id}: inserted ${verticesAdded} vertices (${originalLength} → ${updatedRing.length})`);
                     }
-
                     return updatedRing;
                 });
-
-                syncedPolygons[neighborIndex] = {
-                    ...poly,
-                    rings: updatedRings
-                };
+                syncedPolygons[neighborIndex] = { ...poly, rings: updatedRings };
             }
 
-            // Rebuild adjacency graph after Pass 1 to detect newly updated external neighbors
+            // Rebuild after Pass 1 — scoped to external neighbors + split zone
             console.log(`Rebuilding adjacency graph after Pass 1...`);
-            adjacencyGraph.buildAdjacencyList(syncedPolygons);
+            const externalNeighborIds = [...externalNeighborIndices].map(i => syncedPolygons[i].id);
+            adjacencyGraph.rebuildForAffected(syncedPolygons, externalNeighborIds, [...externalNeighborIds, ...splitIds]);
         }
 
-        // Pass 2: Sync split polygons with updated external neighbor vertices
+        // Pass 2: Insert external neighbor vertices into split polygons
         console.log(`Pass 2: Syncing ${splitIndices.size} split polygons with updated external neighbor vertices`);
 
-        // Collect vertices from external neighbors
         const externalNeighborVertices = [];
         for (const neighborIndex of externalNeighborIndices) {
-            const vertices = this.collectVertices(syncedPolygons[neighborIndex]);
-            externalNeighborVertices.push(...vertices);
+            externalNeighborVertices.push(...this.collectVertices(syncedPolygons[neighborIndex]));
         }
 
         if (externalNeighborVertices.length > 0) {
@@ -395,39 +357,29 @@ class VertexSync {
             for (let i = 0; i < count; i++) {
                 const splitIndex = startIndex + i;
                 const poly = syncedPolygons[splitIndex];
-
-                // Insert external neighbor vertices into split polygons
                 const updatedRings = poly.rings.map(ring => {
                     const originalLength = ring.length;
                     const updatedRing = this.insertVerticesIntoRing(ring, uniqueExternalVertices);
                     const verticesAdded = updatedRing.length - originalLength;
-
                     if (verticesAdded > 0) {
                         console.log(`  Split polygon ${poly.id}: inserted ${verticesAdded} external vertices (${originalLength} → ${updatedRing.length})`);
                     }
-
                     return updatedRing;
                 });
-
-                syncedPolygons[splitIndex] = {
-                    ...poly,
-                    rings: updatedRings
-                };
+                syncedPolygons[splitIndex] = { ...poly, rings: updatedRings };
             }
 
-            // Rebuild adjacency graph after Pass 2 to detect newly updated split polygons
+            // Rebuild after Pass 2 — scoped to split zone
             console.log(`Rebuilding adjacency graph after Pass 2...`);
-            adjacencyGraph.buildAdjacencyList(syncedPolygons);
+            const externalNeighborIds2 = [...externalNeighborIndices].map(i => syncedPolygons[i].id);
+            adjacencyGraph.rebuildForAffected(syncedPolygons, splitIds, [...splitIds, ...externalNeighborIds2]);
         }
 
-        // Pass 3: Final multi-directional sync to ensure complete propagation
+        // Pass 3: Final bidirectional sync across all affected polygons
+        // Pass 4 is removed — Pass 3 already covers split polygons bidirectionally
         const allAffectedIndices = new Set([...splitIndices, ...externalNeighborIndices]);
         console.log(`Pass 3: Final sync of ${allAffectedIndices.size} affected polygons (split + external neighbors)`);
-        syncedPolygons = this.syncVertices(syncedPolygons, adjacencyGraph, allAffectedIndices);
-
-        // Pass 4: One more round for split polygons to catch any remaining vertices
-        console.log(`Pass 4: Final sync of ${splitIndices.size} split polygons`);
-        syncedPolygons = this.syncVertices(syncedPolygons, adjacencyGraph, splitIndices);
+        syncedPolygons = this.syncVertices(syncedPolygons, adjacencyGraph, allAffectedIndices, idToIndex);
 
         return syncedPolygons;
     }
@@ -442,21 +394,16 @@ class VertexSync {
     syncAfterMerge(allPolygons, adjacencyGraph, mergedIndex) {
         console.log(`Syncing vertices after merge at index ${mergedIndex}`);
 
-        // Collect merged polygon and its neighbors
+        const idToIndex = new Map(allPolygons.map((p, i) => [p.id, i]));
         const affectedIndices = new Set([mergedIndex]);
 
-        const mergedPoly = allPolygons[mergedIndex];
-        const neighborIds = adjacencyGraph.getNeighbors(mergedPoly.id);
-
-        neighborIds.forEach(neighborId => {
-            const neighborIndex = allPolygons.findIndex(p => p.id === neighborId);
-            if (neighborIndex >= 0) {
-                affectedIndices.add(neighborIndex);
-            }
+        adjacencyGraph.getNeighbors(allPolygons[mergedIndex].id).forEach(neighborId => {
+            const neighborIndex = idToIndex.get(neighborId);
+            if (neighborIndex !== undefined) affectedIndices.add(neighborIndex);
         });
 
         console.log(`Syncing ${affectedIndices.size} affected polygons (merged + neighbors)`);
-        return this.syncVertices(allPolygons, adjacencyGraph, affectedIndices);
+        return this.syncVertices(allPolygons, adjacencyGraph, affectedIndices, idToIndex);
     }
 
     /**

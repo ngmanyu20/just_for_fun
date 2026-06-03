@@ -1,11 +1,12 @@
 # app.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
-from schemas import SplitRequest, MergeRequest
-from geometry_core import split_polygon_geojson, merge_polygons_geojson
+from schemas import SplitRequest, MergeRequest, SvgSplitRequest, OsmSplitRequest, OsmMultiSplitRequest
+from geometry_core import split_polygon_geojson, merge_polygons_geojson, split_polygon_by_svg, split_polygon_by_osm, split_polygons_by_osm_with_boundaries
 import os
 
 
@@ -21,6 +22,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prevent browser from caching JS/HTML files so code changes are always picked up
+# without needing a hard refresh (Ctrl+Shift+R).
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.endswith('.js') or path.endswith('.html') or path == '/':
+            response.headers['Cache-Control'] = 'no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+        return response
+
+app.add_middleware(NoCacheMiddleware)
 
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +88,68 @@ def split_polygon(req: SplitRequest):
         return result
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/split-svg")
+def split_polygon_svg(req: SvgSplitRequest):
+    import traceback
+    try:
+        result = split_polygon_by_svg(
+            geometry_geojson=req.geometry,
+            svg_content=req.svg_content,
+            target_count=req.target_count,
+            anchor_x=req.anchor_x,
+            anchor_y=req.anchor_y,
+            data_width=req.data_width,
+            svg_w=req.svg_w,
+            svg_h=req.svg_h,
+            min_area_fraction=req.min_area_fraction,
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/split-osm")
+def split_polygon_osm(req: OsmSplitRequest):
+    import traceback
+    try:
+        result = split_polygon_by_osm(
+            geometry_geojson=req.geometry,
+            north=req.north,
+            south=req.south,
+            east=req.east,
+            west=req.west,
+            use_secondary=req.use_secondary,
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/split-osm-multi")
+def split_polygons_osm_multi(req: OsmMultiSplitRequest):
+    """
+    OSM-split multiple adjacent polygons while preserving their shared boundaries.
+    Each OSM district is clipped by the original polygon boundaries and returned
+    with a source_index property indicating which input polygon it belongs to.
+    """
+    import traceback
+    try:
+        result = split_polygons_by_osm_with_boundaries(
+            geometries_geojson=req.geometries,
+            north=req.north,
+            south=req.south,
+            east=req.east,
+            west=req.west,
+            use_secondary=req.use_secondary,
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -132,28 +208,36 @@ async def merge_county(request: dict):
         # Merge using unary_union
         merged = unary_union(polygons)
 
-        # Handle MultiPolygon
+        # Fix truly invalid geometry only (self-intersecting rings, etc.)
+        if not merged.is_valid:
+            merged = merged.buffer(0)
+
+        # Collect all parts (keep disconnected islands — don't drop the smaller ones)
         if merged.geom_type == 'MultiPolygon':
-            merged = max(merged.geoms, key=lambda p: p.area)
+            geoms = list(merged.geoms)
+        else:
+            geoms = [merged]
 
-        # Simplify
+        # Simplify each part individually
         SIMPLIFY_TOLERANCE = 0.001
-        if SIMPLIFY_TOLERANCE > 0:
-            simplified = merged.simplify(SIMPLIFY_TOLERANCE, preserve_topology=True)
-            if simplified.is_valid:
-                merged = simplified
-
-        # Extract coordinates
-        exterior = [[round(x, 6), round(y, 6)] for x, y in merged.exterior.coords]
-        holes = [[[round(x, 6), round(y, 6)] for x, y in interior.coords]
-                 for interior in merged.interiors]
+        parts_data = []
+        for geom in geoms:
+            if SIMPLIFY_TOLERANCE > 0:
+                simplified = geom.simplify(SIMPLIFY_TOLERANCE, preserve_topology=True)
+                if simplified.is_valid:
+                    geom = simplified
+            ext = [[round(x, 2), round(y, 2)] for x, y in geom.exterior.coords]
+            holes = [[[round(x, 2), round(y, 2)] for x, y in interior.coords]
+                     for interior in geom.interiors]
+            parts_data.append({'exterior': ext, 'holes': holes})
 
         return {
             'county': county_name,
-            'exterior': exterior,
-            'holes': holes,
-            'vertex_count': len(exterior),
-            'hole_count': len(holes)
+            'exterior': parts_data[0]['exterior'],   # backwards compat
+            'holes':    parts_data[0]['holes'],       # backwards compat
+            'parts':    parts_data,                   # all disconnected pieces
+            'vertex_count': sum(len(p['exterior']) for p in parts_data),
+            'hole_count':   sum(len(p['holes'])    for p in parts_data),
         }
 
     except Exception as e:

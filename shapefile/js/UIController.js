@@ -5,6 +5,7 @@ class UIController {
     constructor() {
         this.elements = {
             csvFile: document.getElementById('csvFile'),
+            countySelect: document.getElementById('countySelect'),
             polygonSelect: document.getElementById('polygonSelect'),
             editMode: document.getElementById('editMode'),
             viewMode: document.getElementById('viewMode'),
@@ -12,6 +13,8 @@ class UIController {
             redoBtn: document.getElementById('redoBtn'),
             combineBtn: document.getElementById('combineBtn'),
             splitBtn: document.getElementById('splitBtn'),
+            splitByOsmBtn: document.getElementById('splitByOsmBtn'),
+            deletePolygonBtn: document.getElementById('deletePolygonBtn'),
             regenerateBtn: document.getElementById('regenerateBtn'),
             exportData: document.getElementById('exportData'),
             resetView: document.getElementById('resetView'),
@@ -23,6 +26,7 @@ class UIController {
 
         this.currentMode = 'view';
         this.selectedPolygonIndex = null;
+        this._allPolygons = []; // kept for county→polygon filtering
     }
 
     /**
@@ -46,36 +50,100 @@ class UIController {
     }
 
     /**
-     * Populate the polygon selection dropdown
+     * Populate the county + polygon dual selectors.
+     * County dropdown shows unique counties sorted alphabetically.
+     * Polygon dropdown is filtered to the currently selected county,
+     * sorted by numeric serial (NC1_001 < NC1_002 < … < NC1_023).
      * @param {Array<Object>} polygons - Array of polygon objects
      */
     populatePolygonSelect(polygons) {
-        if (!this.elements.polygonSelect) return;
-        
-        this.elements.polygonSelect.innerHTML = '<option value="">Choose a polygon to edit...</option>';
-        
-        polygons.forEach((polygon, index) => {
-            const option = document.createElement('option');
-            option.value = index;
-            // Show Shape_ID and County if both are available
-            if (polygon.county && polygon.county !== polygon.id) {
-                option.textContent = `${polygon.id} (${polygon.county})`;
-            } else {
-                option.textContent = polygon.id;
+        this._allPolygons = polygons;
+
+        const { countySelect, polygonSelect } = this.elements;
+        if (!polygonSelect) return;
+
+        // --- Build county list ---
+        if (countySelect) {
+            const currentCounty = countySelect.value;
+
+            const counties = [...new Set(
+                polygons.map(p => p.county).filter(Boolean)
+            )].sort();
+
+            countySelect.innerHTML = '<option value="">— select —</option>';
+            counties.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                countySelect.appendChild(opt);
+            });
+
+            // Restore previous county selection if it still exists
+            if (currentCounty && counties.includes(currentCounty)) {
+                countySelect.value = currentCounty;
             }
-            this.elements.polygonSelect.appendChild(option);
+        }
+
+        // --- Build polygon list for the selected county ---
+        this._repopulatePolygonDropdown();
+    }
+
+    /**
+     * Repopulate the polygon dropdown based on the currently selected county.
+     * Polygons are sorted by their numeric serial (the NNN part of County_NNN).
+     */
+    _repopulatePolygonDropdown() {
+        const { countySelect, polygonSelect } = this.elements;
+        if (!polygonSelect) return;
+
+        const selectedCounty = countySelect ? countySelect.value : '';
+        const polygons = this._allPolygons;
+
+        polygonSelect.innerHTML = '<option value="">— select —</option>';
+
+        if (!selectedCounty) return; // No county chosen yet — leave list empty
+
+        const filtered = polygons.filter(p => p.county === selectedCounty);
+
+        // Sort by numeric serial (handles NC1_001, NC1_023, etc.)
+        filtered.sort((a, b) => {
+            const numA = parseInt(a.id.split('_').pop(), 10) || 0;
+            const numB = parseInt(b.id.split('_').pop(), 10) || 0;
+            return numA - numB;
+        });
+
+        filtered.forEach(polygon => {
+            const idx = polygons.indexOf(polygon);
+            const opt = document.createElement('option');
+            opt.value = idx;
+            opt.textContent = polygon.id;
+            polygonSelect.appendChild(opt);
         });
     }
 
     /**
-     * Set the selected polygon in the dropdown
+     * Set the selected polygon in the dropdown, also syncing the county selector.
      * @param {number|null} index - Index of selected polygon or null for none
      */
     setSelectedPolygon(index) {
         this.selectedPolygonIndex = index;
-        if (this.elements.polygonSelect) {
-            this.elements.polygonSelect.value = index !== null ? index : '';
+        const { countySelect, polygonSelect } = this.elements;
+
+        if (index === null) {
+            if (polygonSelect) polygonSelect.value = '';
+            return;
         }
+
+        const polygon = this._allPolygons[index];
+        if (!polygon) return;
+
+        // Sync county dropdown first (repopulates polygon list for that county)
+        if (countySelect && polygon.county && countySelect.value !== polygon.county) {
+            countySelect.value = polygon.county;
+            this._repopulatePolygonDropdown();
+        }
+
+        if (polygonSelect) polygonSelect.value = index;
     }
 
     /**
@@ -345,6 +413,30 @@ class UIController {
     }
 
     /**
+     * Enable or disable the Split by OSM button
+     * @param {boolean} enabled
+     */
+    setOsmSplitEnabled(enabled) {
+        if (!this.elements.splitByOsmBtn) return;
+        this.elements.splitByOsmBtn.disabled = !enabled;
+        this.elements.splitByOsmBtn.title = enabled
+            ? 'Split selected polygon using OSM street districts'
+            : 'Select exactly 1 polygon to split by OSM';
+    }
+
+    /**
+     * Enable or disable the Delete Polygon button
+     * @param {boolean} enabled
+     */
+    setDeletePolygonEnabled(enabled) {
+        if (!this.elements.deletePolygonBtn) return;
+        this.elements.deletePolygonBtn.disabled = !enabled;
+        this.elements.deletePolygonBtn.title = enabled
+            ? 'Delete the selected polygon (removes its row from the CSV)'
+            : 'Select exactly 1 polygon to delete';
+    }
+
+    /**
      * Enable or disable regenerate button
      * @param {boolean} enabled - Whether to enable the regenerate button
      */
@@ -366,6 +458,9 @@ class UIController {
     setEditingEnabled(enabled) {
         if (this.elements.editMode) {
             this.elements.editMode.disabled = !enabled;
+        }
+        if (this.elements.countySelect) {
+            this.elements.countySelect.disabled = !enabled;
         }
         if (this.elements.polygonSelect) {
             this.elements.polygonSelect.disabled = !enabled;
@@ -399,10 +494,14 @@ class UIController {
      */
     resetUI() {
         this.setMode(false); // View mode
-        this.setSelectedPolygon(null);
-        if (this.elements.polygonSelect) {
-            this.elements.polygonSelect.innerHTML = '<option value="">Choose a polygon to edit...</option>';
+        this._allPolygons = [];
+        if (this.elements.countySelect) {
+            this.elements.countySelect.innerHTML = '<option value="">— select —</option>';
         }
+        if (this.elements.polygonSelect) {
+            this.elements.polygonSelect.innerHTML = '<option value="">— select —</option>';
+        }
+        this.setSelectedPolygon(null);
         this.updatePolygonInfo(null);
         this.hideSharedVertexInfo();
         this.setExportEnabled(false);
@@ -480,6 +579,18 @@ class UIController {
             }
         }
         
+        // County dropdown: repopulate polygon list, clear selection
+        if (this.elements.countySelect) {
+            this.elements.countySelect.addEventListener('change', () => {
+                this._repopulatePolygonDropdown();
+                if (this.elements.polygonSelect) this.elements.polygonSelect.value = '';
+                if (handlers.onPolygonSelect) {
+                    // Fire a synthetic empty-selection event so the editor deselects
+                    handlers.onPolygonSelect({ target: { value: '' } });
+                }
+            });
+        }
+
         if (handlers.onPolygonSelect && this.elements.polygonSelect) {
             this.elements.polygonSelect.addEventListener('change', handlers.onPolygonSelect);
         }

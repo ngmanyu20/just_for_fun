@@ -51,6 +51,16 @@ function setupLayerButtons() {
             }
         });
     }
+
+    const streetMapBtn = document.getElementById('streetMapBtn');
+    if (streetMapBtn) {
+        streetMapBtn.addEventListener('click', function() {
+            if (window.polygonEditor) {
+                const visible = window.polygonEditor.toggleStreetLayer();
+                streetMapBtn.classList.toggle('active', visible);
+            }
+        });
+    }
 }
 
 /**
@@ -160,6 +170,7 @@ function showCsvList(files) {
             if (window.polygonEditor) {
                 try {
                     await window.polygonEditor.handleFileSelect({ target: { value: file.url } });
+                    window._currentCsvFilename = file.name;
                     statusEl.textContent = `Loaded ${file.name}`;
                     modalBackdrop.classList.remove('open');
                 } catch (e) {
@@ -325,11 +336,412 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        // Change Density — opens input modal for the currently selected polygon
+        const changeDensityBtn = document.getElementById('changeDensityBtn');
+        if (changeDensityBtn) {
+            changeDensityBtn.addEventListener('click', () => {
+                const editor = window.polygonEditor;
+                if (!editor) return;
+                if (editor.selectedPolygonIndex === null) {
+                    alert('Please select a polygon first.');
+                    return;
+                }
+                editor.showDensityInput(editor.selectedPolygonIndex);
+            });
+        }
+
+        // Density input modal buttons
+        const densityInputConfirm = document.getElementById('densityInputConfirm');
+        const densityInputCancel  = document.getElementById('densityInputCancel');
+        const densityInputValue   = document.getElementById('densityInputValue');
+
+        if (densityInputConfirm) {
+            densityInputConfirm.addEventListener('click', () => {
+                window.polygonEditor?.applyDensityChange(densityInputValue.value);
+            });
+        }
+        if (densityInputCancel) {
+            densityInputCancel.addEventListener('click', () => {
+                window.polygonEditor?.closeDensityModal();
+            });
+        }
+        if (densityInputValue) {
+            // Confirm on Enter, cancel on Escape
+            densityInputValue.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')  window.polygonEditor?.applyDensityChange(densityInputValue.value);
+                if (e.key === 'Escape') window.polygonEditor?.closeDensityModal();
+            });
+        }
+
         // Vertex Simplification
         const simplifyBtn = document.getElementById('simplifyBtn');
         if (simplifyBtn) {
             simplifyBtn.addEventListener('click', () => {
                 if (window.polygonEditor) window.polygonEditor.handleSimplification();
+            });
+        }
+
+        // Update Neighbours
+        const updateNeighboursBtn = document.getElementById('updateNeighboursBtn');
+        if (updateNeighboursBtn) {
+            updateNeighboursBtn.addEventListener('click', () => {
+                if (window.polygonEditor) window.polygonEditor.handleUpdateNeighbours();
+            });
+        }
+
+        // ── Density layer controls ────────────────────────────────────────────
+        const densityColorMapBtn = document.getElementById('densityColorMapBtn');
+        const locationMapBtn     = document.getElementById('locationMapBtn');
+        const displayDataBtn     = document.getElementById('displayDataBtn');
+        const densityModeBtn     = document.getElementById('densityModeBtn');
+        const estPopModeBtn      = document.getElementById('estPopModeBtn');
+        const typeLabelBtn       = document.getElementById('typeLabelBtn');
+
+        // Density Color Map — mutually exclusive with Location Map
+        if (densityColorMapBtn) {
+            densityColorMapBtn.addEventListener('click', () => {
+                if (!window.polygonEditor) return;
+                const renderer = window.polygonEditor.renderer;
+                const active = window.polygonEditor.toggleDensityColorMap();
+                densityColorMapBtn.classList.toggle('active', active);
+                // Turn off the other colour maps when density map is activated
+                if (active) {
+                    if (renderer.options.showLocationColorMap) {
+                        renderer.options.showLocationColorMap = false;
+                        if (locationMapBtn) locationMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showTypeColorMap) {
+                        renderer.options.showTypeColorMap = false;
+                        const typeMapBtn = document.getElementById('typeMapBtn');
+                        if (typeMapBtn) typeMapBtn.classList.remove('active');
+                    }
+                }
+                window.polygonEditor.draw();
+            });
+        }
+
+        // Location Map — colour polygons by Location field (mutually exclusive with Density Color Map)
+        if (locationMapBtn) {
+            locationMapBtn.addEventListener('click', () => {
+                if (!window.polygonEditor) return;
+                const renderer = window.polygonEditor.renderer;
+                const next = !renderer.options.showLocationColorMap;
+                renderer.options.showLocationColorMap = next;
+                locationMapBtn.classList.toggle('active', next);
+                // Turn off the other two colour maps when location map is activated
+                if (next) {
+                    if (renderer.options.showDensityColorMap) {
+                        renderer.options.showDensityColorMap = false;
+                        if (densityColorMapBtn) densityColorMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showTypeColorMap) {
+                        renderer.options.showTypeColorMap = false;
+                        if (typeMapBtn) typeMapBtn.classList.remove('active');
+                    }
+                }
+                // Ensure Display Data is on when Location Map is activated
+                if (next && !renderer.options.showDensityLabel) {
+                    setLabelMode('density');
+                }
+                window.polygonEditor.draw();
+            });
+        }
+
+        // Type Map — colour polygons by Type/Code (mutually exclusive with Density & Location maps)
+        const typeMapBtn = document.getElementById('typeMapBtn');
+        if (typeMapBtn) {
+            typeMapBtn.addEventListener('click', () => {
+                if (!window.polygonEditor) return;
+                const renderer = window.polygonEditor.renderer;
+                const next = !renderer.options.showTypeColorMap;
+                renderer.options.showTypeColorMap = next;
+                typeMapBtn.classList.toggle('active', next);
+                // Turn off the other two colour maps
+                if (next) {
+                    if (renderer.options.showDensityColorMap) {
+                        renderer.options.showDensityColorMap = false;
+                        if (densityColorMapBtn) densityColorMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showLocationColorMap) {
+                        renderer.options.showLocationColorMap = false;
+                        if (locationMapBtn) locationMapBtn.classList.remove('active');
+                    }
+                    // Ensure Display Data is on
+                    if (!renderer.options.showDensityLabel) setLabelMode('density');
+                }
+                window.polygonEditor.draw();
+            });
+        }
+
+        // displayDataBtn = master ON/OFF, always lit when any label is showing.
+        // densityModeBtn / estPopModeBtn / typeLabelBtn = mutually exclusive sub-modes.
+        //   'density'       → density numbers, Location-Type overlay off
+        //   'estPopulation' → est-population numbers, Location-Type overlay off
+        //   'locationType'  → density numbers + Location-Type overlay
+        //   null            → all labels off
+
+        function setLabelMode(mode) {
+            // mode: null | 'density' | 'estPopulation' | 'locationType'
+            if (!window.polygonEditor) return;
+            const renderer = window.polygonEditor.renderer;
+
+            if (mode === null) {
+                // Master OFF — clear everything
+                renderer.options.showDensityLabel      = false;
+                renderer.options.showLocationTypeLabel = false;
+                displayDataBtn.classList.remove('active');
+                densityModeBtn.classList.remove('active');
+                estPopModeBtn.classList.remove('active');
+                if (typeLabelBtn) typeLabelBtn.classList.remove('active');
+            } else {
+                // displayDataBtn always lit; exactly one sub-mode lit
+                renderer.options.showDensityLabel = true;
+                displayDataBtn.classList.add('active');
+                densityModeBtn.classList.toggle('active', mode === 'density');
+                estPopModeBtn.classList.toggle('active',  mode === 'estPopulation');
+                if (typeLabelBtn) typeLabelBtn.classList.toggle('active', mode === 'locationType');
+
+                renderer.options.showLocationTypeLabel = (mode === 'locationType');
+                // locationType shows population (actual or estimated), not raw density
+                renderer.setDensityMode(
+                    (mode === 'estPopulation' || mode === 'locationType') ? 'estPopulation' : 'density'
+                );
+            }
+            window.polygonEditor.draw();
+        }
+
+        // Master toggle — turns on with density as default sub-mode
+        if (displayDataBtn) {
+            displayDataBtn.addEventListener('click', () => {
+                const isOn = window.polygonEditor?.renderer.options.showDensityLabel;
+                setLabelMode(isOn ? null : 'density');
+            });
+        }
+
+        // Mutually exclusive sub-modes
+        if (densityModeBtn) densityModeBtn.addEventListener('click', () => setLabelMode('density'));
+        if (estPopModeBtn)  estPopModeBtn.addEventListener('click',  () => setLabelMode('estPopulation'));
+        if (typeLabelBtn)   typeLabelBtn.addEventListener('click',   () => setLabelMode('locationType'));
+
+        // Expose for AppMode.set() initialisation in index.html
+        window._setLabelMode = setLabelMode;
+
+        /**
+         * Update the Est Population button label based on whether the loaded
+         * polygons have actual population data in the CSV.
+         * Call this after any CSV load.
+         */
+        window._updatePopulationBtnLabel = function(polygons) {
+            if (!estPopModeBtn) return;
+            const hasActual = polygons && polygons.some(
+                p => !isNaN(p.actualPopulation) && p.actualPopulation > 0
+            );
+            estPopModeBtn.textContent = hasActual ? 'Population' : 'Est Population';
+        };
+
+        // ── Edit Location / Edit Type / Disable Change (mutually exclusive) ────
+        const editLocationBtn  = document.getElementById('editLocationBtn');
+        const editTypeBtn      = document.getElementById('editTypeBtn');
+        const disableChangeBtn = document.getElementById('disableChangeBtn');
+
+        const editModeBtns = [editLocationBtn, editTypeBtn, disableChangeBtn].filter(Boolean);
+        const changeLocationRow = document.getElementById('changeLocationRow');
+        const changeTypeRow     = document.getElementById('changeTypeRow');
+
+        function setEditDistrictMode(activeBtn) {
+            editModeBtns.forEach(btn => btn.classList.remove('active'));
+            if (activeBtn) activeBtn.classList.add('active');
+            if (changeLocationRow) changeLocationRow.style.display = (activeBtn === editLocationBtn) ? 'block' : 'none';
+            if (changeTypeRow)     changeTypeRow.style.display     = (activeBtn === editTypeBtn)     ? 'block' : 'none';
+        }
+
+        // Default: Disable Change is active
+        setEditDistrictMode(disableChangeBtn);
+
+        if (editLocationBtn)  editLocationBtn.addEventListener('click',  () => setEditDistrictMode(editLocationBtn));
+        if (editTypeBtn)      editTypeBtn.addEventListener('click',      () => setEditDistrictMode(editTypeBtn));
+        if (disableChangeBtn) disableChangeBtn.addEventListener('click', () => setEditDistrictMode(disableChangeBtn));
+
+        // ── Change Location modal ─────────────────────────────────────────────
+        const changeLocationBtn    = document.getElementById('changeLocationBtn');
+        const locationModal        = document.getElementById('locationModal');
+        const locationModalConfirm = document.getElementById('locationModalConfirm');
+        const locationModalCancel  = document.getElementById('locationModalCancel');
+
+        if (changeLocationBtn) {
+            changeLocationBtn.addEventListener('click', () => {
+                const editor = window.polygonEditor;
+                if (!editor) return;
+                if (editor.selectedPolygonIndex === null) {
+                    alert('Please select a polygon first.');
+                    return;
+                }
+                // Pre-select based on the primary (last-clicked) polygon's current location
+                const primaryPolygon = editor.polygons[editor.selectedPolygonIndex];
+                const currentLoc = primaryPolygon.location || '';
+                const radios = document.querySelectorAll('input[name="locationChoice"]');
+                radios.forEach(r => {
+                    r.checked = (currentLoc === '' ? r.value === 'NA' : r.value === currentLoc);
+                });
+                // Update modal title to show how many polygons are selected
+                const selCount = editor.selectedPolygonIndices.size;
+                const modalTitle = document.querySelector('#locationModal [style*="font-weight:700"]');
+                if (modalTitle) {
+                    modalTitle.textContent = selCount > 1
+                        ? `Select Location (${selCount} polygons)`
+                        : 'Select Location';
+                }
+                if (locationModal) locationModal.style.display = 'flex';
+            });
+        }
+
+        if (locationModalCancel) {
+            locationModalCancel.addEventListener('click', () => {
+                if (locationModal) locationModal.style.display = 'none';
+            });
+        }
+
+        if (locationModalConfirm) {
+            locationModalConfirm.addEventListener('click', () => {
+                const editor = window.polygonEditor;
+                if (!editor || editor.selectedPolygonIndex === null) return;
+
+                const selected = document.querySelector('input[name="locationChoice"]:checked');
+                if (!selected) { alert('Please select a location.'); return; }
+
+                const chosenValue = selected.value === 'NA' ? '' : selected.value;
+
+                // Apply to all selected polygons (single or multi-selection)
+                const indices = editor.selectedPolygonIndices.size > 0
+                    ? Array.from(editor.selectedPolygonIndices)
+                    : [editor.selectedPolygonIndex];
+
+                indices.forEach(idx => {
+                    const polygon = editor.polygons[idx];
+                    if (!polygon) return;
+                    polygon.location = chosenValue;
+                    // Keep DataManager's originalData in sync for CSV export
+                    if (editor.dataManager.originalData &&
+                            editor.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                        editor.dataManager.originalData[polygon.rowIndex].Location = chosenValue;
+                    }
+                });
+
+                const label = indices.length > 1
+                    ? `Location changed: ${indices.length} polygons`
+                    : `Location changed: ${editor.polygons[indices[0]]?.id}`;
+                editor.historyManager.saveToHistory(editor.polygons, label);
+                editor.updateUndoRedoButtons();
+                editor.draw();
+                editor.updatePolygonInfo();
+
+                if (locationModal) locationModal.style.display = 'none';
+            });
+        }
+
+        // ── Change Type modal ─────────────────────────────────────────────────
+        // Code options per Location (mirrors the CLUSTER lookup in display.html)
+        const TYPE_CLUSTER = {
+            'Inner City': { S:'Prestige', A1:'Prosperous', A2:'Progressive', B1:'Academic', C1:'Professional', C2:'Middle Class', D1:'Stable Family', D2:'Working-Class', E1:'Artists', E2:'Grassroots', F1:'Deprived', F2:'Social Estate', TECH:'Technological Hub', UNI:'Student Campus' },
+            'Outer City': { A1:'Prosperous', A2:'Progressive', B1:'Academic', C1:'Professional', C2:'Middle Class', D1:'Stable Family', D2:'Working-Class', E1:'Artists', E2:'Grassroots', F1:'Deprived', F2:'Social Estate', UNI:'Student Campus' },
+            'Rural':      { A1:'Prosperous', C1:'New-Build Family', D1:'Mixed', D2:'Agricultural', F1:'Deprived' },
+            'Suburb':     { A1:'Prosperous', B1:'Academic', C1:'Professional', C2:'Middle Class', E2:'Grassroots', F1:'Deprived', UNI:'Student Campus' },
+            'Town':       { B2:'Mixed New Town', C1:'Professional', C2:'Middle Class', D2:'Working-Class', E1:'Mixed Rural Town', F1:'Deprived' },
+        };
+
+        const changeTypeBtn    = document.getElementById('changeTypeBtn');
+        const typeModal        = document.getElementById('typeModal');
+        const typeModalConfirm = document.getElementById('typeModalConfirm');
+        const typeModalCancel  = document.getElementById('typeModalCancel');
+        const typeRadioList    = document.getElementById('typeRadioList');
+        const typeModalTitle   = document.getElementById('typeModalTitle');
+        const typeModalSubtitle = document.getElementById('typeModalSubtitle');
+
+        function buildTypeRadioList(location, currentCode) {
+            if (!typeRadioList) return;
+            typeRadioList.innerHTML = '';
+            const codes = TYPE_CLUSTER[location] || {};
+
+            Object.entries(codes).forEach(([code, label]) => {
+                const el = document.createElement('label');
+                el.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer;';
+                el.innerHTML = `<input type="radio" name="typeChoice" value="${code}" ${currentCode === code ? 'checked' : ''}> ${code} — ${label}`;
+                typeRadioList.appendChild(el);
+            });
+
+            // NA option
+            const naEl = document.createElement('label');
+            naEl.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer;';
+            naEl.innerHTML = `<input type="radio" name="typeChoice" value="NA" ${!currentCode ? 'checked' : ''}> NA`;
+            typeRadioList.appendChild(naEl);
+        }
+
+        if (changeTypeBtn) {
+            changeTypeBtn.addEventListener('click', () => {
+                const editor = window.polygonEditor;
+                if (!editor) return;
+                if (editor.selectedPolygonIndex === null) {
+                    alert('Please select a polygon first.');
+                    return;
+                }
+                const primary = editor.polygons[editor.selectedPolygonIndex];
+                if (!primary.location) {
+                    alert('This polygon has no Location set.\nPlease assign a Location first using Edit Location.');
+                    return;
+                }
+                // Build radio list from cluster options for this location
+                buildTypeRadioList(primary.location, primary.polygonType || '');
+
+                const selCount = editor.selectedPolygonIndices.size;
+                if (typeModalTitle) {
+                    typeModalTitle.textContent = selCount > 1
+                        ? `Select Type (${selCount} polygons)`
+                        : 'Select Type';
+                }
+                if (typeModalSubtitle) typeModalSubtitle.textContent = primary.location;
+                if (typeModal) typeModal.style.display = 'flex';
+            });
+        }
+
+        if (typeModalCancel) {
+            typeModalCancel.addEventListener('click', () => {
+                if (typeModal) typeModal.style.display = 'none';
+            });
+        }
+
+        if (typeModalConfirm) {
+            typeModalConfirm.addEventListener('click', () => {
+                const editor = window.polygonEditor;
+                if (!editor || editor.selectedPolygonIndex === null) return;
+
+                const selected = document.querySelector('input[name="typeChoice"]:checked');
+                if (!selected) { alert('Please select a type.'); return; }
+
+                const chosenCode = selected.value === 'NA' ? '' : selected.value;
+
+                const indices = editor.selectedPolygonIndices.size > 0
+                    ? Array.from(editor.selectedPolygonIndices)
+                    : [editor.selectedPolygonIndex];
+
+                indices.forEach(idx => {
+                    const polygon = editor.polygons[idx];
+                    if (!polygon) return;
+                    polygon.polygonType = chosenCode;
+                    if (editor.dataManager.originalData &&
+                            editor.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                        editor.dataManager.originalData[polygon.rowIndex].County_Type = chosenCode;
+                    }
+                });
+
+                const label = indices.length > 1
+                    ? `Type changed: ${indices.length} polygons`
+                    : `Type changed: ${editor.polygons[indices[0]]?.id}`;
+                editor.historyManager.saveToHistory(editor.polygons, label);
+                editor.updateUndoRedoButtons();
+                editor.draw();
+                editor.updatePolygonInfo();
+
+                if (typeModal) typeModal.style.display = 'none';
             });
         }
 
@@ -417,7 +829,8 @@ window.addEventListener('load', async function() {
             // Load the sample data
             const result = await polygonEditor.dataManager.loadCSV(file);
             polygonEditor.loadPolygons(result.polygons);
-            
+            if (window._updatePopulationBtnLabel) window._updatePopulationBtnLabel(result.polygons);
+
             console.log(`Sample data loaded: ${result.count} polygons`);
             polygonEditor.uiController.showSuccess(`Sample data loaded: ${result.count} polygons`);
             

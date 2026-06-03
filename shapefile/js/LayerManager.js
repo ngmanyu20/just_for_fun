@@ -113,8 +113,17 @@ class LayerManager {
 
                 const merged = await response.json();
 
-                // Convert exterior coordinates back to polygon format
-                const exteriorRing = merged.exterior.map(([x, y]) => ({x, y}));
+                // Python exterior rings from unary_union — used for both rendering and
+                // FixedCountyVertices (vertex protection).
+                // The JS edge-extraction approach was abandoned: sub-polygon coordinates are
+                // floating-point (not integer grid-aligned), so edges between adjacent polygons
+                // don't cancel exactly in the edge-count map, causing interior diagonal edges
+                // to leak into the county outline.
+                const parts = merged.parts || [{ exterior: merged.exterior, holes: merged.holes || [] }];
+                const fixedRings = parts.map(p => p.exterior.map(([x, y]) => ({x, y})));
+
+                // Use Python exterior for rendering — geometrically clean outline.
+                const rings = fixedRings;
 
                 countyPolygons.push({
                     id: countyName,
@@ -123,8 +132,8 @@ class LayerManager {
                     layerType: 'county',
                     isCountyView: true,
                     subPolygons: data.subPolygons,
-                    rings: [exteriorRing],
-                    holes: merged.holes || [],
+                    rings,       // Python exterior — clean outline for rendering
+                    fixedRings,  // Python exterior — authoritative for FixedCountyVertices
                     vertexCount: merged.vertex_count
                 });
 
@@ -133,11 +142,11 @@ class LayerManager {
             } catch (error) {
                 console.error(`Failed to merge ${countyName}, using fallback:`, error);
 
-                // Fallback to JS method
-                const outerBoundary = this.extractOuterBoundary(data.subPolygons);
-                const simplifiedBoundary = outerBoundary.length > 0
-                    ? this.simplifyVertices(outerBoundary)
-                    : data.subPolygons[0].rings[0];
+                // Fallback to JS method — extractOuterBoundary now returns all loops
+                const outerLoops = this.extractOuterBoundary(data.subPolygons);
+                const rings = outerLoops.length > 0
+                    ? outerLoops.map(loop => this.simplifyVertices(loop))
+                    : [data.subPolygons[0].rings[0]];  // last-resort: first sub-polygon ring
 
                 countyPolygons.push({
                     id: countyName,
@@ -146,7 +155,7 @@ class LayerManager {
                     layerType: 'county',
                     isCountyView: true,
                     subPolygons: data.subPolygons,
-                    rings: [simplifiedBoundary]
+                    rings  // all boundary loops (one per island)
                 });
             }
         }
@@ -174,9 +183,10 @@ class LayerManager {
     }
 
     /**
-     * Extract outer boundary from multiple polygons
+     * Extract outer boundary from multiple polygons.
+     * Returns an array of rings (one per disconnected boundary loop).
      * @param {Array<Object>} polygons - Polygons to process
-     * @returns {Array<Object>} - Outer boundary edges
+     * @returns {Array<Array<Object>>} - Array of rings, each ring is [{x,y}…]
      */
     extractOuterBoundary(polygons) {
         // Build edge map (edge -> count)
@@ -197,7 +207,7 @@ class LayerManager {
             });
         });
 
-        // Outer boundary edges appear only once (internal edges appear twice)
+        // Outer boundary edges appear only once (internal shared edges appear twice)
         const outerEdges = [];
 
         for (const [edgeKey, count] of edgeMap.entries()) {
@@ -207,7 +217,7 @@ class LayerManager {
             }
         }
 
-        // Connect edges into a ring
+        // Connect edges into all boundary loops (county may have disconnected islands)
         return this.connectEdges(outerEdges);
     }
 
@@ -248,51 +258,55 @@ class LayerManager {
     }
 
     /**
-     * Connect disconnected edges into a closed ring
+     * Connect boundary edges into one or more closed rings.
+     * A county may consist of disconnected islands, each producing its own loop.
      * @param {Array<Object>} edges - Array of edge objects {p1, p2}
-     * @returns {Array<Object>} - Connected ring of vertices
+     * @returns {Array<Array<Object>>} - Array of rings, each ring is [{x,y}…]
      */
     connectEdges(edges) {
         if (edges.length === 0) return [];
 
-        const vertices = [];
         const remainingEdges = [...edges];
+        const allRings = [];
 
-        // Start with first edge
-        let currentEdge = remainingEdges.shift();
-        vertices.push({ ...currentEdge.p1 });
-        vertices.push({ ...currentEdge.p2 });
-
-        // Connect edges
         while (remainingEdges.length > 0) {
-            const lastVertex = vertices[vertices.length - 1];
+            // Start a new loop with the first remaining edge
+            const loop = [];
+            let startEdge = remainingEdges.shift();
+            loop.push({ ...startEdge.p1 });
+            loop.push({ ...startEdge.p2 });
 
-            // Find edge that connects to last vertex
-            const nextEdgeIndex = remainingEdges.findIndex(edge =>
-                this.pointsEqual(edge.p1, lastVertex) || this.pointsEqual(edge.p2, lastVertex)
-            );
+            // Greedily extend the loop
+            while (remainingEdges.length > 0) {
+                const lastVertex = loop[loop.length - 1];
 
-            if (nextEdgeIndex === -1) {
-                // No more connected edges, break
-                break;
+                const nextIdx = remainingEdges.findIndex(edge =>
+                    this.pointsEqual(edge.p1, lastVertex) ||
+                    this.pointsEqual(edge.p2, lastVertex)
+                );
+
+                if (nextIdx === -1) break; // loop is complete (or data has a gap)
+
+                const nextEdge = remainingEdges.splice(nextIdx, 1)[0];
+                if (this.pointsEqual(nextEdge.p1, lastVertex)) {
+                    loop.push({ ...nextEdge.p2 });
+                } else {
+                    loop.push({ ...nextEdge.p1 });
+                }
             }
 
-            const nextEdge = remainingEdges.splice(nextEdgeIndex, 1)[0];
+            // Close the loop
+            if (loop.length > 0 && !this.pointsEqual(loop[0], loop[loop.length - 1])) {
+                loop.push({ ...loop[0] });
+            }
 
-            // Add the other vertex
-            if (this.pointsEqual(nextEdge.p1, lastVertex)) {
-                vertices.push({ ...nextEdge.p2 });
-            } else {
-                vertices.push({ ...nextEdge.p1 });
+            // Only keep loops with at least 3 unique vertices (a valid polygon)
+            if (loop.length >= 4) {
+                allRings.push(loop);
             }
         }
 
-        // Close the ring
-        if (vertices.length > 0 && !this.pointsEqual(vertices[0], vertices[vertices.length - 1])) {
-            vertices.push({ ...vertices[0] });
-        }
-
-        return vertices;
+        return allRings;
     }
 
     /**

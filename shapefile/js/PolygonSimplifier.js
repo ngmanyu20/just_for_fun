@@ -151,4 +151,123 @@ class PolygonSimplifier {
     _key(v) {
         return `${v.x.toFixed(6)},${v.y.toFixed(6)}`;
     }
+
+    // ─── RDP (Ramer-Douglas-Peucker) API ─────────────────────────────────────
+
+    /**
+     * Simplify one polygon using the Ramer-Douglas-Peucker algorithm.
+     * Vertices shared with adjacent polygons are never removed.
+     *
+     * @param {Array}  polygons   - All loaded polygons
+     * @param {number} targetIdx  - Index of polygon to simplify
+     * @param {number} epsilon    - Max perpendicular distance (data units); 0 = exact collinear only
+     * @returns {number}          - Number of vertices removed
+     */
+    simplifyRDP(polygons, targetIdx, epsilon) {
+        if (epsilon < 0) epsilon = 0;
+        const poly       = polygons[targetIdx];
+        const pinnedKeys = this._buildPinnedSet(polygons, targetIdx);
+        let removed = 0;
+        for (let ri = 0; ri < poly.rings.length; ri++) {
+            const orig       = poly.rings[ri];
+            const simplified = this._rdpRing(orig, pinnedKeys, epsilon);
+            removed += orig.length - simplified.length;
+            poly.rings[ri] = simplified;
+        }
+        return removed;
+    }
+
+    /** Vertices of targetIdx that appear in any other polygon → must not be moved. */
+    _buildPinnedSet(polygons, targetIdx) {
+        const otherKeys = new Set();
+        for (let i = 0; i < polygons.length; i++) {
+            if (i === targetIdx) continue;
+            for (const ring of polygons[i].rings) {
+                for (let j = 0; j < ring.length - 1; j++) otherKeys.add(this._key(ring[j]));
+            }
+        }
+        const pinned = new Set();
+        for (const ring of polygons[targetIdx].rings) {
+            for (let j = 0; j < ring.length - 1; j++) {
+                if (otherKeys.has(this._key(ring[j]))) pinned.add(this._key(ring[j]));
+            }
+        }
+        return pinned;
+    }
+
+    /**
+     * Apply RDP to a single closed ring.
+     * Pinned vertices and index-0 are always kept.
+     * The ring is split at anchor points; RDP runs on each arc independently.
+     */
+    _rdpRing(ring, pinnedKeys, epsilon) {
+        const uLen = ring.length - 1;   // unique vertices (closing excluded)
+        if (uLen < 4) return ring.slice();
+
+        // Collect mandatory anchors: index 0 (seam) + all pinned vertices
+        const keep = new Set([0]);
+        for (let i = 0; i < uLen; i++) {
+            if (pinnedKeys.has(this._key(ring[i]))) keep.add(i);
+        }
+
+        let anchors = [...keep].sort((a, b) => a - b);
+
+        // Need ≥ 2 anchors so each arc has a well-defined start/end line
+        if (anchors.length === 1) {
+            let maxD = -1, antipodal = Math.floor(uLen / 2);
+            for (let i = 1; i < uLen; i++) {
+                const d = Math.hypot(ring[i].x - ring[0].x, ring[i].y - ring[0].y);
+                if (d > maxD) { maxD = d; antipodal = i; }
+            }
+            keep.add(antipodal);
+            anchors = [...keep].sort((a, b) => a - b);
+        }
+
+        // RDP on each arc between consecutive anchors
+        for (let s = 0; s < anchors.length; s++) {
+            const a0 = anchors[s];
+            const a1 = anchors[(s + 1) % anchors.length];
+
+            // Intermediate indices from a0+1 to a1-1 (wrapping)
+            const inter = [];
+            let cur = (a0 + 1) % uLen;
+            while (cur !== a1 && inter.length <= uLen) {
+                inter.push(cur);
+                cur = (cur + 1) % uLen;
+            }
+            if (inter.length === 0) continue;
+
+            this._rdpKeep(ring, inter, ring[a0], ring[a1], epsilon, keep);
+        }
+
+        const sorted = [...keep].sort((a, b) => a - b);
+        const newRing = sorted.map(i => ({ x: ring[i].x, y: ring[i].y }));
+        newRing.push({ x: newRing[0].x, y: newRing[0].y });
+        return newRing;
+    }
+
+    /**
+     * Recursive RDP on a sub-array of ring indices.
+     * Adds to keepSet the indices of vertices that must be retained.
+     */
+    _rdpKeep(ring, indices, startPt, endPt, epsilon, keepSet) {
+        if (indices.length === 0) return;
+        let maxDist = -1, maxI = 0;
+        for (let i = 0; i < indices.length; i++) {
+            const d = this._perpDist(startPt, endPt, ring[indices[i]]);
+            if (d > maxDist) { maxDist = d; maxI = i; }
+        }
+        if (maxDist < epsilon) return;   // all intermediate vertices removable
+        keepSet.add(indices[maxI]);
+        this._rdpKeep(ring, indices.slice(0, maxI),       startPt,          ring[indices[maxI]], epsilon, keepSet);
+        this._rdpKeep(ring, indices.slice(maxI + 1), ring[indices[maxI]], endPt,                epsilon, keepSet);
+    }
+
+    /** Perpendicular distance from point p to the line through a and b. */
+    _perpDist(a, b, p) {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 < 1e-14) return Math.hypot(p.x - a.x, p.y - a.y);
+        return Math.abs(dx * (a.y - p.y) - dy * (a.x - p.x)) / Math.sqrt(len2);
+    }
 }

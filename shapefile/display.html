@@ -24,7 +24,7 @@
             color: #667eea;
             padding-bottom: 6px;
             border-bottom: 2px solid #e9ecef;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .panel {
@@ -34,7 +34,6 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
 
-        /* Select County */
         .control-group label {
             font-weight: 600;
             font-size: 10px;
@@ -51,33 +50,37 @@
             font-size: 11px;
         }
 
-        /* Polygon Info */
-        #displayPolygonInfo {
+        /* Info rows */
+        .info-table {
+            width: 100%;
             font-size: 11px;
-            line-height: 1.6;
+            border-collapse: collapse;
         }
 
-        #displayPolygonInfo h4 {
-            font-size: 13px;
-            margin-bottom: 6px;
-            color: #222;
+        .info-table td {
+            padding: 3px 0;
+            vertical-align: top;
         }
 
-        #displayPolygonInfo p {
-            margin-bottom: 3px;
+        .info-table td:first-child {
+            font-weight: 600;
+            color: #495057;
+            white-space: nowrap;
+            padding-right: 10px;
+            width: 1%;
         }
 
-        #displaySharedInfo {
+        .placeholder {
             font-size: 11px;
-            color: #555;
-            margin-top: 6px;
+            color: #999;
         }
 
+        /* Coordinates */
         .coords-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-top: 10px;
+            margin-top: 12px;
             margin-bottom: 4px;
         }
 
@@ -112,14 +115,17 @@
             overflow-y: auto;
         }
 
-        /* Vertex Info */
-        #displayVertexInfo {
-            font-size: 11px;
-            line-height: 1.6;
-            padding: 8px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            min-height: 60px;
+        /* Mode badge */
+        .mode-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-bottom: 14px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            letter-spacing: 0.4px;
         }
 
         .status-bar {
@@ -127,14 +133,67 @@
             color: #aaa;
             text-align: right;
         }
+
+        /* ── Vertex panel ─────────────────────────────────────────────────── */
+        .vertex-count-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #764ba2, #667eea);
+            color: white;
+            letter-spacing: 0.3px;
+        }
+
+        .vertex-card {
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            background: #fafbff;
+        }
+
+        .vertex-card:last-child { margin-bottom: 0; }
+
+        .vertex-card-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: #495057;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .vertex-type-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            vertical-align: middle;
+        }
+        .vtype-fixed      { background:#cce5ff; color:#004085; }
+        .vtype-crosscounty{ background:#f8d7da; color:#721c24; }
+        .vtype-samecounty { background:#fff3cd; color:#856404; }
+        .vtype-ordinary   { background:#d4edda; color:#155724; }
     </style>
 </head>
 <body>
 
-    <!-- Select County -->
+    <!-- Active mode indicator -->
+    <div id="modeBadge" class="mode-badge">Edit Polygon</div>
+
+    <!-- Select Polygon -->
     <div class="panel">
-        <h2>🗃️ Select County</h2>
+        <h2>🗃️ Select Polygon</h2>
+        <div class="control-group" style="margin-bottom: 8px;">
+            <label>County</label>
+            <select id="displayCountySelect"></select>
+        </div>
         <div class="control-group">
+            <label>Sub-County</label>
             <select id="displayPolygonSelect"></select>
         </div>
     </div>
@@ -142,8 +201,9 @@
     <!-- Polygon Information -->
     <div class="panel">
         <h2>📊 Polygon Information</h2>
-        <div id="displayPolygonInfo"><p style="color:#999;">Select a polygon to see its information.</p></div>
-        <div id="displaySharedInfo"></div>
+        <div id="displayPolygonInfo">
+            <p class="placeholder">Select a polygon to see its information.</p>
+        </div>
         <div class="coords-header">
             <span>Coordinates</span>
             <button class="coords-toggle" id="coordsToggleBtn">+</button>
@@ -153,26 +213,106 @@
         </div>
     </div>
 
-    <!-- Vertex Info -->
+    <!-- County Information -->
     <div class="panel">
-        <h2>📍 Vertex Info</h2>
+        <h2>🏛️ County Information</h2>
+        <div id="displayCountyInfo">
+            <p class="placeholder">Select a polygon to see county information.</p>
+        </div>
+    </div>
+
+    <!-- Multiple Polygons -->
+    <div class="panel" id="panelMultiPolygon" style="display:none;">
+        <h2>🗂️ Multiple Polygons</h2>
+        <div id="displayMultiInfo"></div>
+    </div>
+
+    <!-- Vertex Selection — only shown in Edit Polygon mode -->
+    <div class="panel" id="panelVertexInfo" style="display:none;">
+        <h2>📍 Vertex Selection</h2>
         <div id="displayVertexInfo">
-            <div style="font-weight:bold;margin-bottom:4px;">No vertex selected</div>
-            <div style="font-size:10px;color:#999;">Shift+Click on a vertex to select</div>
+            <p class="placeholder">Shift+Click a vertex to inspect it.</p>
         </div>
     </div>
 
     <div class="status-bar" id="statusBar">Waiting for main window…</div>
 
     <script>
-        const displaySelect   = document.getElementById('displayPolygonSelect');
-        const displayInfo     = document.getElementById('displayPolygonInfo');
-        const displayShared   = document.getElementById('displaySharedInfo');
-        const displayCoords   = document.getElementById('displayCoordinates');
-        const displayVertex   = document.getElementById('displayVertexInfo');
-        const statusBar       = document.getElementById('statusBar');
-        const coordsWrapper   = document.getElementById('coordsWrapper');
-        const coordsToggleBtn = document.getElementById('coordsToggleBtn');
+        const displayCountySelect  = document.getElementById('displayCountySelect');
+        const displaySelect        = document.getElementById('displayPolygonSelect');
+        const displayInfo          = document.getElementById('displayPolygonInfo');
+        const displayCountyInfo    = document.getElementById('displayCountyInfo');
+        const displayCoords        = document.getElementById('displayCoordinates');
+        const displayMultiInfo     = document.getElementById('displayMultiInfo');
+        const panelMultiPolygon    = document.getElementById('panelMultiPolygon');
+        const panelVertexInfo      = document.getElementById('panelVertexInfo');
+        const displayVertexInfo    = document.getElementById('displayVertexInfo');
+        const statusBar            = document.getElementById('statusBar');
+        const coordsWrapper        = document.getElementById('coordsWrapper');
+        const coordsToggleBtn      = document.getElementById('coordsToggleBtn');
+        const modeBadge            = document.getElementById('modeBadge');
+
+        const panelPolygonInfo  = displayInfo.closest('.panel');
+        const panelCountyInfo   = displayCountyInfo.closest('.panel');
+
+        const MODE_LABELS = {
+            polygon:      'Edit Polygon',
+            population:   'Edit Population Density',
+            districtType: 'Edit District Type',
+        };
+
+        let currentMode = null;   // null forces first applyMode call to always run
+
+        function applyMode(mode) {
+            if (mode === currentMode) return;
+            currentMode = mode;
+
+            modeBadge.textContent = MODE_LABELS[mode] || mode;
+
+            // Each mode shows the same panels for now;
+            // visibility rules go here when per-mode content is defined.
+            panelPolygonInfo.style.display = '';
+            panelCountyInfo.style.display  = '';
+        }
+
+        // ── Community-cluster lookup ─────────────────────────────────────────────
+        // Source: csv_input/Info_CSV/Community_matrix.csv
+        // Key: location (CSV "Type" column) → code → Community Cluster name
+        // Cluster names are consistent across all Regions for the same Location+Code.
+        const CLUSTER = {
+            'Inner City': {
+                S:'Prestige', A1:'Prosperous', A2:'Progressive', B1:'Academic',
+                C1:'Professional', C2:'Middle Class', D1:'Stable Family', D2:'Working-Class',
+                E1:'Artists', E2:'Grassroots', F1:'Deprived', F2:'Social Estate',
+                TECH:'Technological Hub', UNI:'Student Campus'
+            },
+            'Outer City': {
+                A1:'Prosperous', A2:'Progressive', B1:'Academic', C1:'Professional',
+                C2:'Middle Class', D1:'Stable Family', D2:'Working-Class', E1:'Artists',
+                E2:'Grassroots', F1:'Deprived', F2:'Social Estate', UNI:'Student Campus'
+            },
+            'Rural': {
+                A1:'Prosperous', C1:'New-Build Family', D1:'Mixed',
+                D2:'Agricultural', F1:'Deprived'
+            },
+            'Suburb': {
+                A1:'Prosperous', B1:'Academic', C1:'Professional', C2:'Middle Class',
+                E2:'Grassroots', F1:'Deprived', UNI:'Student Campus'
+            },
+            'Town': {
+                B2:'Mixed New Town', C1:'Professional', C2:'Middle Class',
+                D2:'Working-Class', E1:'Mixed Rural Town', F1:'Deprived'
+            }
+        };
+
+        /** Returns "Code — Cluster Name" or just the code if no match found. */
+        function clusterLabel(location, code) {
+            if (!code) return '—';
+            const cluster = CLUSTER[location] && CLUSTER[location][code];
+            return cluster ? `${code} — ${cluster}` : code;
+        }
+
+        const METERS_PER_UNIT = 1000 / 8.01;
 
         coordsToggleBtn.addEventListener('click', () => {
             const expanded = coordsWrapper.style.display !== 'none';
@@ -180,10 +320,155 @@
             coordsToggleBtn.textContent = expanded ? '+' : '−';
         });
 
-        let lastSelectValue = '';
+        /** Shoelace area in km² for a polygon object (rings array). */
+        function calcAreaKm2(polygon) {
+            let areaUnits = 0;
+            polygon.rings.forEach((ring, ringIdx) => {
+                let ringArea = 0;
+                for (let i = 0; i < ring.length - 1; i++) {
+                    ringArea += ring[i].x * ring[i + 1].y - ring[i + 1].x * ring[i].y;
+                }
+                ringArea = Math.abs(ringArea) / 2;
+                if (ringIdx === 0) areaUnits += ringArea;
+                else               areaUnits -= ringArea;
+            });
+            return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+        }
+
+        function fmt(n, decimals = 4) {
+            return Number(n).toFixed(decimals);
+        }
+
+        function renderPolygonInfo(polygon) {
+            const areaKm2    = calcAreaKm2(polygon);
+            const popDensity = polygon.populationDensity || 0;
+            const estPop     = areaKm2 * popDensity;
+
+            // Determine whether to show actual or estimated population
+            const hasActual  = !isNaN(polygon.actualPopulation) && polygon.actualPopulation > 0;
+            const popValue   = hasActual ? polygon.actualPopulation : estPop;
+            const popLabel   = hasActual ? 'Actual Population' : 'Est Population';
+            const densLabel  = hasActual ? 'Pop Density' : 'Pop Density';
+
+            const region   = polygon.region   || '—';
+            const location = polygon.location || '—';
+            const typeCode = polygon.polygonType || '';
+            const typeLabel = clusterLabel(location === '—' ? '' : location, typeCode);
+
+            // District-type rows: only show when the fields are populated
+            const hasDistrictData = polygon.region || polygon.location || polygon.polygonType;
+            const districtRows = hasDistrictData ? `
+                    <tr><td>Region</td><td>${region}</td></tr>
+                    <tr><td>Location</td><td>${location}</td></tr>
+                    <tr><td>Type</td><td>${typeLabel}</td></tr>` : '';
+
+            displayInfo.innerHTML = `
+                <table class="info-table">
+                    <tr><td>Sub-County</td><td>${polygon.id}</td></tr>
+                    <tr><td>Area</td><td>${fmt(areaKm2)} km²</td></tr>
+                    <tr><td>${densLabel}</td><td>${fmt(popDensity, 2)} /km²</td></tr>
+                    <tr><td>${popLabel}</td><td>${Math.round(popValue).toLocaleString()}</td></tr>
+                    ${districtRows}
+                </table>`;
+
+            // Coordinates
+            const coords = polygon.rings[0]
+                .map(p => `(${p.x.toFixed(4)}, ${p.y.toFixed(4)})`)
+                .join('\n');
+            displayCoords.textContent = coords;
+        }
+
+        function renderMultiInfo(selectedPolygons) {
+            if (!selectedPolygons || selectedPolygons.length < 2) {
+                panelMultiPolygon.style.display = 'none';
+                return;
+            }
+
+            const counties    = new Set(selectedPolygons.map(p => p.county).filter(Boolean));
+            let totalAreaKm2  = 0;
+            let totalEstPop   = 0;
+
+            selectedPolygons.forEach(p => {
+                const a = calcAreaKm2(p);
+                totalAreaKm2 += a;
+                totalEstPop  += a * (p.populationDensity || 0);
+            });
+
+            const estDensity = totalAreaKm2 > 0 ? totalEstPop / totalAreaKm2 : 0;
+
+            displayMultiInfo.innerHTML = `
+                <table class="info-table">
+                    <tr><td>Polygons Selected</td><td>${selectedPolygons.length}</td></tr>
+                    <tr><td>Counties</td><td>${counties.size} (${[...counties].join(', ')})</td></tr>
+                    <tr><td>Total Area</td><td>${fmt(totalAreaKm2)} km²</td></tr>
+                    <tr><td>Est Total Population</td><td>${Math.round(totalEstPop).toLocaleString()}</td></tr>
+                    <tr><td>Est Density</td><td>${fmt(estDensity, 2)} /km²</td></tr>
+                </table>`;
+
+            panelMultiPolygon.style.display = '';
+        }
+
+        function renderCountyInfo(countyName, allPolygons) {
+            const countyPolygons = allPolygons.filter(p => p.county === countyName);
+            if (countyPolygons.length === 0) {
+                displayCountyInfo.innerHTML = '<p class="placeholder">No polygons found for this county.</p>';
+                return;
+            }
+
+            let totalAreaKm2   = 0;
+            let totalEstPop    = 0;
+            let totalActualPop = 0;
+            let actualCount    = 0;
+
+            countyPolygons.forEach(p => {
+                const a = calcAreaKm2(p);
+                totalAreaKm2 += a;
+                totalEstPop  += a * (p.populationDensity || 0);
+                if (!isNaN(p.actualPopulation) && p.actualPopulation > 0) {
+                    totalActualPop += p.actualPopulation;
+                    actualCount++;
+                }
+            });
+
+            // Use actual totals only when every polygon in the county has actual data
+            const allActual    = actualCount === countyPolygons.length;
+            const totalPop     = allActual ? totalActualPop : totalEstPop;
+            const popDensity   = totalAreaKm2 > 0 ? totalPop / totalAreaKm2 : 0;
+            const popRowLabel  = allActual ? 'Total Population'    : 'Est Total Population';
+            const densRowLabel = allActual ? 'Population Density'  : 'Est Population Density';
+
+            // In Redistricting mode: show Allocated Seat = countyPop / quota
+            const opener = window.opener;
+            const isRedistricting = opener && !opener.closed &&
+                opener.AppMode && opener.AppMode.current === 'redistricting';
+            const quota = isRedistricting ? (opener._currentCouncilQuota || 0) : 0;
+            const allocatedRow = (isRedistricting && quota > 0)
+                ? `<tr><td>Allocated Seat</td><td>${(totalPop / quota).toFixed(2)}</td></tr>`
+                : '';
+
+            displayCountyInfo.innerHTML = `
+                <table class="info-table">
+                    <tr><td>County</td><td>${countyName}</td></tr>
+                    <tr><td>Area</td><td>${fmt(totalAreaKm2)} km²</td></tr>
+                    <tr><td>${popRowLabel}</td><td>${Math.round(totalPop).toLocaleString()}</td></tr>
+                    <tr><td>${densRowLabel}</td><td>${fmt(popDensity, 2)} /km²</td></tr>
+                    ${allocatedRow}
+                </table>`;
+        }
+
         let suppressChange = false;
 
-        // When the user picks a polygon in this window, drive the main window's select
+        displayCountySelect.addEventListener('change', () => {
+            if (suppressChange) return;
+            const opener = window.opener;
+            if (!opener || opener.closed) return;
+            const mainCounty = opener.document.getElementById('countySelect');
+            if (mainCounty) {
+                mainCounty.value = displayCountySelect.value;
+                mainCounty.dispatchEvent(new Event('change'));
+            }
+        });
+
         displaySelect.addEventListener('change', () => {
             if (suppressChange) return;
             const opener = window.opener;
@@ -195,6 +480,122 @@
             }
         });
 
+        function syncOptions(source, dest) {
+            if (source.options.length === dest.options.length &&
+                source.value === dest.value) return false;
+            dest.innerHTML = '';
+            for (const opt of source.options) {
+                const o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.textContent;
+                dest.appendChild(o);
+            }
+            dest.value = source.value;
+            return true;
+        }
+
+        // Track last-rendered state to detect any change requiring a re-render
+        let lastState = null;
+
+        function polygonStateHash(polygon, allPolygons) {
+            if (!polygon) return null;
+            // Include density of all polygons in same county (county totals depend on them)
+            const countyTotal = allPolygons
+                .filter(p => p.county === polygon.county)
+                .reduce((sum, p) => sum + (p.populationDensity || 0), 0);
+            return `${polygon.id}|${polygon.populationDensity}|${polygon.countyType}|${countyTotal}`;
+        }
+
+        function multiStateHash(polygons) {
+            if (!polygons || polygons.length < 2) return 'none';
+            return polygons.map(p => `${p.id}:${p.populationDensity}`).join(',');
+        }
+
+        function vertexStateHash(editor) {
+            if (!editor || !editor.vertexSelection) return 'none';
+            const vs = editor.vertexSelection;
+            if (vs.selectedVertices.size === 0) return 'empty';
+            return [...vs.selectedVertices].sort().join(',');
+        }
+
+        /** Vertex type → badge CSS class */
+        function vtypeBadge(type) {
+            if (!type) return '';
+            const cls = {
+                'FIXED':        'vtype-fixed',
+                'CROSS_COUNTY': 'vtype-crosscounty',
+                'SAME_COUNTY':  'vtype-samecounty',
+                'ORDINARY':     'vtype-ordinary',
+            }[type] || '';
+            const label = type.replace('_', ' ');
+            return `<span class="vertex-type-badge ${cls}">${label}</span>`;
+        }
+
+        function renderVertexInfo(editor, mode) {
+            // Panel only exists in Edit Polygon mode
+            if (mode !== 'polygon') {
+                panelVertexInfo.style.display = 'none';
+                return;
+            }
+            panelVertexInfo.style.display = '';
+
+            const vs = editor && editor.vertexSelection;
+            if (!vs || vs.selectedVertices.size === 0) {
+                displayVertexInfo.innerHTML = '<p class="placeholder">Shift+Click a vertex to inspect it.</p>';
+                return;
+            }
+
+            const selectedInfo = vs.getSelectedVertexInfo(editor.polygons);
+            const count = selectedInfo.length;
+
+            const cards = selectedInfo.map(v => {
+                // ── Vertex type via VertexClassifier ──────────────────────────
+                let typeBadgeHtml = '—';
+                if (editor.vertexClassifier) {
+                    try {
+                        const type = editor.vertexClassifier.classify(v.x, v.y, editor.polygons);
+                        typeBadgeHtml = vtypeBadge(type);
+                    } catch(e) {}
+                }
+
+                // ── Polygons sharing this coordinate ──────────────────────────
+                const neighborData = vs.neighboringVertices.get(v.coordKey);
+                let sharedHtml = '<span style="color:#999">None</span>';
+                if (neighborData && neighborData.polygons.length > 0) {
+                    const ids = [...new Set(
+                        neighborData.polygons
+                            .map(n => editor.polygons[n.polygonIndex])
+                            .filter(Boolean)
+                            .map(p => p.id)
+                    )];
+                    sharedHtml = ids.map(id =>
+                        `<span style="background:#e9ecef;border-radius:3px;padding:1px 5px;margin:1px;display:inline-block">${id}</span>`
+                    ).join(' ');
+                }
+
+                const ringLabel = v.ringIndex === 0 ? 'Exterior' : `Hole ${v.ringIndex}`;
+
+                return `
+                    <div class="vertex-card">
+                        <div class="vertex-card-header">
+                            Vertex #${v.vertexIndex}
+                            <span style="color:#aaa;font-weight:400"> · ${v.polygonId}</span>
+                        </div>
+                        <table class="info-table">
+                            <tr><td>Ring</td><td>${ringLabel}</td></tr>
+                            <tr><td>X</td><td>${v.x.toFixed(4)}</td></tr>
+                            <tr><td>Y</td><td>${v.y.toFixed(4)}</td></tr>
+                            <tr><td>Type</td><td>${typeBadgeHtml}</td></tr>
+                            <tr><td>Shared by</td><td>${sharedHtml}</td></tr>
+                        </table>
+                    </div>`;
+            }).join('');
+
+            displayVertexInfo.innerHTML = `
+                <div class="vertex-count-badge">${count} vertex${count !== 1 ? 'es' : ''} selected</div>
+                ${cards}`;
+        }
+
         function syncFromOpener() {
             const opener = window.opener;
             if (!opener || opener.closed) {
@@ -204,60 +605,73 @@
 
             try {
                 const openerDoc = opener.document;
+                suppressChange = true;
 
-                // --- Sync polygon select options ---
+                // Sync county dropdown
+                const mainCounty = openerDoc.getElementById('countySelect');
+                if (mainCounty) syncOptions(mainCounty, displayCountySelect);
+
+                // Sync polygon dropdown (values are array indices, text is polygon ID)
                 const mainSelect = openerDoc.getElementById('polygonSelect');
-                if (mainSelect) {
-                    const mainValue = mainSelect.value;
-                    // Rebuild options only when count or value changes to avoid flicker
-                    if (displaySelect.options.length !== mainSelect.options.length ||
-                        displaySelect.value !== mainValue) {
+                if (mainSelect) syncOptions(mainSelect, displaySelect);
 
-                        suppressChange = true;
-                        displaySelect.innerHTML = '';
-                        for (const opt of mainSelect.options) {
-                            const o = document.createElement('option');
-                            o.value = opt.value;
-                            o.textContent = opt.textContent;
-                            displaySelect.appendChild(o);
-                        }
-                        displaySelect.value = mainValue;
-                        suppressChange = false;
+                suppressChange = false;
+
+                // Sync active mode
+                const openerMode = opener.AppMode && opener.AppMode.current;
+                if (openerMode) applyMode(openerMode);
+
+                // Get live polygon data from the editor
+                const editor = opener.polygonEditor;
+                if (!editor || !editor.polygons) {
+                    statusBar.textContent = `Synced · ${new Date().toLocaleTimeString()}`;
+                    return;
+                }
+
+                // Multi-selection aggregates (read live from editor)
+                const multiIndices = editor.selectedPolygonIndices
+                    ? [...editor.selectedPolygonIndices] : [];
+                const multiPolygons = multiIndices.map(i => editor.polygons[i]).filter(Boolean);
+
+                // Read selected polygon directly from editor (not from dropdown — dropdown lags)
+                const selectedIdx = (editor.selectedPolygonIndex !== null &&
+                                     editor.selectedPolygonIndex !== undefined)
+                    ? editor.selectedPolygonIndex : null;
+                const polygon = selectedIdx !== null ? editor.polygons[selectedIdx] : null;
+
+                // Build a state hash covering everything displayed
+                const stateNow = [
+                    selectedIdx,
+                    polygon ? polygonStateHash(polygon, editor.polygons) : 'none',
+                    multiStateHash(multiPolygons),
+                    openerMode,
+                    vertexStateHash(editor),
+                ].join('||');
+
+                if (stateNow !== lastState) {
+                    lastState = stateNow;
+
+                    if (polygon) {
+                        renderPolygonInfo(polygon);
+                        renderCountyInfo(polygon.county, editor.polygons);
+                    } else {
+                        displayInfo.innerHTML       = '<p class="placeholder">Select a polygon to see its information.</p>';
+                        displayCountyInfo.innerHTML = '<p class="placeholder">Select a polygon to see county information.</p>';
+                        displayCoords.textContent   = '';
                     }
-                }
 
-                // --- Sync polygon info ---
-                const mainInfo = openerDoc.getElementById('polygonInfo');
-                if (mainInfo && mainInfo.innerHTML !== displayInfo.innerHTML) {
-                    displayInfo.innerHTML = mainInfo.innerHTML;
-                }
-
-                // --- Sync shared info ---
-                const mainShared = openerDoc.getElementById('sharedInfo');
-                if (mainShared && mainShared.textContent !== displayShared.textContent) {
-                    displayShared.textContent = mainShared.textContent;
-                }
-
-                // --- Sync coordinates ---
-                const mainCoords = openerDoc.getElementById('coordinates');
-                if (mainCoords && mainCoords.textContent !== displayCoords.textContent) {
-                    displayCoords.textContent = mainCoords.textContent;
-                }
-
-                // --- Sync vertex info ---
-                const mainVertex = openerDoc.getElementById('vertexInfo');
-                if (mainVertex && mainVertex.innerHTML !== displayVertex.innerHTML) {
-                    displayVertex.innerHTML = mainVertex.innerHTML;
+                    renderMultiInfo(multiPolygons);
+                    renderVertexInfo(editor, openerMode);
                 }
 
                 statusBar.textContent = `Synced · ${new Date().toLocaleTimeString()}`;
 
             } catch (e) {
+                suppressChange = false;
                 statusBar.textContent = 'Sync error: ' + e.message;
             }
         }
 
-        // Poll every 300 ms
         setInterval(syncFromOpener, 300);
         syncFromOpener();
     </script>

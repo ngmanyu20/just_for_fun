@@ -245,6 +245,240 @@ class PolygonSplitter {
     }
 
     /**
+     * Split a polygon using shapes extracted from an SVG street network.
+     * Blank areas (parts of the polygon not covered by any SVG block) are
+     * also returned as sub-polygons so no area is silently dropped.
+     *
+     * @param {Object} polygon - Polygon to split (internal format)
+     * @param {string} svgContent - SVG file text content
+     * @param {number} targetCount - Target number of SVG-derived sub-polygons
+     * @param {Object|null} svgAlignment - Optional SvgLayer alignment
+     *   { anchorX, anchorY, dataWidth, svgW, svgH }
+     * @returns {Promise<Object>} - { success, message, subPolygons }
+     */
+    async splitBySvg(polygon, svgContent, targetCount, svgAlignment = null) {
+        try {
+            if (targetCount < 1) {
+                return { success: false, message: 'Target count must be >= 1', subPolygons: [] };
+            }
+
+            const geometry = this.convertToGeoJSON(polygon);
+
+            const payload = {
+                geometry,
+                svg_content: svgContent,
+                target_count: targetCount,
+            };
+
+            if (svgAlignment) {
+                payload.anchor_x   = svgAlignment.anchorX;
+                payload.anchor_y   = svgAlignment.anchorY;
+                payload.data_width = svgAlignment.dataWidth;
+                payload.svg_w      = svgAlignment.svgW;
+                payload.svg_h      = svgAlignment.svgH;
+            }
+
+            const controller = new AbortController();
+            const timeoutId  = setTimeout(() => controller.abort(), 120000); // 2 min for large SVGs
+
+            let response;
+            try {
+                response = await fetch(`${this.serviceUrl}/split-svg`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(payload),
+                    signal:  controller.signal,
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                let msg = `HTTP ${response.status}: ${response.statusText}`;
+                try { msg = JSON.parse(text).detail || msg; } catch (_) {
+                    if (text) msg += ` — ${text.slice(0, 200)}`;
+                }
+                return { success: false, message: msg, subPolygons: [] };
+            }
+
+            const featureCollection = await response.json();
+
+            if (!featureCollection || featureCollection.type !== 'FeatureCollection' || !Array.isArray(featureCollection.features)) {
+                return { success: false, message: 'Invalid response from server', subPolygons: [] };
+            }
+
+            const subPolygons = this.convertFromGeoJSON(featureCollection, polygon);
+            const svgBlocks   = subPolygons.filter(p => p.kind === 'svg_block');
+            const blanks      = subPolygons.filter(p => p.kind === 'blank');
+
+            let message = `Split into ${svgBlocks.length} SVG block${svgBlocks.length !== 1 ? 's' : ''}`;
+            if (blanks.length > 0) {
+                message += ` + ${blanks.length} uncovered area${blanks.length !== 1 ? 's' : ''}`;
+            }
+
+            return { success: true, message, subPolygons };
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return { success: false, message: 'Request timed out — SVG processing took too long', subPolygons: [] };
+            }
+            return { success: false, message: error.message || 'SVG split failed', subPolygons: [] };
+        }
+    }
+
+    /**
+     * Split a polygon using OSM-derived enclosures downloaded for a WGS84 bbox.
+     * All gaps are absorbed — no blank polygons in the output.
+     *
+     * @param {Object} polygon - Polygon to split (internal format)
+     * @param {number} north - Bounding box north latitude
+     * @param {number} south - Bounding box south latitude
+     * @param {number} east  - Bounding box east longitude
+     * @param {number} west  - Bounding box west longitude
+     * @param {boolean} useSecondary - Also use tertiary roads for subdivision
+     * @returns {Promise<Object>} - { success, message, subPolygons }
+     */
+    async splitByOsm(polygon, north, south, east, west, useSecondary = false) {
+        try {
+            const geometry = this.convertToGeoJSON(polygon);
+
+            const payload = { geometry, north, south, east, west, use_secondary: useSecondary };
+
+            const controller = new AbortController();
+            const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min for OSM download
+
+            let response;
+            try {
+                response = await fetch(`${this.serviceUrl}/split-osm`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(payload),
+                    signal:  controller.signal,
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                let msg = `HTTP ${response.status}: ${response.statusText}`;
+                try { msg = JSON.parse(text).detail || msg; } catch (_) {
+                    if (text) msg += ` — ${text.slice(0, 200)}`;
+                }
+                return { success: false, message: msg, subPolygons: [] };
+            }
+
+            const featureCollection = await response.json();
+
+            if (!featureCollection || featureCollection.type !== 'FeatureCollection' || !Array.isArray(featureCollection.features)) {
+                return { success: false, message: 'Invalid response from server', subPolygons: [] };
+            }
+
+            const subPolygons = this.convertFromGeoJSON(featureCollection, polygon);
+            if (featureCollection.simplify_stats) {
+                const s = featureCollection.simplify_stats;
+                if (s.error) {
+                    console.warn('[OSM simplify] FAILED on server:', s.error);
+                } else {
+                    console.log(`[OSM simplify] before=${s.vertices_before} after=${s.vertices_after} removed=${s.removed} epsilon=${s.epsilon}`);
+                }
+            }
+            const message = `Split into ${subPolygons.length} OSM district${subPolygons.length !== 1 ? 's' : ''}`;
+            return { success: true, message, subPolygons };
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return { success: false, message: 'Request timed out — OSM download took too long', subPolygons: [] };
+            }
+            return { success: false, message: error.message || 'OSM split failed', subPolygons: [] };
+        }
+    }
+
+    /**
+     * OSM-split multiple adjacent polygons while preserving their shared boundaries.
+     *
+     * Calls /split-osm-multi, which runs the OSM pipeline on the union of all input
+     * polygons and then clips each resulting OSM district against each original polygon.
+     * The output is grouped by source polygon so each original is replaced only by the
+     * sub-districts that fall within its own area.
+     *
+     * @param {Array<Object>} polygons - Adjacent polygons to split (internal format)
+     * @param {number} north - Bounding box north latitude
+     * @param {number} south - Bounding box south latitude
+     * @param {number} east  - Bounding box east longitude
+     * @param {number} west  - Bounding box west longitude
+     * @param {boolean} useSecondary - Also use tertiary roads
+     * @returns {Promise<Object>} - { success, message, resultsByIndex }
+     *   resultsByIndex: [{ sourceIndex, subPolygons }] sorted DESCENDING by sourceIndex
+     *   so PolygonEditor can safely splice from the end of the array.
+     */
+    async splitMultipleByOsm(polygons, north, south, east, west, useSecondary = false) {
+        try {
+            const geometries = polygons.map(p => this.convertToGeoJSON(p));
+            const payload = { geometries, north, south, east, west, use_secondary: useSecondary };
+
+            const controller = new AbortController();
+            const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min
+
+            let response;
+            try {
+                response = await fetch(`${this.serviceUrl}/split-osm-multi`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(payload),
+                    signal:  controller.signal,
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                let msg = `HTTP ${response.status}: ${response.statusText}`;
+                try { msg = JSON.parse(text).detail || msg; } catch (_) {
+                    if (text) msg += ` — ${text.slice(0, 200)}`;
+                }
+                return { success: false, message: msg, resultsByIndex: [] };
+            }
+
+            const featureCollection = await response.json();
+
+            if (!featureCollection || featureCollection.type !== 'FeatureCollection' || !Array.isArray(featureCollection.features)) {
+                return { success: false, message: 'Invalid response from server', resultsByIndex: [] };
+            }
+
+            // Group features by source_index, then convert each group using its
+            // corresponding source polygon (for county and ID extraction).
+            const groups = new Map();
+            for (const feature of featureCollection.features) {
+                const si = feature.properties?.source_index ?? 0;
+                if (!groups.has(si)) groups.set(si, []);
+                groups.get(si).push(feature);
+            }
+
+            const resultsByIndex = [];
+            for (const [sourceIndex, features] of groups) {
+                const miniFC    = { type: 'FeatureCollection', features };
+                const subPolys  = this.convertFromGeoJSON(miniFC, polygons[sourceIndex]);
+                resultsByIndex.push({ sourceIndex, subPolygons: subPolys });
+            }
+            // Sort descending so PolygonEditor can splice highest index first
+            resultsByIndex.sort((a, b) => b.sourceIndex - a.sourceIndex);
+
+            const totalDistricts = resultsByIndex.reduce((s, r) => s + r.subPolygons.length, 0);
+            const message = `Split ${polygons.length} polygons into ${totalDistricts} OSM district${totalDistricts !== 1 ? 's' : ''} (boundaries preserved)`;
+            return { success: true, message, resultsByIndex };
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return { success: false, message: 'Request timed out — OSM download took too long', resultsByIndex: [] };
+            }
+            return { success: false, message: error.message || 'Multi-polygon OSM split failed', resultsByIndex: [] };
+        }
+    }
+
+    /**
      * Calculate suggested number of districts based on area
      * This is a simple heuristic and doesn't require the Python service
      * @param {Object} polygon - Polygon object

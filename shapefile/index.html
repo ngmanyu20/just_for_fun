@@ -348,6 +348,80 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            position: relative;
+        }
+
+        /* Floating action panel — top-left of canvas */
+        .canvas-fab {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .canvas-fab-toggle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 20px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            padding: 0;
+        }
+
+        .canvas-fab-toggle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .canvas-fab-menu {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .canvas-fab-menu.open {
+            display: flex;
+        }
+
+        .canvas-fab-menu button {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            background: white;
+            color: #495057;
+            border: 2px solid #dee2e6;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+            text-align: left;
+        }
+
+        .canvas-fab-menu button:hover {
+            background: #f0f4ff;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+            transform: translateY(-1px);
+        }
+
+        .canvas-fab-menu button.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
         }
 
         /* Measure button active state */
@@ -414,6 +488,9 @@
             display: none;
         }
     </style>
+    <!-- Leaflet for OSM split map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
     <div class="status" id="status"></div>
@@ -423,6 +500,17 @@
         <div class="main-content">
             <div class="canvas-container">
                 <canvas id="canvas" width="1200" height="800"></canvas>
+
+                <!-- Floating action panel (top-left of canvas) -->
+                <div class="canvas-fab">
+                    <button class="canvas-fab-toggle" id="fabToggleBtn" title="Toggle actions">+</button>
+                    <div class="canvas-fab-menu" id="fabMenu">
+                        <button id="editPolygonBtn">Edit Polygon</button>
+                        <button id="editPopDensityBtn">Edit Population Density</button>
+                        <button id="editDistrictTypeBtn">Edit District Type</button>
+                        <button id="redistrictingBtn">Redistricting</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Hidden elements kept for JS compatibility -->
@@ -467,91 +555,252 @@
                 <button id="viewMode" class="btn-primary active">👁️ View</button>
             </div>
 
-            <!-- Layer Panel (Collapsible) -->
-            <div class="collapsible-section">
-                <div class="collapsible-header" onclick="toggleLayerSection()">
-                    <span>🗂️ Layer</span>
-                    <span class="collapsible-toggle" id="layerToggle">+</span>
-                </div>
-                <div class="collapsible-content" id="layerContent">
-                    <div class="button-row">
-                        <button id="layerCounty" class="btn-secondary">County</button>
-                        <button id="layerSubCounty" class="btn-secondary active">Sub-County</button>
-                    </div>
+            <!-- Layer Panel -->
+            <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+                Layer
+                <span id="layerToggle" style="display:none;"></span>
+            </div>
+            <div id="layerContent">
+                <div class="button-row">
+                    <button id="layerCounty" class="btn-secondary">County</button>
+                    <button id="layerSubCounty" class="btn-secondary active">Sub-County</button>
                 </div>
             </div>
 
             <!-- Display Button -->
-            <button id="displayBtn" class="btn-secondary" style="width: 100%; margin-bottom: 8px;">🖥️ Display</button>
+            <button id="displayBtn" class="btn-secondary" style="width: 100%; margin-bottom: 4px; margin-top: 8px;">🖥️ Display</button>
 
-            <!-- Select County (hidden, kept for JS compatibility) -->
-            <select id="polygonSelect" style="display:none;">
-                <option value="">Choose a polygon to edit...</option>
-            </select>
+            <!-- Change Density Button -->
+            <button id="changeDensityBtn" class="btn-secondary" style="width: 100%; margin-bottom: 8px; font-size: 11px;">✏️ Change Density</button>
 
-            <!-- Undo/Redo (Same Line, Smaller) -->
-            <div class="button-row">
-                <button id="undoBtn" class="btn-secondary small" disabled>↶ Undo</button>
-                <button id="redoBtn" class="btn-secondary small" disabled>↷ Redo</button>
-            </div>
+            <!-- Hidden selectors — kept for JS/UIController compatibility -->
+            <select id="countySelect" style="display:none;"></select>
+            <select id="polygonSelect" style="display:none;"></select>
 
-            <!-- Polygon Operations -->
-            <div class="section-title">Polygon</div>
-            <button id="combineBtn" class="btn-secondary" disabled>🔗 Combine Polygons</button>
+            <!-- ═══ POLYGON-MODE-ONLY SECTION ═══ -->
+            <div id="toolbarPolygonSection">
 
-            <!-- Split Polygon Controls -->
-            <div class="section-title">Split Polygon</div>
-
-            <div class="split-controls">
-                <input type="number" id="numDistricts" min="2" max="20" value="8" placeholder="# Districts" style="flex: 1;" />
-                <button id="regenerateBtn" class="btn-secondary small" disabled style="flex: 0 0 auto; padding: 2px 4px; font-size: 12px; width: 26px; height: 26px;">🔄</button>
-            </div>
-
-            <button id="splitBtn" class="btn-secondary" disabled>✂️ Split</button>
-
-            <!-- Vertex Info (hidden, kept for JS compatibility) -->
-            <div id="vertexInfo" style="display:none;"></div>
-
-            <!-- Vertices Section -->
-            <div class="section-title">Vertices</div>
-
-            <!-- Vertex Operations Buttons -->
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-                <!-- Replace Vertex -->
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <button id="replaceVertexBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
-                        🔄 Replace (1=Prev / 2=Next)
-                    </button>
+                <!-- Undo/Redo (Same Line, Smaller) -->
+                <div class="button-row">
+                    <button id="undoBtn" class="btn-secondary small" disabled>↶ Undo</button>
+                    <button id="redoBtn" class="btn-secondary small" disabled>↷ Redo</button>
                 </div>
 
-                <!-- Delete Vertex -->
-                <button id="deleteVertexBtn" class="btn-danger" disabled style="font-size: 10px; padding: 5px;">
-                    🗑️ Delete Vertex (Del)
-                </button>
+                <!-- Polygon Operations -->
+                <div class="section-title">Polygon</div>
+                <button id="combineBtn" class="btn-secondary" disabled>🔗 Combine Polygons</button>
 
-                <!-- Midpoint Creation -->
-                <button id="midpointBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
-                    ➕ Create Midpoint (M)
-                </button>
+                <!-- Split Polygon Controls -->
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-weight: 700; font-size: 12px; color: #667eea; white-space: nowrap;">Split Polygon:</span>
+                    <input type="number" id="numDistricts" min="2" max="20" value="8" placeholder="# Districts" style="flex: 1; padding: 4px 6px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px;" />
+                    <button id="splitBtn" class="btn-secondary" disabled style="white-space: nowrap; flex: 0 0 auto; width: auto; padding: 4px 10px; font-size: 11px;">Split</button>
+                </div>
+                <button id="splitByOsmBtn" class="btn-secondary" disabled style="width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 10px; border-color: #27ae60; color: #27ae60;">🌍 Split by OSM</button>
+                <button id="deletePolygonBtn" class="btn-danger" disabled style="width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 10px;">🗑️ Delete Polygon</button>
 
-                <!-- Split by Vertices -->
-                <button id="splitByVerticesBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
-                    ✂️ Split by Vertices (C)
-                </button>
+                <!-- Vertex Info (hidden, kept for JS compatibility) -->
+                <div id="vertexInfo" style="display:none;"></div>
 
-                <!-- Clear Selection -->
-                <button id="clearVertexSelectionBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
-                    ❌ Clear Selection
-                </button>
+                <!-- Vertices Section -->
+                <div class="section-title">Vertices</div>
+
+                <!-- Vertex Operations Buttons -->
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <!-- Replace Vertex -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <button id="replaceVertexBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">
+                            🔄 Replace (1=Prev / 2=Next)
+                        </button>
+                    </div>
+
+                    <!-- Virtual Node Mode toggle -->
+                    <button id="virtualNodeModeBtn" class="btn-secondary" style="
+                        font-size: 10px; padding: 5px; width: 100%;
+                        border: 2px solid #FF8C00; color: #FF8C00; background: white;
+                        transition: background 0.15s, color 0.15s;">
+                        ◈ Virtual Nodes (V) — draw a free-form cut line
+                    </button>
+                    <style>
+                        #virtualNodeModeBtn.active {
+                            background: #FF8C00 !important;
+                            color: white !important;
+                        }
+                    </style>
+
+                    <!-- Delete Vertex + Midpoint Creation -->
+                    <div class="button-row">
+                        <button id="deleteVertexBtn" class="btn-danger" disabled style="font-size: 10px; padding: 5px;">Delete Vertex (Del)</button>
+                        <button id="midpointBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">Create Midpoint (M)</button>
+                    </div>
+
+                    <!-- Split by Vertices + Clear Selection -->
+                    <div class="button-row">
+                        <button id="splitByVerticesBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">Split by Vertices (C)</button>
+                        <button id="clearVertexSelectionBtn" class="btn-secondary" disabled style="font-size: 10px; padding: 5px;">Clear Selection</button>
+                    </div>
+                </div>
+
+                <!-- Vertex Simplification -->
+                <div class="button-row">
+                    <button id="simplifyBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Simplify Vertices</button>
+                    <button id="updateNeighboursBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Update Neighbours</button>
+                </div>
+                <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+                    <span style="font-size:9px; color:#888; white-space:nowrap;">RDP tolerance:</span>
+                    <input type="number" id="simplifyTolerance" value="150" min="0" step="10"
+                           style="flex:1; font-size:10px; padding:2px 4px; border:1px solid #ddd; border-radius:3px; min-width:0;" />
+                    <span style="font-size:9px; color:#888; white-space:nowrap;">m (0 = exact)</span>
+                </div>
+
+            </div><!-- /#toolbarPolygonSection -->
+
+            <!-- Layer section (hidden in Edit Polygon mode) -->
+            <div id="toolbarLayerSection" style="display:none;">
+            <div class="section-title">Layer</div>
+            <!-- Edit Location / Type / Disable (hidden in population density mode) -->
+            <div id="editLocationTypeRow" class="button-row" style="margin-bottom: 4px;">
+                <button id="editLocationBtn"  class="btn-secondary" style="font-size: 10px; padding: 5px;">Edit Location</button>
+                <button id="editTypeBtn"      class="btn-secondary" style="font-size: 10px; padding: 5px;">Edit Type</button>
+                <button id="disableChangeBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Disable Change</button>
+            </div>
+            <!-- Change Location button — visible only when Edit Location is active -->
+            <div id="changeLocationRow" style="display:none; margin-bottom:6px;">
+                <button id="changeLocationBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%;">Change Location</button>
+            </div>
+            <!-- Change Type button — visible only when Edit Type is active -->
+            <div id="changeTypeRow" style="display:none; margin-bottom:6px;">
+                <button id="changeTypeBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%;">Change Type</button>
+            </div>
+            <!-- Line 1: colour map toggles -->
+            <div id="colorMapRow" class="button-row">
+                <button id="densityColorMapBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Density Color Map</button>
+                <button id="locationMapBtn"     class="btn-secondary" style="font-size: 10px; padding: 5px;">Location Map</button>
+                <button id="typeMapBtn"         class="btn-secondary" style="font-size: 10px; padding: 5px;">Type Map</button>
+            </div>
+            <!-- Line 2: label display modes -->
+            <div class="button-row" style="margin-top: 4px;">
+                <button id="displayDataBtn"  class="btn-secondary" style="font-size: 10px; padding: 5px;">Display Data</button>
+                <button id="densityModeBtn"  class="btn-secondary" style="font-size: 10px; padding: 5px;">Population Density</button>
+                <button id="estPopModeBtn"   class="btn-secondary" style="font-size: 10px; padding: 5px;">Est Population</button>
+            </div>
+            <!-- Line 3: district-type label modes -->
+            <div class="button-row" style="margin-top: 4px;">
+                <button id="typeLabelBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Location - Type</button>
+            </div>
+            </div><!-- /#toolbarLayerSection -->
+
+            <!-- Redistricting controls (visible only in Redistricting mode) -->
+            <div id="toolbarRedistrictingSection" style="display:none;">
+                <div class="section-title">Redistricting</div>
+                <button id="redistrictingRuleBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%; margin-bottom:6px;">Redistricting Rule</button>
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                    <label style="font-size:10px; font-weight:600; color:#495057; white-space:nowrap;">Select Council:</label>
+                    <select id="councilSelect" style="flex:1; padding:4px 5px; border:2px solid #ddd; border-radius:4px; font-size:10px;">
+                        <option value="">— All —</option>
+                    </select>
+                </div>
+                <!-- Council stats (shown when a council is selected) -->
+                <div id="councilStats" style="display:none; background:#f8f9ff; border:1px solid #dee2e6; border-radius:6px; font-size:10px; color:#333;">
+                    <!-- Collapsible header row -->
+                    <div id="csHeader" onclick="(function(btn){
+                                var body = document.getElementById('csBody');
+                                var open = body.style.display !== 'none';
+                                body.style.display = open ? 'none' : '';
+                                btn.querySelector('#csToggleBtn').textContent = open ? '+' : '−';
+                            })(this)"
+                         style="display:flex; align-items:center; gap:5px; padding:7px 10px;
+                                cursor:pointer; user-select:none; border-radius:6px;">
+                        <span id="csToggleBtn"
+                              style="font-size:10px; width:16px; height:16px; border:1px solid #adb5bd;
+                                     border-radius:3px; background:#fff; display:flex; align-items:center;
+                                     justify-content:center; flex-shrink:0; font-weight:700; color:#555;">+</span>
+                        <span id="csCouncilName" style="font-weight:700; color:#333; flex:1; overflow:hidden;
+                                                         text-overflow:ellipsis; white-space:nowrap;"></span>
+                        <span style="color:#555; white-space:nowrap;">
+                            Created: <span id="csCreated" style="font-weight:700; color:#333;">0</span>
+                        </span>
+                        <span style="color:#555; white-space:nowrap; margin-left:6px;">
+                            Rem: <span id="csRemaining" style="font-weight:700; color:#333;">0</span>
+                        </span>
+                    </div>
+                    <!-- Collapsible body -->
+                    <div id="csBody" style="display:none; padding:0 10px 8px 10px; line-height:1.8;">
+                        <table style="width:100%; border-collapse:collapse;">
+                            <tr>
+                                <td style="color:#555;">Total Population</td>
+                                <td id="csTotalPop" style="text-align:right; font-weight:600;"></td>
+                            </tr>
+                            <tr>
+                                <td style="color:#555;">Allocated Seat</td>
+                                <td id="csAllocSeat" style="text-align:right; font-weight:600;"></td>
+                            </tr>
+                            <tr>
+                                <td style="color:#555;">Quota</td>
+                                <td id="csQuota" style="text-align:right; font-weight:600;"></td>
+                            </tr>
+                            <tr>
+                                <td style="color:#555;">Boundary</td>
+                                <td id="csBoundary" style="text-align:right; font-weight:600;"></td>
+                            </tr>
+                        </table>
+                        <div style="margin-top:6px; display:flex; align-items:center; gap:5px;">
+                            <input type="checkbox" id="extraSeatChk" style="cursor:pointer;">
+                            <label for="extraSeatChk" style="cursor:pointer; font-size:10px; color:#333;">Extra Seat</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Ward -->
+                <div style="margin-top:8px; background:white; border:1px solid #dee2e6; border-radius:8px; padding:10px;">
+                    <!-- Header: title + action buttons (swap between Create-new vs Cancel/Confirm) -->
+                    <div style="display:flex; align-items:center; gap:5px; margin-bottom:6px;">
+                        <span style="font-size:11px; font-weight:700; color:#333; flex:1;">Current ward</span>
+                        <button id="createWardBtn" class="btn-primary" style="font-size:9px; padding:3px 8px; width:auto;">Create new ward</button>
+                        <button id="wardCancelBtn"  class="btn-secondary" style="display:none; font-size:9px; padding:3px 7px; width:auto;">Cancel</button>
+                        <button id="wardConfirmBtn" class="btn-primary"   style="display:none; font-size:9px; padding:3px 7px; width:auto;">Create</button>
+                    </div>
+
+                    <!-- Ward creation panel — colour picker only, shown when create mode is active -->
+                    <div id="wardCreatePanel" style="display:none; margin-bottom:8px; padding:6px 8px; background:#f8f9ff; border-radius:6px; border:1px solid #dee2e6;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-size:10px; color:#555; white-space:nowrap;">Ward colour</span>
+                            <!-- Custom colour picker -->
+                            <div id="wardColorPicker" style="position:relative; flex:1;">
+                                <div id="wardColorSelected" style="display:flex; align-items:center; gap:5px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; cursor:pointer; background:white; font-size:10px; user-select:none;">
+                                    <span id="wardColorSwatch" style="display:inline-block; width:12px; height:12px; border-radius:2px; background:#dc3545;"></span>
+                                    <span id="wardColorLabel" style="flex:1;">Red</span>
+                                    <span style="color:#888;">▾</span>
+                                </div>
+                                <div id="wardColorDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1.5px solid #ddd; border-radius:5px; box-shadow:0 4px 12px rgba(0,0,0,0.12); z-index:100; margin-top:2px; max-height:180px; overflow-y:auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats — always shown -->
+                    <table style="width:100%; border-collapse:collapse; font-size:10px;">
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <td id="wardDraftPopLabel" style="padding:4px 0; color:#555;">Draft electorate</td>
+                            <td id="wardDraftPop" style="text-align:right; font-weight:600; padding:4px 0;">0</td>
+                        </tr>
+                        <tr>
+                            <td id="wardVarianceLabel" style="padding:4px 0; color:#555;">Variance</td>
+                            <td id="wardVariance" style="text-align:right; font-weight:600; padding:4px 0; color:#dc3545;">−100.00%</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Wards list -->
+                <div style="margin-top:8px; background:white; border:1px solid #dee2e6; border-radius:8px; padding:10px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <span style="font-size:11px; font-weight:700; color:#333;">Wards</span>
+                        <button id="clearWardsBtn" style="font-size:9px; padding:3px 8px; border:1px solid #dc3545; border-radius:4px; background:#fff; color:#dc3545; cursor:pointer; width:auto;">Clear</button>
+                    </div>
+                    <div id="wardsList" style="font-size:10px; color:#999; font-style:italic; max-height:100px; overflow-y:auto;">No wards saved yet.</div>
+                </div>
             </div>
 
-            <!-- Vertex Simplification -->
-            <div class="section-title">Simplification</div>
-            <button id="simplifyBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">
-                🧹 Vertices Simplification
-            </button>
-
-            <!-- Measure Distance -->
+            <!-- Measure Distance (visible in all modes) -->
             <div class="section-title">Measure</div>
             <button id="measureBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">
                 📏 Measure Dist
@@ -560,12 +809,163 @@
                 <div id="measureTotal">Click the map to start measuring</div>
                 <div style="color:#888; margin-top:2px;">Click circle to remove · Drag to move · Esc to exit</div>
             </div>
+
+            <!-- ═══ SVG BACKGROUND LAYER ═══ -->
+            <div class="section-title">SVG Street Map</div>
+
+            <!-- File picker -->
+            <label for="svgFileInput" class="btn-secondary"
+                   style="display:block; width:100%; padding:6px 10px; border-radius:4px;
+                          font-size:11px; font-weight:600; cursor:pointer; text-align:center;
+                          border:2px solid #dee2e6; background:#f8f9fa; color:#495057;
+                          box-sizing:border-box;">
+                📂 Load SVG File
+            </label>
+            <input type="file" id="svgFileInput" accept=".svg" style="display:none;">
+            <div id="svgStatus" style="font-size:10px; color:#666; margin-top:2px; min-height:14px;"></div>
+
+            <!-- Visible only once a file is loaded -->
+            <div id="svgControls" style="display:none; margin-top:4px;">
+
+                <!-- Toggle + Fit row -->
+                <div class="button-row" style="margin-bottom:6px;">
+                    <button id="svgToggleBtn"   class="btn-secondary" style="font-size:10px; padding:4px;">👁 Toggle</button>
+                    <button id="svgFitViewBtn"  class="btn-secondary" style="font-size:10px; padding:4px;">⊡ Fit View</button>
+                    <button id="svgFitPolyBtn"  class="btn-secondary" style="font-size:10px; padding:4px;">⊡ Fit Polys</button>
+                </div>
+
+                <!-- Drag-to-move mode -->
+                <button id="svgMoveBtn" class="btn-secondary"
+                        style="font-size:10px; padding:4px; width:100%; margin-bottom:6px;">
+                    ✥ Move SVG (drag on canvas)
+                </button>
+
+                <!-- Rotate -->
+                <div style="margin-bottom:6px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                        <span style="font-size:10px; font-weight:600; color:#495057;">Rotate</span>
+                        <span id="svgRotationVal"
+                              style="font-size:10px; color:#667eea; font-weight:700;
+                                     background:#f0f4ff; border-radius:4px; padding:1px 6px;">0°</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:4px;">
+                        <button id="svgRotL90"  class="btn-secondary"
+                                style="font-size:11px; padding:4px 0; text-align:center;"
+                                title="Rotate 90° counter-clockwise">↺ 90°</button>
+                        <button id="svgRotL15"  class="btn-secondary"
+                                style="font-size:11px; padding:4px 0; text-align:center;"
+                                title="Rotate 15° counter-clockwise">↺ 15°</button>
+                        <button id="svgRotR15"  class="btn-secondary"
+                                style="font-size:11px; padding:4px 0; text-align:center;"
+                                title="Rotate 15° clockwise">↻ 15°</button>
+                        <button id="svgRotR90"  class="btn-secondary"
+                                style="font-size:11px; padding:4px 0; text-align:center;"
+                                title="Rotate 90° clockwise">↻ 90°</button>
+                    </div>
+                    <button id="svgRotReset" class="btn-secondary"
+                            style="font-size:10px; padding:3px; width:100%; margin-top:4px;">
+                        ↺ Reset Rotation
+                    </button>
+                </div>
+
+                <!-- Scale -->
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="font-size:10px; color:#495057; white-space:nowrap; width:48px;">Scale</span>
+                    <input type="range" id="svgScaleSlider" min="1" max="500" step="1" value="100"
+                           style="flex:1; cursor:pointer;">
+                    <span id="svgScaleVal" style="font-size:10px; color:#495057; width:36px; text-align:right;">100%</span>
+                </div>
+
+                <!-- X offset -->
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="font-size:10px; color:#495057; white-space:nowrap; width:48px;">Offset X</span>
+                    <input type="range" id="svgOffsetXSlider" min="-200" max="200" step="1" value="0"
+                           style="flex:1; cursor:pointer;">
+                    <span id="svgOffsetXVal" style="font-size:10px; color:#495057; width:36px; text-align:right;">0</span>
+                </div>
+
+                <!-- Y offset -->
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="font-size:10px; color:#495057; white-space:nowrap; width:48px;">Offset Y</span>
+                    <input type="range" id="svgOffsetYSlider" min="-200" max="200" step="1" value="0"
+                           style="flex:1; cursor:pointer;">
+                    <span id="svgOffsetYVal" style="font-size:10px; color:#495057; width:36px; text-align:right;">0</span>
+                </div>
+
+                <!-- Opacity -->
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="font-size:10px; color:#495057; white-space:nowrap; width:48px;">Opacity</span>
+                    <input type="range" id="svgOpacitySlider" min="5" max="100" step="5" value="35"
+                           style="flex:1; cursor:pointer;">
+                    <span id="svgOpacityVal" style="font-size:10px; color:#495057; width:36px; text-align:right;">35%</span>
+                </div>
+
+                <!-- Reset button -->
+                <button id="svgResetBtn" class="btn-danger"
+                        style="font-size:10px; padding:4px; width:100%; margin-top:2px;">
+                    ✕ Remove SVG
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Backend URL config: set to your deployed FastAPI server URL -->
+    <!-- Change Density Modal -->
+    <div id="densityInputModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:20px; width:320px; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="font-weight:700; font-size:13px; color:#333; margin-bottom:4px;">Change Population Density</div>
+            <div id="densityInputLabel" style="font-size:11px; color:#667eea; margin-bottom:12px;"></div>
+            <input type="number" id="densityInputValue" min="501" max="29999" step="1"
+                   style="width:100%; padding:8px 10px; border:2px solid #ddd; border-radius:6px; font-size:14px; margin-bottom:6px; outline:none;"
+                   placeholder="Enter value (50 – 30,000)" />
+            <div id="densityInputError" style="color:#dc3545; font-size:11px; margin-bottom:8px; display:none;">
+                Value must be a number between 50 and 30,000.
+            </div>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+                <button id="densityInputConfirm" class="btn-primary" style="flex:1; padding:8px;">Confirm</button>
+                <button id="densityInputCancel" class="btn-secondary" style="flex:1; padding:8px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Location Modal -->
+    <div id="locationModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:20px; width:260px; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="font-weight:700; font-size:13px; color:#333; margin-bottom:12px;">Select Location</div>
+            <div style="display:flex; flex-direction:column; gap:10px; font-size:12px; color:#333;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="Inner City"> Inner City</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="Outer City"> Outer City</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="Suburb"> Suburb</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="Rural"> Rural</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="Town"> Town</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="radio" name="locationChoice" value="NA"> NA</label>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:16px;">
+                <button id="locationModalConfirm" class="btn-primary" style="flex:1; font-size:12px; padding:8px;">Change</button>
+                <button id="locationModalCancel"  class="btn-secondary" style="flex:1; font-size:12px; padding:8px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Type Modal -->
+    <div id="typeModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:20px; width:280px; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div id="typeModalTitle" style="font-weight:700; font-size:13px; color:#333; margin-bottom:4px;">Select Type</div>
+            <div id="typeModalSubtitle" style="font-size:11px; color:#667eea; margin-bottom:12px;"></div>
+            <div id="typeRadioList" style="display:flex; flex-direction:column; gap:8px; font-size:12px; color:#333; max-height:240px; overflow-y:auto;"></div>
+            <div style="display:flex; gap:8px; margin-top:16px;">
+                <button id="typeModalConfirm" class="btn-primary"   style="flex:1; font-size:12px; padding:8px;">Change</button>
+                <button id="typeModalCancel"  class="btn-secondary" style="flex:1; font-size:12px; padding:8px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backend URL config -->
     <script>
-        window.BACKEND_URL = 'https://testing-josh.onrender.com';
+        const LOCAL_BACKEND  = 'http://localhost:8000';
+        const REMOTE_BACKEND = 'https://testing-josh.onrender.com';
+
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        window.BACKEND_URL = isLocal ? LOCAL_BACKEND : REMOTE_BACKEND;
     </script>
 
     <!-- Module Scripts -->
@@ -590,6 +990,9 @@
     <script src="js/MeasureTool.js"></script>
     <script src="js/UIController.js"></script>
     <script src="js/MouseHandler.js"></script>
+    <script src="js/StreetLayer.js"></script>
+    <script src="js/SvgLayer.js"></script>
+    <script src="js/VirtualNodeManager.js"></script>
     <script src="js/Renderer.js"></script>
     <script src="js/PolygonEditor.js"></script>
     <script src="js/app.js"></script>
@@ -661,6 +1064,170 @@
 
     <!-- Collapsible Section Script -->
     <script>
+        // ── App mode system ──────────────────────────────────────────────────────
+        // Modes: 'polygon' | 'population' | 'districtType'
+        // Default is 'polygon'; switches to it when a CSV is loaded.
+
+        window.AppMode = {
+            current: 'polygon',
+
+            /** Call this after a CSV load to activate the default mode. */
+            initDefault() { this.set('polygon'); },
+
+            set(mode) {
+                this.current = mode;
+
+                const polygonSection = document.getElementById('toolbarPolygonSection');
+                const menuBtns = document.querySelectorAll('.canvas-fab-menu button');
+
+                // Show / hide polygon-only toolbar section
+                if (polygonSection) {
+                    polygonSection.style.display = (mode === 'polygon') ? '' : 'none';
+                }
+
+                // Show Change Density button only in population density mode
+                const changeDensityBtn = document.getElementById('changeDensityBtn');
+                if (changeDensityBtn) {
+                    changeDensityBtn.style.display = (mode === 'population') ? '' : 'none';
+                }
+
+                // Hide Layer section in Edit Polygon mode
+                const layerSection = document.getElementById('toolbarLayerSection');
+                if (layerSection) {
+                    layerSection.style.display = (mode === 'polygon') ? 'none' : '';
+                }
+
+                // Show Redistricting section only in redistricting mode
+                const redistrictingSection = document.getElementById('toolbarRedistrictingSection');
+                if (redistrictingSection) {
+                    redistrictingSection.style.display = (mode === 'redistricting') ? '' : 'none';
+                }
+
+                // Hide CSV status label + Layer section in Redistricting mode
+                const csvStatusEl = document.getElementById('csvStatus');
+                if (csvStatusEl) csvStatusEl.style.display = (mode === 'redistricting') ? 'none' : '';
+                const layerContentEl = document.getElementById('layerContent');
+                if (layerContentEl) layerContentEl.style.display = (mode === 'redistricting') ? 'none' : '';
+                // Also hide the "Layer" section-title above layerContent
+                const layerTitleEl = layerContentEl?.previousElementSibling;
+                if (layerTitleEl && layerTitleEl.classList.contains('section-title')) {
+                    layerTitleEl.style.display = (mode === 'redistricting') ? 'none' : '';
+                }
+
+                // Hide Edit / View / County / Sub-County buttons in Redistricting mode
+                ['editMode', 'viewMode', 'layerCounty', 'layerSubCounty'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = (mode === 'redistricting') ? 'none' : '';
+                });
+
+                // Hide Edit Location / Type / Disable in Population Density mode;
+                // hide both that row AND the colour-map row in Redistricting mode
+                const isRedistricting     = (mode === 'redistricting');
+                const editLocationTypeRow = document.getElementById('editLocationTypeRow');
+                const colorMapRow         = document.getElementById('colorMapRow');
+                if (editLocationTypeRow) {
+                    editLocationTypeRow.style.display =
+                        (mode === 'population' || isRedistricting) ? 'none' : '';
+                }
+                if (colorMapRow) {
+                    colorMapRow.style.display = isRedistricting ? 'none' : '';
+                }
+
+                // Auto-enable Density Color Map when entering population mode
+                if (mode === 'population' && window.polygonEditor) {
+                    const btn = document.getElementById('densityColorMapBtn');
+                    if (!window.polygonEditor.renderer.options.showDensityColorMap) {
+                        window.polygonEditor.toggleDensityColorMap();
+                        if (btn) btn.classList.add('active');
+                    }
+                }
+
+                // Apply default layer state when entering district type mode
+                if (mode === 'districtType' && window.polygonEditor) {
+                    const renderer = window.polygonEditor.renderer;
+
+                    // Location Map ON, Density Color Map OFF
+                    renderer.options.showLocationColorMap = true;
+                    renderer.options.showDensityColorMap  = false;
+                    document.getElementById('locationMapBtn')    ?.classList.add('active');
+                    document.getElementById('densityColorMapBtn')?.classList.remove('active');
+
+                    // Display Data ON + Location-Type as active sub-mode
+                    if (window._setLabelMode) {
+                        window._setLabelMode('locationType');
+                    } else {
+                        renderer.options.showDensityLabel      = true;
+                        renderer.options.showLocationTypeLabel = true;
+                        if (renderer.setDensityMode) renderer.setDensityMode('density');
+                        document.getElementById('displayDataBtn') ?.classList.add('active');
+                        document.getElementById('densityModeBtn') ?.classList.remove('active');
+                        document.getElementById('estPopModeBtn')  ?.classList.remove('active');
+                        document.getElementById('typeLabelBtn')   ?.classList.add('active');
+                    }
+
+                    window.polygonEditor.draw();
+                }
+
+                // Apply default layer state when entering redistricting mode — no colour maps
+                if (mode === 'redistricting' && window.polygonEditor) {
+                    const renderer = window.polygonEditor.renderer;
+
+                    // All colour maps OFF
+                    renderer.options.showDensityColorMap  = false;
+                    renderer.options.showLocationColorMap = false;
+                    renderer.options.showTypeColorMap     = false;
+                    document.getElementById('densityColorMapBtn')?.classList.remove('active');
+                    document.getElementById('locationMapBtn')    ?.classList.remove('active');
+                    document.getElementById('typeMapBtn')        ?.classList.remove('active');
+
+                    // Display Data ON + Location-Type as active sub-mode
+                    if (window._setLabelMode) {
+                        window._setLabelMode('locationType');
+                    }
+
+                    window.polygonEditor.draw();
+                }
+
+                // Highlight active mode button in FAB menu
+                menuBtns.forEach(btn => btn.classList.remove('active'));
+                const activeId = {
+                    polygon:        'editPolygonBtn',
+                    population:     'editPopDensityBtn',
+                    districtType:   'editDistrictTypeBtn',
+                    redistricting:  'redistrictingBtn',
+                }[mode];
+                const activeBtn = document.getElementById(activeId);
+                if (activeBtn) activeBtn.classList.add('active');
+
+                // Close the FAB menu and reset toggle label
+                const menu    = document.getElementById('fabMenu');
+                const toggler = document.getElementById('fabToggleBtn');
+                if (menu)    menu.classList.remove('open');
+                if (toggler) toggler.textContent = '+';
+            }
+        };
+
+        // Floating action button toggle + mode selection
+        (function() {
+            const btn  = document.getElementById('fabToggleBtn');
+            const menu = document.getElementById('fabMenu');
+            if (!btn || !menu) return;
+
+            btn.addEventListener('click', function() {
+                const open = menu.classList.toggle('open');
+                btn.textContent = open ? '−' : '+';
+            });
+
+            document.getElementById('editPolygonBtn')
+                ?.addEventListener('click', () => window.AppMode.set('polygon'));
+            document.getElementById('editPopDensityBtn')
+                ?.addEventListener('click', () => window.AppMode.set('population'));
+            document.getElementById('editDistrictTypeBtn')
+                ?.addEventListener('click', () => window.AppMode.set('districtType'));
+            document.getElementById('redistrictingBtn')
+                ?.addEventListener('click', () => window.AppMode.set('redistricting'));
+        })();
+
         function toggleFileSection() {
             const content = document.getElementById('fileContent');
             const toggle = document.getElementById('fileToggle');
@@ -670,11 +1237,7 @@
         }
 
         function toggleLayerSection() {
-            const content = document.getElementById('layerContent');
-            const toggle = document.getElementById('layerToggle');
-
-            content.classList.toggle('active');
-            toggle.classList.toggle('active');
+            // Layer section is now always visible — nothing to toggle
         }
 
         function toggleCoordinates() {
@@ -702,6 +1265,1036 @@
                 });
             }
         });
+    </script>
+
+    <!-- Split by OSM Modal -->
+    <div id="osmSplitModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:22px 24px; width:640px; max-width:95vw; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div id="osmSplitTitle" style="font-weight:700; font-size:13px; color:#333; margin-bottom:6px;">Split Polygon by OSM Districts</div>
+            <div id="osmSplitSubtitle" style="font-size:11px; color:#888; margin-bottom:10px;">
+                Pan and zoom the map to position the green frame over your target area.
+                The frame is sized to match the selected polygon's real-world dimensions.
+                OSM road data will be downloaded for the framed area.
+            </div>
+
+            <!-- Leaflet map with fixed frame overlay -->
+            <div style="position:relative; width:100%; height:380px; margin-bottom:8px;">
+                <div id="osmSplitMap" style="width:100%; height:100%; border-radius:8px; border:1.5px solid #ddd;"></div>
+                <!-- SVG overlay mirrors the actual polygon shape, not just its bounding box -->
+                <svg id="osmFrameSvg" style="position:absolute; top:0; left:0; pointer-events:none; z-index:1000; overflow:visible;">
+                    <!-- Single polygon shape (used when 1 polygon selected) -->
+                    <polygon id="osmFramePoly"
+                             fill="rgba(39,174,96,0.12)" stroke="#27ae60" stroke-width="2.5" stroke-linejoin="round"/>
+                    <!-- Multi-polygon outlines (used when >1 polygon selected) -->
+                    <g id="osmFramePolyGroup"></g>
+                    <!-- Dashed bounding box to show OSM download area -->
+                    <rect id="osmFrameBbox"
+                          fill="none" stroke="#27ae60" stroke-width="1" stroke-dasharray="6,4" opacity="0.5"/>
+                </svg>
+            </div>
+
+            <!-- Live bbox display -->
+            <div style="margin-bottom:10px;">
+                <span id="osmBboxDisplay" style="font-size:11px; color:#555; font-family:monospace;"></span>
+            </div>
+
+            <!-- Options -->
+            <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="osmUseSecondary" />
+                <label for="osmUseSecondary" style="font-size:12px; color:#555; cursor:pointer;">
+                    Use tertiary roads (more subdivisions within districts)
+                </label>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button id="osmSplitCancelBtn"
+                        style="padding:6px 18px; border:1.5px solid #ddd; border-radius:6px; background:white; font-size:12px; cursor:pointer;">
+                    Cancel
+                </button>
+                <button id="osmSplitConfirmBtn"
+                        style="padding:6px 18px; border:none; border-radius:6px; background:#27ae60; color:white; font-size:12px; cursor:pointer; font-weight:600;">
+                    Split
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Redistricting Rule Modal -->
+    <div id="redistrictingRuleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:22px 24px; width:360px; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="font-weight:700; font-size:13px; color:#333; margin-bottom:14px;">Redistricting Rule — Population Quota</div>
+            <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:16px;">
+                <thead>
+                    <tr style="background:#f0f4ff;">
+                        <th style="text-align:left; padding:7px 10px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Population Size</th>
+                        <th style="text-align:right; padding:7px 10px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Quota</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:8px 10px; color:#333;">0 – 400,000</td>
+                        <td style="padding:8px 10px; text-align:right;">
+                            <input type="number" id="quotaT1" min="1" step="1" value="20000"
+                                   style="width:90px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; font-size:12px; text-align:right;">
+                        </td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:8px 10px; color:#333;">400,001 – 650,000</td>
+                        <td style="padding:8px 10px; text-align:right;">
+                            <input type="number" id="quotaT2" min="1" step="1" value="23000"
+                                   style="width:90px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; font-size:12px; text-align:right;">
+                        </td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:8px 10px; color:#333;">650,001 – 1,000,000</td>
+                        <td style="padding:8px 10px; text-align:right;">
+                            <input type="number" id="quotaT3" min="1" step="1" value="24000"
+                                   style="width:90px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; font-size:12px; text-align:right;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px 10px; color:#333;">1,000,000 +</td>
+                        <td style="padding:8px 10px; text-align:right;">
+                            <input type="number" id="quotaT4" min="1" step="1" value="25000"
+                                   style="width:90px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; font-size:12px; text-align:right;">
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="display:flex; gap:8px;">
+                <button id="redistrictingRuleConfirm" class="btn-primary"   style="flex:1; padding:8px; font-size:12px;">Confirm</button>
+                <button id="redistrictingRuleCancel"  class="btn-secondary" style="flex:1; padding:8px; font-size:12px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Redistricting Rule ───────────────────────────────────────────────────
+        window.redistrictingRules = { t1: 20000, t2: 23000, t3: 24000, t4: 25000 };
+
+        (function () {
+            const modal      = document.getElementById('redistrictingRuleModal');
+            const openBtn    = document.getElementById('redistrictingRuleBtn');
+            const confirmBtn = document.getElementById('redistrictingRuleConfirm');
+            const cancelBtn  = document.getElementById('redistrictingRuleCancel');
+            const inputs     = ['quotaT1','quotaT2','quotaT3','quotaT4'];
+
+            function openModal() {
+                // Populate inputs with current saved values
+                document.getElementById('quotaT1').value = window.redistrictingRules.t1;
+                document.getElementById('quotaT2').value = window.redistrictingRules.t2;
+                document.getElementById('quotaT3').value = window.redistrictingRules.t3;
+                document.getElementById('quotaT4').value = window.redistrictingRules.t4;
+                modal.style.display = 'flex';
+            }
+
+            function closeModal() {
+                modal.style.display = 'none';
+            }
+
+            if (openBtn)    openBtn.addEventListener('click', openModal);
+            if (cancelBtn)  cancelBtn.addEventListener('click', closeModal);
+
+            if (confirmBtn) confirmBtn.addEventListener('click', () => {
+                const vals = inputs.map(id => parseInt(document.getElementById(id).value, 10));
+                if (vals.some(v => isNaN(v) || v < 1)) {
+                    alert('All quota values must be positive integers.');
+                    return;
+                }
+                window.redistrictingRules = { t1: vals[0], t2: vals[1], t3: vals[2], t4: vals[3] };
+                console.log('Redistricting rules saved:', window.redistrictingRules);
+                closeModal();
+                if (window._refreshCouncilStats) window._refreshCouncilStats();
+            });
+
+            // Close on backdrop click
+            modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+        })();
+
+        // ── Ward manager ────────────────────────────────────────────────────────
+        window.WardManager = (function () {
+            const METERS_PER_UNIT = 1000 / 8.01;
+
+            const WARD_COLORS = [
+                { name: 'Red',    hex: '#dc3545' },
+                { name: 'Orange', hex: '#fd7e14' },
+                { name: 'Yellow', hex: '#ffc107' },
+                { name: 'Green',  hex: '#28a745' },
+                { name: 'Cyan',   hex: '#17a2b8' },
+                { name: 'Blue',   hex: '#007bff' },
+                { name: 'Violet', hex: '#6f42c1' },
+                { name: 'Pink',   hex: '#e83e8c' },
+                { name: 'Teal',   hex: '#20c997' },
+                { name: 'Purple', hex: '#6610f2' },
+            ];
+
+            // State
+            let createMode          = false;       // true while ward creation panel is open
+            let colorIndex          = 0;           // rotates through WARD_COLORS on each new ward
+            let currentColor        = WARD_COLORS[0];
+            let currentWardPolygons = new Set();   // polygon ids selected in current draft
+            let savedWards          = [];           // [{ name, district, color, polygonIds, population }]
+            let selectedWardIdx     = null;         // index in savedWards of highlighted ward (non-create mode)
+
+            // ── Colour picker ────────────────────────────────────────────────────
+            const colorSelected  = document.getElementById('wardColorSelected');
+            const colorSwatch    = document.getElementById('wardColorSwatch');
+            const colorLabel     = document.getElementById('wardColorLabel');
+            const colorDropdown  = document.getElementById('wardColorDropdown');
+
+            // Build dropdown options
+            colorDropdown.innerHTML = WARD_COLORS.map(c => `
+                <div data-color="${c.hex}" data-name="${c.name}"
+                     style="display:flex; align-items:center; gap:7px; padding:6px 8px; cursor:pointer;
+                            font-size:10px; color:${c.hex}; font-weight:600;">
+                    <span style="display:inline-block; width:12px; height:12px; border-radius:2px;
+                                 background:${c.hex}; flex-shrink:0;"></span>
+                    ${c.name}
+                </div>`).join('');
+
+            colorSelected?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                colorDropdown.style.display = colorDropdown.style.display === 'none' ? '' : 'none';
+            });
+
+            colorDropdown?.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-color]');
+                if (!item) return;
+                currentColor = { name: item.dataset.name, hex: item.dataset.color };
+                // Keep colorIndex in sync so next auto-rotate continues from here
+                colorIndex = WARD_COLORS.findIndex(c => c.hex === currentColor.hex);
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                colorDropdown.style.display   = 'none';
+            });
+
+            document.addEventListener('click', () => {
+                if (colorDropdown) colorDropdown.style.display = 'none';
+            });
+
+            // ── Helpers ──────────────────────────────────────────────────────────
+            function calcAreaKm2(polygon) {
+                let areaUnits = 0;
+                polygon.rings.forEach((ring, ri) => {
+                    let a = 0;
+                    for (let i = 0; i < ring.length - 1; i++)
+                        a += ring[i].x * ring[i+1].y - ring[i+1].x * ring[i].y;
+                    areaUnits += ri === 0 ? Math.abs(a)/2 : -Math.abs(a)/2;
+                });
+                return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+            }
+
+            function polygonPop(p) {
+                if (!isNaN(p.actualPopulation) && p.actualPopulation > 0) return p.actualPopulation;
+                return calcAreaKm2(p) * (p.populationDensity || 0);
+            }
+
+            function getQuota() {
+                // Use cached value if available
+                if (window._currentCouncilQuota > 0) return window._currentCouncilQuota;
+                // Fallback: compute directly from current district's polygons
+                const district = window.polygonEditor?.districtFilter;
+                if (!district || !window.polygonEditor) return 0;
+                const r = window.redistrictingRules || { t1:20000, t2:23000, t3:24000, t4:25000 };
+                const polys = window.polygonEditor.polygons.filter(p => p.district === district);
+                if (polys.length === 0) return 0;
+                let totalPop = 0;
+                polys.forEach(p => {
+                    totalPop += (!isNaN(p.actualPopulation) && p.actualPopulation > 0)
+                        ? p.actualPopulation
+                        : calcAreaKm2(p) * (p.populationDensity || 0);
+                });
+                totalPop = Math.round(totalPop);
+                let baseQuota;
+                if      (totalPop <= 400000)  baseQuota = r.t1;
+                else if (totalPop <= 650000)  baseQuota = r.t2;
+                else if (totalPop <= 1000000) baseQuota = r.t3;
+                else                          baseQuota = r.t4;
+                const seats = Math.ceil(totalPop / baseQuota);
+                const computed = seats > 0 ? Math.round(totalPop / seats) : 0;
+                // Cache it so the stats panel stays in sync
+                window._currentCouncilQuota = computed;
+                return computed;
+            }
+
+            function updateUI() {
+                const count    = currentWardPolygons.size;
+                const editor   = window.polygonEditor;
+                let   draftPop = 0;
+                if (editor) {
+                    editor.polygons
+                        .filter(p => currentWardPolygons.has(p.id))
+                        .forEach(p => draftPop += polygonPop(p));
+                }
+                draftPop = Math.round(draftPop);
+
+                const quota    = getQuota();
+                const variance = quota > 0 ? (draftPop - quota) / quota * 100 : -100;
+
+                // wardPollingCount was removed from HTML — skip safely
+                const withinBound = createMode && quota > 0 && Math.abs(variance) <= 20;
+                const tick = ' ✅';
+
+                const draftPopEl    = document.getElementById('wardDraftPop');
+                const draftLabelEl  = document.getElementById('wardDraftPopLabel');
+                if (draftPopEl)   draftPopEl.textContent   = createMode ? draftPop.toLocaleString() : '0';
+                if (draftLabelEl) draftLabelEl.textContent = 'Draft electorate' + (withinBound ? tick : '');
+
+                const varEl      = document.getElementById('wardVariance');
+                const varLabelEl = document.getElementById('wardVarianceLabel');
+                if (varLabelEl) varLabelEl.textContent = 'Variance' + (withinBound ? tick : '');
+                if (varEl) {
+                    if (createMode) {
+                        const sign = variance >= 0 ? '+' : '';
+                        varEl.textContent = sign + variance.toFixed(2) + '%';
+                        varEl.style.color = variance < 0 ? '#dc3545' : '#28a745';
+                    } else {
+                        varEl.textContent = '—';
+                        varEl.style.color = '#999';
+                    }
+                }
+            }
+
+            function wardVarianceText(ward) {
+                const quota = getQuota();
+                if (!quota) return '';
+                const v      = (ward.population - quota) / quota * 100;
+                const sign   = v >= 0 ? '+' : '';
+                const col    = v < 0 ? '#dc3545' : '#28a745';
+                const within = Math.abs(v) <= 20;
+                return `<span style="color:${col}; font-size:9px; font-weight:600;">(${sign}${v.toFixed(1)}%)${within ? ' ✅' : ''}</span>`;
+            }
+
+            function renderWardsList() {
+                const el = document.getElementById('wardsList');
+                // Only show wards for the currently selected district
+                const currentDistrict = window.polygonEditor?.districtFilter || null;
+                const visible = currentDistrict
+                    ? savedWards.filter(w => w.district === currentDistrict)
+                    : savedWards;
+                // Build mapping: visible index → savedWards index
+                const visibleIndices = currentDistrict
+                    ? savedWards.map((w, i) => w.district === currentDistrict ? i : -1).filter(i => i >= 0)
+                    : savedWards.map((_, i) => i);
+
+                if (visible.length === 0) {
+                    el.innerHTML = '<span style="color:#999; font-style:italic;">No wards saved yet.</span>';
+                    return;
+                }
+                el.innerHTML = visible.map((w, vi) => {
+                    const idx = visibleIndices[vi];
+                    const isSelected = idx === selectedWardIdx;
+                    const bg = isSelected ? '#e8f4fd' : 'transparent';
+                    const border = isSelected ? '1px solid #007bff' : '1px solid transparent';
+                    return `
+                    <div onclick="window.WardManager.clickWardRow(${idx})"
+                         style="padding:5px 0 5px 4px; border-bottom:1px solid #f0f0f0; font-size:10px;
+                                background:${bg}; border-left:${border}; cursor:pointer; border-radius:3px;">
+                        <!-- Summary row: swatch · name · population · variance · toggle -->
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <span style="display:inline-block; width:9px; height:9px; border-radius:2px;
+                                         background:${w.color.hex}; flex-shrink:0;"></span>
+                            <span style="font-weight:700; color:#333; flex:1;">${w.name}</span>
+                            <span style="color:#555;">${Math.round(w.population).toLocaleString()} ${wardVarianceText(w)}</span>
+                            <button onclick="event.stopPropagation();(function(btn){
+                                        var row = document.getElementById('ward-actions-${idx}');
+                                        var open = row.style.display !== 'none';
+                                        row.style.display = open ? 'none' : 'flex';
+                                        btn.textContent = open ? '+' : '−';
+                                    })(this)"
+                                    style="font-size:10px; width:18px; height:18px; border:1px solid #ccc;
+                                           border-radius:4px; background:#f8f8f8; cursor:pointer;
+                                           display:flex; align-items:center; justify-content:center;
+                                           flex-shrink:0; padding:0; line-height:1;">+</button>
+                        </div>
+                        <!-- Collapsible action row -->
+                        <div id="ward-actions-${idx}" style="display:none; gap:6px; margin-top:5px; padding-left:14px;">
+                            <button onclick="event.stopPropagation();window.WardManager.editWard(${idx})"
+                                    style="flex:1; font-size:9px; padding:3px 0; border:1px solid #888;
+                                           border-radius:4px; background:#fff; cursor:pointer; color:#333;">Edit</button>
+                            <button onclick="event.stopPropagation();window.WardManager.deleteWard(${idx})"
+                                    style="flex:1; font-size:9px; padding:3px 0; border:1px solid #dc3545;
+                                           border-radius:4px; background:#fff; cursor:pointer; color:#dc3545;">Delete</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            function openCreateMode() {
+                createMode = true;
+                selectedWardIdx = null;
+                currentWardPolygons = new Set();
+                // Rotate to next colour (wraps around)
+                colorIndex   = (colorIndex + 1) % WARD_COLORS.length;
+                currentColor = WARD_COLORS[colorIndex];
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                document.getElementById('wardCreatePanel').style.display = '';
+                document.getElementById('createWardBtn').style.display   = 'none';
+                document.getElementById('wardCancelBtn').style.display   = '';
+                document.getElementById('wardConfirmBtn').style.display  = '';
+                updateUI();
+            }
+
+            function closeCreateMode() {
+                // If cancelling an edit, restore the original ward and its polygon assignments
+                if (editingIndex && editingIndex._ward) {
+                    const restored = editingIndex._ward;
+                    // Re-insert at original position (clamped in case list shrank)
+                    const insertAt = Math.min(editingIndex._spliceIdx, savedWards.length);
+                    savedWards.splice(insertAt, 0, restored);
+                    // Restore districtWard on the ward's polygons
+                    if (window.polygonEditor) {
+                        window.polygonEditor.polygons
+                            .filter(p => restored.polygonIds.includes(p.id))
+                            .forEach(p => { p.districtWard = restored.name; });
+                    }
+                }
+                createMode = false;
+                editingIndex = null;
+                currentWardPolygons = new Set();
+                document.getElementById('wardCreatePanel').style.display = 'none';
+                document.getElementById('createWardBtn').style.display   = '';
+                document.getElementById('wardCancelBtn').style.display   = 'none';
+                document.getElementById('wardConfirmBtn').style.display  = 'none';
+                renderWardsList();
+                if (window._refreshCouncilHeader) window._refreshCouncilHeader();
+                updateUI();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            // ── Button wiring ─────────────────────────────────────────────────────
+            document.getElementById('createWardBtn')?.addEventListener('click', openCreateMode);
+
+            document.getElementById('wardCancelBtn')?.addEventListener('click', closeCreateMode);
+
+            document.getElementById('wardConfirmBtn')?.addEventListener('click', () => {
+                if (currentWardPolygons.size === 0) {
+                    alert('Select at least one polling district first.');
+                    return;
+                }
+                const editor   = window.polygonEditor;
+                let   totalPop = 0;
+                const currentDistrict = window.polygonEditor?.districtFilter || '';
+                // When editing, keep the original ward name; only assign a new one for new wards.
+                // Use max existing ward number + 1 (not count + 1) to avoid duplicates after deletions.
+                let wardName;
+                if (editingIndex !== null && editingIndex._name) {
+                    wardName = editingIndex._name;
+                } else {
+                    const districtWards = savedWards.filter(w => w.district === currentDistrict);
+                    const usedNums = districtWards.map(w => {
+                        const m = w.name.match(/^Ward (\d+)$/i);
+                        return m ? parseInt(m[1], 10) : 0;
+                    });
+                    const nextNo = usedNums.length > 0 ? Math.max(...usedNums) + 1 : 1;
+                    wardName = `Ward ${nextNo}`;
+                }
+
+                if (editor) {
+                    editor.polygons
+                        .filter(p => currentWardPolygons.has(p.id))
+                        .forEach(p => {
+                            totalPop += polygonPop(p);
+                            // Write back to polygon data — updates District_Ward column
+                            p.districtWard = wardName;
+                        });
+                }
+
+                savedWards.push({
+                    name:       wardName,
+                    district:   currentDistrict,
+                    color:      currentColor,
+                    polygonIds: [...currentWardPolygons],
+                    population: Math.round(totalPop)
+                });
+
+                editingIndex = null;
+                renderWardsList();
+                if (window._refreshCouncilHeader) window._refreshCouncilHeader();
+                closeCreateMode();
+            });
+
+            document.getElementById('clearWardsBtn')?.addEventListener('click', () => {
+                if (savedWards.length === 0 && !createMode) return;
+                if (!confirm('Clear all wards? This will remove every saved ward and reset all District_Ward assignments.')) return;
+                if (window.polygonEditor) {
+                    window.polygonEditor.polygons.forEach(p => { p.districtWard = ''; });
+                }
+                savedWards = [];
+                closeCreateMode();
+                renderWardsList();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            });
+
+            // ── Ward-row click (select ward) ──────────────────────────────────────
+            function clickWardRow(idx) {
+                if (createMode) return; // ignore during draft creation
+                selectedWardIdx = (selectedWardIdx === idx) ? null : idx;
+                renderWardsList();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            // ── Select ward by polygon id ─────────────────────────────────────────
+            function selectWardByPolygon(polygonId) {
+                const idx = savedWards.findIndex(w => w.polygonIds.includes(polygonId));
+                selectedWardIdx = (idx >= 0) ? idx : null;
+                renderWardsList();
+            }
+
+            // ── C key action from redistricting mode ──────────────────────────────
+            function activateCKey() {
+                if (selectedWardIdx !== null) {
+                    // A ward row is selected — edit it
+                    editWard(selectedWardIdx);
+                } else {
+                    // No ward selected — open create panel
+                    openCreateMode();
+                }
+            }
+
+            // ── Load wards from polygon data (called after CSV load) ──────────────
+            function loadFromPolygons(polygons) {
+                // Group polygons by (district, districtWard)
+                const groups = {};
+                polygons.forEach(p => {
+                    if (!p.districtWard) return;
+                    const key = (p.district || '') + '\x00' + p.districtWard;
+                    if (!groups[key]) groups[key] = { district: p.district || '', name: p.districtWard, polys: [] };
+                    groups[key].polys.push(p);
+                });
+
+                // Assign colors rotating per district
+                const districtColorIdx = {};
+                savedWards = [];
+                Object.values(groups).forEach(g => {
+                    const d = g.district;
+                    if (districtColorIdx[d] === undefined) districtColorIdx[d] = 0;
+                    const color = WARD_COLORS[districtColorIdx[d] % WARD_COLORS.length];
+                    districtColorIdx[d]++;
+                    let pop = 0;
+                    g.polys.forEach(p => { pop += polygonPop(p); });
+                    savedWards.push({
+                        name:       g.name,
+                        district:   d,
+                        color:      color,
+                        polygonIds: g.polys.map(p => p.id),
+                        population: Math.round(pop)
+                    });
+                });
+
+                selectedWardIdx = null;
+                colorIndex = savedWards.length % WARD_COLORS.length;
+                renderWardsList();
+                if (window._refreshCouncilHeader) window._refreshCouncilHeader();
+            }
+
+            // ── Public API ────────────────────────────────────────────────────────
+            function isCreateMode()       { return createMode; }
+            function getCurrentColor()    { return currentColor; }
+            function getCurrentWardIds()  { return currentWardPolygons; }
+            function getSavedWards()      { return savedWards; }
+
+            function togglePolygon(polygonId) {
+                if (!createMode) return; // clicks only register in create mode
+                if (currentWardPolygons.has(polygonId)) {
+                    currentWardPolygons.delete(polygonId);
+                } else {
+                    currentWardPolygons.add(polygonId);
+                }
+                updateUI();
+            }
+
+            // null = new ward, or { _name, _ward, _spliceIdx } when editing
+            let editingIndex = null;
+
+            function editWard(idx) {
+                const ward = savedWards[idx];
+                // Store the full ward snapshot and its original position so Cancel can restore it
+                editingIndex = { _name: ward.name, _ward: { ...ward, polygonIds: [...ward.polygonIds] }, _spliceIdx: idx };
+                selectedWardIdx = null;
+                // Restore the ward's selections and colour into create mode
+                currentWardPolygons = new Set(ward.polygonIds);
+                currentColor  = ward.color;
+                colorIndex    = WARD_COLORS.findIndex(c => c.hex === currentColor.hex);
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                // Clear districtWard on its polygons so they're free to re-assign
+                if (window.polygonEditor) {
+                    window.polygonEditor.polygons
+                        .filter(p => ward.polygonIds.includes(p.id))
+                        .forEach(p => { p.districtWard = ''; });
+                }
+                savedWards.splice(idx, 1); // temporarily remove while editing
+                renderWardsList();
+                createMode = true;
+                document.getElementById('wardCreatePanel').style.display = '';
+                document.getElementById('createWardBtn').style.display   = 'none';
+                document.getElementById('wardCancelBtn').style.display   = '';
+                document.getElementById('wardConfirmBtn').style.display  = '';
+                updateUI();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            function deleteWard(idx) {
+                const ward = savedWards[idx];
+                if (window.polygonEditor) {
+                    window.polygonEditor.polygons
+                        .filter(p => ward.polygonIds.includes(p.id))
+                        .forEach(p => { p.districtWard = ''; });
+                }
+                savedWards.splice(idx, 1);
+                renderWardsList();
+                if (window._refreshCouncilHeader) window._refreshCouncilHeader();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            function reset() {
+                savedWards = [];
+                closeCreateMode();
+                renderWardsList();
+            }
+
+            function getSelectedWardIds() {
+                if (selectedWardIdx === null) return null;
+                const w = savedWards[selectedWardIdx];
+                return w ? new Set(w.polygonIds) : null;
+            }
+
+            return { togglePolygon, getCurrentWardIds, getCurrentColor,
+                     isCreateMode, updateUI, reset, getSavedWards, editWard, deleteWard,
+                     selectWardByPolygon, activateCKey, loadFromPolygons, clickWardRow,
+                     openCreateMode, renderWardsList, getSelectedWardIds };
+        })();
+
+        // ── Council select + stats ───────────────────────────────────────────────
+        (function () {
+            const councilSelect = document.getElementById('councilSelect');
+            const councilStats  = document.getElementById('councilStats');
+            const extraSeatChk  = document.getElementById('extraSeatChk');
+            if (!councilSelect) return;
+
+            const METERS_PER_UNIT = 1000 / 8.01;
+
+            function calcAreaKm2(polygon) {
+                let areaUnits = 0;
+                polygon.rings.forEach((ring, ri) => {
+                    let a = 0;
+                    for (let i = 0; i < ring.length - 1; i++)
+                        a += ring[i].x * ring[i+1].y - ring[i+1].x * ring[i].y;
+                    areaUnits += ri === 0 ? Math.abs(a)/2 : -Math.abs(a)/2;
+                });
+                return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+            }
+
+            /** Allocated seats for a given total population using current rules. */
+            function allocatedSeats(pop) {
+                const r = window.redistrictingRules || { t1:20000, t2:23000, t3:24000, t4:25000 };
+                let quota;
+                if      (pop <= 400000)  quota = r.t1;
+                else if (pop <= 650000)  quota = r.t2;
+                else if (pop <= 1000000) quota = r.t3;
+                else                     quota = r.t4;
+                return Math.ceil(pop / quota);
+            }
+
+            function renderStats(districtName) {
+                if (!districtName || !window.polygonEditor) {
+                    councilStats.style.display = 'none';
+                    window._currentCouncilQuota = 0;
+                    return;
+                }
+
+                const polys = window.polygonEditor.polygons.filter(p => p.district === districtName);
+                if (polys.length === 0) { councilStats.style.display = 'none'; return; }
+
+                // Total population — prefer actual, fall back to estimate
+                let totalPop = 0;
+                polys.forEach(p => {
+                    if (!isNaN(p.actualPopulation) && p.actualPopulation > 0) {
+                        totalPop += p.actualPopulation;
+                    } else {
+                        totalPop += calcAreaKm2(p) * (p.populationDensity || 0);
+                    }
+                });
+                totalPop = Math.round(totalPop);
+
+                const extra      = extraSeatChk && extraSeatChk.checked ? 1 : 0;
+                const seats      = allocatedSeats(totalPop) + extra;
+                const quota      = seats > 0 ? totalPop / seats : 0;
+                const boundLo    = quota * 0.8;
+                const boundHi    = quota * 1.2;
+
+                document.getElementById('csTotalPop').textContent  = totalPop.toLocaleString();
+                document.getElementById('csAllocSeat').textContent = seats + (extra ? ' (+1 extra)' : '');
+                window._currentCouncilQuota = Math.round(quota);
+                document.getElementById('csQuota').textContent     = window._currentCouncilQuota.toLocaleString();
+                document.getElementById('csBoundary').textContent  =
+                    Math.round(boundLo).toLocaleString() + ' – ' + Math.round(boundHi).toLocaleString();
+
+                // Header summary
+                document.getElementById('csCouncilName').textContent = districtName;
+                window._currentCouncilSeats = seats;
+                refreshCouncilHeader(districtName, seats);
+
+                councilStats.style.display = '';
+            }
+
+            function refreshCouncilHeader(districtName, seats) {
+                const d = districtName || councilSelect.value || '';
+                const s = seats != null ? seats : (window._currentCouncilSeats || 0);
+                const created   = window.WardManager
+                    ? window.WardManager.getSavedWards().filter(w => w.district === d).length
+                    : 0;
+                const remaining = Math.max(0, s - created);
+                document.getElementById('csCreated').textContent   = created;
+                document.getElementById('csRemaining').textContent = remaining;
+                const remEl = document.getElementById('csRemaining');
+                if (remEl) remEl.style.color = remaining === 0 ? '#28a745' : (remaining < 0 ? '#dc3545' : '#333');
+            }
+
+            // Expose so WardManager can call it after saving / deleting a ward
+            window._refreshCouncilHeader = () => refreshCouncilHeader(councilSelect.value, window._currentCouncilSeats);
+
+            /**
+             * Populate the council dropdown from the loaded polygon data.
+             * Called after any CSV load via window._updateCouncilSelect().
+             */
+            window._updateCouncilSelect = function(polygons) {
+                const districts = [...new Set(
+                    (polygons || []).map(p => p.district).filter(Boolean)
+                )].sort();
+
+                councilSelect.innerHTML = '<option value="">— All —</option>';
+                districts.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.textContent = d;
+                    councilSelect.appendChild(opt);
+                });
+
+                councilStats.style.display = 'none';
+                if (extraSeatChk) extraSeatChk.checked = false;
+            };
+
+            // Filter polygons + refresh stats on council change
+            councilSelect.addEventListener('change', () => {
+                if (!window.polygonEditor) return;
+                const district = councilSelect.value || null;
+                window.polygonEditor.districtFilter = district;
+                window.polygonEditor.draw();
+                renderStats(district);
+                if (extraSeatChk) extraSeatChk.checked = false;
+                // Refresh ward list to show only this council's wards
+                if (window.WardManager) window.WardManager.renderWardsList();
+            });
+
+            // Recalculate when Extra Seat is toggled
+            if (extraSeatChk) {
+                extraSeatChk.addEventListener('change', () => renderStats(councilSelect.value));
+            }
+
+            // Expose so Redistricting Rule confirm can trigger a recalc
+            window._refreshCouncilStats = () => renderStats(councilSelect.value);
+        })();
+    </script>
+
+    <!-- ═══ SVG Layer Controls ══════════════════════════════════════════════ -->
+    <script>
+    (function () {
+        const fileInput      = document.getElementById('svgFileInput');
+        const statusEl       = document.getElementById('svgStatus');
+        const controlsEl     = document.getElementById('svgControls');
+        const toggleBtn      = document.getElementById('svgToggleBtn');
+        const fitViewBtn     = document.getElementById('svgFitViewBtn');
+        const fitPolyBtn     = document.getElementById('svgFitPolyBtn');
+        const moveBtn        = document.getElementById('svgMoveBtn');
+        const resetBtn       = document.getElementById('svgResetBtn');
+        const scaleSlider    = document.getElementById('svgScaleSlider');
+        const scaleVal       = document.getElementById('svgScaleVal');
+        const offsetXSlider  = document.getElementById('svgOffsetXSlider');
+        const offsetXVal     = document.getElementById('svgOffsetXVal');
+        const offsetYSlider  = document.getElementById('svgOffsetYSlider');
+        const offsetYVal     = document.getElementById('svgOffsetYVal');
+        const opacitySlider  = document.getElementById('svgOpacitySlider');
+        const opacityVal     = document.getElementById('svgOpacityVal');
+
+        // -- internal state ------------------------------------------------
+        // baseWidth  = SVG dataWidth when scale slider is at 100
+        // baseAnchor = anchorX/Y when offsets are both 0
+        let baseWidth  = 100;
+        let baseAnchorX = 0;
+        let baseAnchorY = 0;
+        let svgMoveMode = false;
+        let _moveDragStart = null;  // { screenX, screenY, anchorX, anchorY }
+
+        function svgLayer() {
+            return window.polygonEditor && window.polygonEditor.svgLayer;
+        }
+        function redraw() {
+            if (window.polygonEditor) window.polygonEditor.draw();
+        }
+
+        // -- apply sliders to SvgLayer -------------------------------------
+        function applySliders() {
+            const sl = svgLayer();
+            if (!sl) return;
+
+            const scalePct  = parseFloat(scaleSlider.value);   // 1–500
+            const offX      = parseFloat(offsetXSlider.value); // -200..200
+            const offY      = parseFloat(offsetYSlider.value);
+            const opacityPct = parseFloat(opacitySlider.value);
+
+            sl.dataWidth = baseWidth * (scalePct / 100);
+            sl.anchorX   = baseAnchorX + offX;
+            sl.anchorY   = baseAnchorY + offY;
+            sl.opacity   = opacityPct / 100;
+
+            scaleVal.textContent   = scalePct   + '%';
+            offsetXVal.textContent = offX  >= 0 ? '+' + offX  : '' + offX;
+            offsetYVal.textContent = offY  >= 0 ? '+' + offY  : '' + offY;
+            opacityVal.textContent = opacityPct + '%';
+
+            redraw();
+        }
+
+        // -- reset slider display (called after fit operations) ------------
+        function resetSliders() {
+            scaleSlider.value   = 100;
+            offsetXSlider.value = 0;
+            offsetYSlider.value = 0;
+            scaleVal.textContent   = '100%';
+            offsetXVal.textContent = '0';
+            offsetYVal.textContent = '0';
+        }
+
+        // -- file load -----------------------------------------------------
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const sl = svgLayer();
+            if (!sl) { statusEl.textContent = 'Editor not ready.'; return; }
+
+            statusEl.textContent = 'Loading…';
+            try {
+                const { width, height } = await sl.loadFile(file);
+                statusEl.textContent = `Loaded: ${file.name} (${Math.round(width)}×${Math.round(height)} SVG units)`;
+                controlsEl.style.display = '';
+
+                // Auto-fit to polygon bounds if polygons are loaded,
+                // otherwise fit to current canvas view
+                const editor = window.polygonEditor;
+                let bounds = null;
+                if (editor && editor.polygons && editor.polygons.length > 0) {
+                    bounds = editor.geometryOps.calculateBounds(editor.polygons);
+                    sl.fitToBounds(bounds);
+                    statusEl.textContent += ' — fitted to polygon bounds';
+                } else if (editor) {
+                    sl.fitToView(editor.geometryOps, editor.canvas);
+                    statusEl.textContent += ' — fitted to canvas view';
+                }
+
+                // Save base values for slider offsets
+                baseWidth   = sl.dataWidth;
+                baseAnchorX = sl.anchorX;
+                baseAnchorY = sl.anchorY;
+
+                // Sync opacity slider to default
+                opacitySlider.value    = Math.round(sl.opacity * 100);
+                opacityVal.textContent = opacitySlider.value + '%';
+                resetSliders();
+                redraw();
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+            }
+            fileInput.value = '';   // allow re-selecting same file
+        });
+
+        // -- toggle --------------------------------------------------------
+        toggleBtn.addEventListener('click', () => {
+            const sl = svgLayer();
+            if (!sl || !sl.isLoaded()) return;
+            const visible = sl.toggle();
+            toggleBtn.textContent = visible ? '🙈 Hide' : '👁 Toggle';
+            toggleBtn.classList.toggle('active', visible);
+            redraw();
+        });
+
+        // -- fit to canvas view --------------------------------------------
+        fitViewBtn.addEventListener('click', () => {
+            const sl = svgLayer();
+            const editor = window.polygonEditor;
+            if (!sl || !sl.isLoaded() || !editor) return;
+            sl.fitToView(editor.geometryOps, editor.canvas);
+            baseWidth   = sl.dataWidth;
+            baseAnchorX = sl.anchorX;
+            baseAnchorY = sl.anchorY;
+            resetSliders();
+            redraw();
+        });
+
+        // -- fit to polygon bounds -----------------------------------------
+        fitPolyBtn.addEventListener('click', () => {
+            const sl = svgLayer();
+            const editor = window.polygonEditor;
+            if (!sl || !sl.isLoaded() || !editor) return;
+            if (!editor.polygons || editor.polygons.length === 0) {
+                alert('No polygons loaded to fit to.');
+                return;
+            }
+            const bounds = editor.geometryOps.calculateBounds(editor.polygons);
+            sl.fitToBounds(bounds);
+            baseWidth   = sl.dataWidth;
+            baseAnchorX = sl.anchorX;
+            baseAnchorY = sl.anchorY;
+            resetSliders();
+            redraw();
+        });
+
+        // -- sliders -------------------------------------------------------
+        [scaleSlider, offsetXSlider, offsetYSlider, opacitySlider].forEach(s => {
+            s.addEventListener('input', applySliders);
+        });
+
+        // -- rotate buttons -----------------------------------------------
+        const rotationVal = document.getElementById('svgRotationVal');
+
+        function applyRotation(delta) {
+            const sl = svgLayer();
+            if (!sl || !sl.isLoaded()) return;
+            sl.rotate(delta);
+            rotationVal.textContent = Math.round(sl.rotation) + '°';
+            redraw();
+        }
+
+        document.getElementById('svgRotL90') ?.addEventListener('click', () => applyRotation(-90));
+        document.getElementById('svgRotL15') ?.addEventListener('click', () => applyRotation(-15));
+        document.getElementById('svgRotR15') ?.addEventListener('click', () => applyRotation(+15));
+        document.getElementById('svgRotR90') ?.addEventListener('click', () => applyRotation(+90));
+
+        document.getElementById('svgRotReset')?.addEventListener('click', () => {
+            const sl = svgLayer();
+            if (!sl) return;
+            sl.rotation = 0;
+            rotationVal.textContent = '0°';
+            redraw();
+        });
+
+        // -- remove SVG ---------------------------------------------------
+        resetBtn.addEventListener('click', () => {
+            const sl = svgLayer();
+            if (!sl) return;
+            sl.clear();
+            controlsEl.style.display = 'none';
+            statusEl.textContent = '';
+            toggleBtn.textContent = '👁 Toggle';
+            toggleBtn.classList.remove('active');
+            exitMoveMode();
+            resetSliders();
+            if (rotationVal) rotationVal.textContent = '0°';
+            redraw();
+        });
+
+        // ── Drag-to-reposition mode ──────────────────────────────────────
+        function enterMoveMode() {
+            svgMoveMode = true;
+            moveBtn.classList.add('active');
+            moveBtn.textContent = '✥ Moving… (click canvas to stop)';
+            const canvas = window.polygonEditor && window.polygonEditor.canvas;
+            if (canvas) canvas.style.cursor = 'move';
+        }
+
+        function exitMoveMode() {
+            svgMoveMode = false;
+            _moveDragStart = null;
+            if (moveBtn) {
+                moveBtn.classList.remove('active');
+                moveBtn.textContent = '✥ Move SVG (drag on canvas)';
+            }
+            const canvas = window.polygonEditor && window.polygonEditor.canvas;
+            if (canvas) canvas.style.cursor = '';
+        }
+
+        moveBtn.addEventListener('click', () => {
+            if (svgMoveMode) exitMoveMode();
+            else enterMoveMode();
+        });
+
+        // Intercept canvas mouse events for SVG drag
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('canvas');
+            if (!canvas) return;
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (!svgMoveMode) return;
+                const sl = svgLayer();
+                const editor = window.polygonEditor;
+                if (!sl || !editor) return;
+                e.stopPropagation();
+                _moveDragStart = {
+                    screenX: e.clientX,
+                    screenY: e.clientY,
+                    anchorX: sl.anchorX,
+                    anchorY: sl.anchorY,
+                };
+            }, true);
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!svgMoveMode || !_moveDragStart) return;
+                const sl     = svgLayer();
+                const editor = window.polygonEditor;
+                if (!sl || !editor) return;
+                e.stopPropagation();
+
+                // Compute drag delta in DATA units
+                const rect   = canvas.getBoundingClientRect();
+                const scaleX = canvas.width  / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const dxPx   = (e.clientX - _moveDragStart.screenX) * scaleX;
+                const dyPx   = (e.clientY - _moveDragStart.screenY) * scaleY;
+
+                // Convert pixel delta to data-unit delta using current zoom
+                const origin = editor.geometryOps.screenToData(0, 0);
+                const delta  = editor.geometryOps.screenToData(dxPx, dyPx);
+                const dataDX = delta.x - origin.x;
+                const dataDY = delta.y - origin.y;
+
+                sl.anchorX = _moveDragStart.anchorX + dataDX;
+                sl.anchorY = _moveDragStart.anchorY + dataDY;
+
+                // Keep offset sliders in sync (clamped to slider range)
+                const offX = Math.round(sl.anchorX - baseAnchorX);
+                const offY = Math.round(sl.anchorY - baseAnchorY);
+                offsetXSlider.value    = Math.max(-200, Math.min(200, offX));
+                offsetYSlider.value    = Math.max(-200, Math.min(200, offY));
+                offsetXVal.textContent = offX >= 0 ? '+' + offX : '' + offX;
+                offsetYVal.textContent = offY >= 0 ? '+' + offY : '' + offY;
+
+                redraw();
+            }, true);
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (!svgMoveMode || !_moveDragStart) return;
+                e.stopPropagation();
+                // Commit new base position so sliders reset to 0 from here
+                const sl = svgLayer();
+                if (sl) {
+                    baseAnchorX = sl.anchorX;
+                    baseAnchorY = sl.anchorY;
+                    offsetXSlider.value    = 0;
+                    offsetYSlider.value    = 0;
+                    offsetXVal.textContent = '0';
+                    offsetYVal.textContent = '0';
+                }
+                _moveDragStart = null;
+            }, true);
+        });
+
+        // Esc exits move mode
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && svgMoveMode) exitMoveMode();
+        });
+    })();
     </script>
 </body>
 </html>
