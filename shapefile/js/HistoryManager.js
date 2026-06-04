@@ -1,308 +1,332 @@
 /**
- * HistoryManager - Handles undo/redo functionality with state management
+ * HistoryManager - Handles undo/redo with diff-based snapshots.
+ *
+ * Instead of deep-cloning the entire polygon array on every save, each entry
+ * stores only the polygons whose fingerprint changed since the previous save.
+ * Full snapshots are kept only at the base of each diff chain (first entry, or
+ * after the oldest entry is evicted).  Reconstruction walks the chain forward
+ * from the nearest full snapshot.
+ *
+ * Memory impact at P=10,000 polygons:
+ *   Old: every save ≈ 25 MB  →  10 saves = 250 MB
+ *   New: split saves ~12 changed polys ≈ 300 KB  →  10 saves ≈ 3 MB + 1 full
  */
 class HistoryManager {
     constructor(maxHistorySize = 10) {
-        this.history = [];
+        this.history      = [];
         this.historyIndex = -1;
         this.maxHistorySize = maxHistorySize;
+        this._prevFps = null; // Map<id, fingerprint> reflecting the last saved state
     }
 
+    // ── Fingerprint ────────────────────────────────────────────────────────
+
     /**
-     * Save current state to history
-     * @param {Array<Object>} polygons - Current polygon data to save
-     * @param {string} action - Description of the action being saved
+     * Cheap per-polygon fingerprint.  Detects ring geometry changes (vertex
+     * sync, splits, moves) and common field edits (density, countyType).
      */
+    _fp(poly) {
+        let n = 0;
+        const rings = poly.rings || [];
+        for (const ring of rings) n += ring.length;
+        const r  = rings[0];
+        const v0 = r && r.length ? r[0]            : { x: 0, y: 0 };
+        const vL = r && r.length ? r[r.length - 1] : { x: 0, y: 0 };
+        return `${n}|${Math.round(v0.x * 1e4)}|${Math.round(v0.y * 1e4)}` +
+               `|${Math.round(vL.x * 1e4)}|${Math.round(vL.y * 1e4)}` +
+               `|${poly.populationDensity || 0}|${poly.countyType || ''}`;
+    }
+
+    // ── Save ───────────────────────────────────────────────────────────────
+
     saveToHistory(polygons, action = 'Unknown action', vnSnapshot = null) {
-        const currentState = {
-            polygons:   JSON.parse(JSON.stringify(polygons)),
-            vnSnapshot: vnSnapshot ? JSON.parse(JSON.stringify(vnSnapshot)) : null,
-            action:     action,
-            timestamp:  Date.now()
-        };
-        
-        // Remove any history after current index (when doing new actions after undo)
+        // Discard any forward redo history
         this.history = this.history.slice(0, this.historyIndex + 1);
-        
-        // Add new state
-        this.history.push(currentState);
-        
-        // Maintain maximum history size
+
+        const currFps = new Map(polygons.map(p => [p.id, this._fp(p)]));
+        const vnClone = vnSnapshot ? JSON.parse(JSON.stringify(vnSnapshot)) : null;
+
+        let entry;
+        if (!this._prevFps) {
+            // First entry after load/clear → full snapshot
+            entry = {
+                type:      'full',
+                polygons:  JSON.parse(JSON.stringify(polygons)),
+                order:     polygons.map(p => p.id),
+                action,
+                timestamp: Date.now(),
+                vnSnapshot: vnClone,
+            };
+        } else {
+            // Subsequent entries → diff (only changed/added polygons)
+            const currIds  = new Set(polygons.map(p => p.id));
+            const changed  = [];
+            for (const p of polygons) {
+                if (this._prevFps.get(p.id) !== currFps.get(p.id)) {
+                    changed.push(JSON.parse(JSON.stringify(p)));
+                }
+            }
+            const removedIds = [...this._prevFps.keys()].filter(id => !currIds.has(id));
+
+            entry = {
+                type:       'diff',
+                changed,
+                removedIds,
+                order:      polygons.map(p => p.id),
+                action,
+                timestamp:  Date.now(),
+                vnSnapshot: vnClone,
+            };
+        }
+
+        this.history.push(entry);
+        this._prevFps = currFps;
+
         if (this.history.length > this.maxHistorySize) {
+            // Promote entry[1] to a full snapshot before evicting entry[0],
+            // so the diff chain never loses its base.
+            this._promoteToFull(1);
             this.history.shift();
+            // historyIndex stays unchanged: it now points to the new entry
+            // (which shifted from history.length-1 to history.length-2 then
+            //  back to length-1 after shift — net effect: same index, correct entry).
         } else {
             this.historyIndex++;
         }
-        
+
         console.log(`Saved to history: ${action} (${this.history.length} states, index ${this.historyIndex})`);
     }
 
+    // ── Internal helpers ───────────────────────────────────────────────────
+
+    /** Convert a diff entry at `idx` into a full snapshot in-place. */
+    _promoteToFull(idx) {
+        if (!this.history[idx] || this.history[idx].type === 'full') return;
+        const polygons = this._resolve(idx); // already deep-cloned
+        const old = this.history[idx];
+        this.history[idx] = {
+            type:      'full',
+            polygons,
+            order:     old.order,
+            action:    old.action,
+            timestamp: old.timestamp,
+            vnSnapshot: old.vnSnapshot,
+        };
+    }
+
     /**
-     * Undo the last action
-     * @returns {Object|null} - Previous state or null if can't undo
+     * Reconstruct the full polygon array at history[index].
+     * Walks backwards to the nearest full entry, then applies diffs forward.
+     * Returns a deep-cloned array safe to hand to callers.
      */
+    _resolve(index) {
+        const entry = this.history[index];
+        if (entry.type === 'full') {
+            return entry.polygons.map(p => JSON.parse(JSON.stringify(p)));
+        }
+
+        // Find nearest full base
+        let base = index - 1;
+        while (base >= 0 && this.history[base].type === 'diff') base--;
+
+        if (base < 0) {
+            console.warn('HistoryManager._resolve: no full base found');
+            return [];
+        }
+
+        // Build a mutable map from the base's stored (non-cloned) data
+        const polyMap = new Map(this.history[base].polygons.map(p => [p.id, p]));
+
+        // Apply each diff forward
+        for (let i = base + 1; i <= index; i++) {
+            const d = this.history[i];
+            for (const id of d.removedIds)  polyMap.delete(id);
+            for (const p  of d.changed)     polyMap.set(p.id, p);
+        }
+
+        // Return in the correct order, deep-cloned so callers can mutate freely
+        return this.history[index].order
+            .map(id => polyMap.get(id))
+            .filter(Boolean)
+            .map(p => JSON.parse(JSON.stringify(p)));
+    }
+
+    /** Resolve + package into the standard return shape. */
+    _getEntry(index) {
+        const entry    = this.history[index];
+        const polygons = this._resolve(index);
+        return {
+            polygons,
+            vnSnapshot: entry.vnSnapshot ? JSON.parse(JSON.stringify(entry.vnSnapshot)) : null,
+            action:     entry.action,
+            timestamp:  entry.timestamp,
+        };
+    }
+
+    // ── Public API ─────────────────────────────────────────────────────────
+
     undo() {
-        if (!this.canUndo()) {
-            return null;
-        }
-
+        if (!this.canUndo()) return null;
         this.historyIndex--;
-        const previousState = this.history[this.historyIndex];
-
-        console.log(`Undoing: ${previousState.action}`);
-        return {
-            polygons: JSON.parse(JSON.stringify(previousState.polygons)),
-            vnSnapshot: previousState.vnSnapshot ? JSON.parse(JSON.stringify(previousState.vnSnapshot)) : null,
-            action: previousState.action,
-            timestamp: previousState.timestamp
-        };
+        const result = this._getEntry(this.historyIndex);
+        // Keep _prevFps aligned with the restored state so the next save diffs correctly
+        this._prevFps = new Map(result.polygons.map(p => [p.id, this._fp(p)]));
+        console.log(`Undoing: ${result.action}`);
+        return result;
     }
 
-    /**
-     * Redo the next action
-     * @returns {Object|null} - Next state or null if can't redo
-     */
     redo() {
-        if (!this.canRedo()) {
-            return null;
-        }
-
+        if (!this.canRedo()) return null;
         this.historyIndex++;
-        const nextState = this.history[this.historyIndex];
+        const result = this._getEntry(this.historyIndex);
+        this._prevFps = new Map(result.polygons.map(p => [p.id, this._fp(p)]));
+        console.log(`Redoing: ${result.action}`);
+        return result;
+    }
 
-        console.log(`Redoing: ${nextState.action}`);
+    canUndo() { return this.historyIndex > 0; }
+    canRedo() { return this.historyIndex < this.history.length - 1; }
+
+    getCurrentState() {
+        if (this.historyIndex < 0) return null;
+        const entry = this.history[this.historyIndex];
         return {
-            polygons: JSON.parse(JSON.stringify(nextState.polygons)),
-            vnSnapshot: nextState.vnSnapshot ? JSON.parse(JSON.stringify(nextState.vnSnapshot)) : null,
-            action: nextState.action,
-            timestamp: nextState.timestamp
+            polygons:  this._resolve(this.historyIndex),
+            action:    entry.action,
+            timestamp: entry.timestamp,
         };
     }
 
-    /**
-     * Check if undo is possible
-     * @returns {boolean} - True if can undo
-     */
-    canUndo() {
-        return this.historyIndex > 0;
-    }
-
-    /**
-     * Check if redo is possible
-     * @returns {boolean} - True if can redo
-     */
-    canRedo() {
-        return this.historyIndex < this.history.length - 1;
-    }
-
-    /**
-     * Get the current state without changing history position
-     * @returns {Object|null} - Current state or null if no history
-     */
-    getCurrentState() {
-        if (this.historyIndex >= 0 && this.historyIndex < this.history.length) {
-            const currentState = this.history[this.historyIndex];
-            return {
-                polygons: JSON.parse(JSON.stringify(currentState.polygons)),
-                action: currentState.action,
-                timestamp: currentState.timestamp
-            };
-        }
-        return null;
-    }
-
-    /**
-     * Get information about available undo actions
-     * @returns {Array<Object>} - Array of undo-able actions
-     */
     getUndoActions() {
         const actions = [];
         for (let i = this.historyIndex - 1; i >= 0; i--) {
             actions.push({
-                index: i,
-                action: this.history[i].action,
+                index:     i,
+                action:    this.history[i].action,
                 timestamp: this.history[i].timestamp,
-                stepsBack: this.historyIndex - i
+                stepsBack: this.historyIndex - i,
             });
         }
         return actions;
     }
 
-    /**
-     * Get information about available redo actions
-     * @returns {Array<Object>} - Array of redo-able actions
-     */
     getRedoActions() {
         const actions = [];
         for (let i = this.historyIndex + 1; i < this.history.length; i++) {
             actions.push({
-                index: i,
-                action: this.history[i].action,
-                timestamp: this.history[i].timestamp,
-                stepsForward: i - this.historyIndex
+                index:        i,
+                action:       this.history[i].action,
+                timestamp:    this.history[i].timestamp,
+                stepsForward: i - this.historyIndex,
             });
         }
         return actions;
     }
 
-    /**
-     * Jump to a specific point in history
-     * @param {number} targetIndex - Index to jump to
-     * @returns {Object|null} - State at target index or null if invalid
-     */
     jumpToHistoryIndex(targetIndex) {
-        if (targetIndex >= 0 && targetIndex < this.history.length) {
-            this.historyIndex = targetIndex;
-            const targetState = this.history[targetIndex];
-            
-            console.log(`Jumped to history index ${targetIndex}: ${targetState.action}`);
-            return {
-                polygons: JSON.parse(JSON.stringify(targetState.polygons)),
-                action: targetState.action,
-                timestamp: targetState.timestamp
-            };
-        }
-        return null;
+        if (targetIndex < 0 || targetIndex >= this.history.length) return null;
+        this.historyIndex = targetIndex;
+        const result = this._getEntry(targetIndex);
+        this._prevFps = new Map(result.polygons.map(p => [p.id, this._fp(p)]));
+        console.log(`Jumped to history index ${targetIndex}: ${result.action}`);
+        return result;
     }
 
-    /**
-     * Clear all history
-     */
     clearHistory() {
-        this.history = [];
+        this.history      = [];
         this.historyIndex = -1;
+        this._prevFps     = null;
         console.log('History cleared');
     }
 
-    /**
-     * Get statistics about the current history
-     * @returns {Object} - History statistics
-     */
     getHistoryStats() {
         return {
-            totalStates: this.history.length,
-            currentIndex: this.historyIndex,
-            undoableActions: this.historyIndex,
-            redoableActions: this.history.length - 1 - this.historyIndex,
-            maxHistorySize: this.maxHistorySize,
-            oldestTimestamp: this.history.length > 0 ? this.history[0].timestamp : null,
-            newestTimestamp: this.history.length > 0 ? this.history[this.history.length - 1].timestamp : null
+            totalStates:      this.history.length,
+            currentIndex:     this.historyIndex,
+            undoableActions:  this.historyIndex,
+            redoableActions:  this.history.length - 1 - this.historyIndex,
+            maxHistorySize:   this.maxHistorySize,
+            oldestTimestamp:  this.history.length > 0 ? this.history[0].timestamp : null,
+            newestTimestamp:  this.history.length > 0 ? this.history[this.history.length - 1].timestamp : null,
         };
     }
 
-    /**
-     * Get a summary of all actions in history
-     * @returns {Array<Object>} - Summary of all historical actions
-     */
     getHistorySummary() {
         return this.history.map((state, index) => ({
-            index: index,
-            action: state.action,
+            index,
+            action:    state.action,
             timestamp: state.timestamp,
             isCurrent: index === this.historyIndex,
-            timeAgo: this.getTimeAgo(state.timestamp)
+            timeAgo:   this.getTimeAgo(state.timestamp),
         }));
     }
 
-    /**
-     * Get human-readable time difference
-     * @param {number} timestamp - Timestamp to compare
-     * @returns {string} - Human-readable time difference
-     */
     getTimeAgo(timestamp) {
-        const now = Date.now();
-        const diff = now - timestamp;
-        
+        const diff    = Date.now() - timestamp;
         const seconds = Math.floor(diff / 1000);
         const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-        
-        if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
-        if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        const hours   = Math.floor(minutes / 60);
+        const days    = Math.floor(hours / 24);
+        if (days    > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+        if (hours   > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
         if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
         return `${seconds} second${seconds > 1 ? 's' : ''} ago`;
     }
 
-    /**
-     * Create a checkpoint with a custom name
-     * @param {Array<Object>} polygons - Current polygon data
-     * @param {string} checkpointName - Name for this checkpoint
-     */
     createCheckpoint(polygons, checkpointName) {
         this.saveToHistory(polygons, `Checkpoint: ${checkpointName}`);
     }
 
-    /**
-     * Find the most recent checkpoint
-     * @returns {Object|null} - Most recent checkpoint state or null
-     */
     findMostRecentCheckpoint() {
         for (let i = this.historyIndex; i >= 0; i--) {
-            const state = this.history[i];
-            if (state.action.startsWith('Checkpoint:')) {
+            if (this.history[i].action.startsWith('Checkpoint:')) {
+                const polygons = this._resolve(i);
                 return {
-                    index: i,
-                    polygons: JSON.parse(JSON.stringify(state.polygons)),
-                    action: state.action,
-                    timestamp: state.timestamp
+                    index:     i,
+                    polygons,
+                    action:    this.history[i].action,
+                    timestamp: this.history[i].timestamp,
                 };
             }
         }
         return null;
     }
 
-    /**
-     * Restore to the most recent checkpoint
-     * @returns {Object|null} - Checkpoint state or null if no checkpoint found
-     */
     restoreToCheckpoint() {
-        const checkpoint = this.findMostRecentCheckpoint();
-        if (checkpoint) {
-            this.historyIndex = checkpoint.index;
-            console.log(`Restored to checkpoint: ${checkpoint.action}`);
-            return {
-                polygons: checkpoint.polygons,
-                action: checkpoint.action,
-                timestamp: checkpoint.timestamp
-            };
+        const cp = this.findMostRecentCheckpoint();
+        if (cp) {
+            this.historyIndex = cp.index;
+            this._prevFps = new Map(cp.polygons.map(p => [p.id, this._fp(p)]));
+            console.log(`Restored to checkpoint: ${cp.action}`);
+            return { polygons: cp.polygons, action: cp.action, timestamp: cp.timestamp };
         }
         return null;
     }
 
-    /**
-     * Set maximum history size
-     * @param {number} maxSize - Maximum number of states to keep
-     */
     setMaxHistorySize(maxSize) {
         this.maxHistorySize = Math.max(1, maxSize);
-        
-        // Trim history if it's now too large
-        if (this.history.length > this.maxHistorySize) {
-            const trimCount = this.history.length - this.maxHistorySize;
-            this.history.splice(0, trimCount);
-            this.historyIndex = Math.max(0, this.historyIndex - trimCount);
+        // Trim oldest entries, promoting any diff that would lose its base
+        while (this.history.length > this.maxHistorySize) {
+            if (this.history.length >= 2 && this.history[1].type === 'diff') {
+                this._promoteToFull(1);
+            }
+            this.history.splice(0, 1);
+            this.historyIndex = Math.max(0, this.historyIndex - 1);
         }
-        
         console.log(`History size limit set to ${this.maxHistorySize}`);
     }
 
-    /**
-     * Export history data for analysis or backup
-     * @returns {Object} - Complete history export
-     */
     exportHistory() {
         return {
             history: this.history.map(state => ({
-                action: state.action,
-                timestamp: state.timestamp,
-                polygonCount: state.polygons.length,
-                totalVertices: state.polygons.reduce((sum, p) => 
-                    sum + p.rings.reduce((rSum, ring) => rSum + ring.length, 0), 0)
+                action:       state.action,
+                timestamp:    state.timestamp,
+                type:         state.type,
+                changedCount: state.type === 'full' ? state.polygons.length : state.changed.length,
             })),
-            currentIndex: this.historyIndex,
-            maxHistorySize: this.maxHistorySize,
-            exportTimestamp: Date.now()
+            currentIndex:    this.historyIndex,
+            maxHistorySize:  this.maxHistorySize,
+            exportTimestamp: Date.now(),
         };
     }
 }

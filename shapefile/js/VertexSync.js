@@ -350,6 +350,7 @@ class VertexSync {
             externalNeighborVertices.push(...this.collectVertices(syncedPolygons[neighborIndex]));
         }
 
+        let pass2Inserted = false;
         if (externalNeighborVertices.length > 0) {
             const uniqueExternalVertices = this.deduplicatePoints(externalNeighborVertices);
             console.log(`Collected ${uniqueExternalVertices.length} unique vertices from external neighbors`);
@@ -362,6 +363,7 @@ class VertexSync {
                     const updatedRing = this.insertVerticesIntoRing(ring, uniqueExternalVertices);
                     const verticesAdded = updatedRing.length - originalLength;
                     if (verticesAdded > 0) {
+                        pass2Inserted = true;
                         console.log(`  Split polygon ${poly.id}: inserted ${verticesAdded} external vertices (${originalLength} → ${updatedRing.length})`);
                     }
                     return updatedRing;
@@ -375,11 +377,16 @@ class VertexSync {
             adjacencyGraph.rebuildForAffected(syncedPolygons, splitIds, [...splitIds, ...externalNeighborIds2]);
         }
 
-        // Pass 3: Final bidirectional sync across all affected polygons
-        // Pass 4 is removed — Pass 3 already covers split polygons bidirectionally
+        // Pass 3: Final bidirectional sync — only needed when Pass 2 inserted new vertices
+        // into split polygons, which may in turn require back-propagation to neighbours.
+        // Skipping it when nothing changed avoids one full O(P·V) syncVertices call.
         const allAffectedIndices = new Set([...splitIndices, ...externalNeighborIndices]);
-        console.log(`Pass 3: Final sync of ${allAffectedIndices.size} affected polygons (split + external neighbors)`);
-        syncedPolygons = this.syncVertices(syncedPolygons, adjacencyGraph, allAffectedIndices, idToIndex);
+        if (pass2Inserted) {
+            console.log(`Pass 3: Final sync of ${allAffectedIndices.size} affected polygons (split + external neighbors)`);
+            syncedPolygons = this.syncVertices(syncedPolygons, adjacencyGraph, allAffectedIndices, idToIndex);
+        } else {
+            console.log(`Pass 3: skipped — Pass 2 inserted no new vertices`);
+        }
 
         return syncedPolygons;
     }

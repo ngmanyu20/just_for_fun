@@ -1867,6 +1867,7 @@ class PolygonEditor {
      * coordinates refreshed from the manager's live state.
      */
     _getEffectiveSplitSequence() {
+        if (this._splitSequence.length === 0) return [];
         const seen = new Set();
         return this._splitSequence.map(s => {
             if (s.type === 'virtual') {
