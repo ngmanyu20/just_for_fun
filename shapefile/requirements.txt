@@ -3,3 +3,9 @@ uvicorn
 shapely
 pydantic
 scipy
+numpy
+geopandas
+osmnx
+momepy
+pyproj
+pandas
