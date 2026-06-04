@@ -22,19 +22,29 @@ class HistoryManager {
     // ── Fingerprint ────────────────────────────────────────────────────────
 
     /**
-     * Cheap per-polygon fingerprint.  Detects ring geometry changes (vertex
-     * sync, splits, moves) and common field edits (density, countyType).
+     * Per-polygon fingerprint — rolling hash over EVERY vertex so any change
+     * (including middle-vertex moves from vertex sync/snap) is detected.
+     *
+     * Previous version only sampled the first and last vertex of the first
+     * ring, which missed interior vertex changes and caused undo/redo to
+     * restore stale geometry for polygons whose middle vertices had changed.
      */
     _fp(poly) {
-        let n = 0;
+        let n = 0, h = 0;
         const rings = poly.rings || [];
-        for (const ring of rings) n += ring.length;
-        const r  = rings[0];
-        const v0 = r && r.length ? r[0]            : { x: 0, y: 0 };
-        const vL = r && r.length ? r[r.length - 1] : { x: 0, y: 0 };
-        return `${n}|${Math.round(v0.x * 1e4)}|${Math.round(v0.y * 1e4)}` +
-               `|${Math.round(vL.x * 1e4)}|${Math.round(vL.y * 1e4)}` +
-               `|${poly.populationDensity || 0}|${poly.countyType || ''}`;
+        for (const ring of rings) {
+            n += ring.length;
+            for (let i = 0; i < ring.length; i++) {
+                const xi = Math.round(ring[i].x * 1e4);
+                const yi = Math.round(ring[i].y * 1e4);
+                // Polynomial rolling hash — position-sensitive, fast integer ops
+                h = (Math.imul(h, 31) + xi) | 0;
+                h = (Math.imul(h, 31) + yi) | 0;
+            }
+            // Ring-length separator so [A,B]+[C] ≠ [A]+[B,C]
+            h = (Math.imul(h, 31) + ring.length) | 0;
+        }
+        return `${n}|${h >>> 0}|${poly.populationDensity || 0}|${poly.countyType || ''}`;
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
