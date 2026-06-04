@@ -73,16 +73,22 @@ class DataManager {
         this.originalData = [];
         this.polygons = [];
 
+        // Track seen IDs so duplicates get a unique suffix (_2, _3, …).
+        // Duplicate Shape_IDs in the CSV would otherwise produce identical polygon.id
+        // values, silently breaking the HistoryManager's Map-keyed diff logic and
+        // causing polygons to vanish on undo/redo.
+        const seenIds = new Map();
+
         for (let i = 1; i < lines.length; i++) {
             const values = this.parseCSVLine(lines[i]);
             const row = {};
-            
+
             headers.forEach((header, index) => {
                 row[header] = values[index] || '';
             });
-            
+
             this.originalData.push(row);
-            
+
             if (row.geometry) {
                 try {
                     const rings = this.parseWKT(row.geometry);
@@ -93,8 +99,16 @@ class DataManager {
                             ? parseFloat(rawPop)
                             : NaN;
 
+                        const baseId = row.Shape_ID || row.County || `Polygon ${i}`;
+                        const seen   = seenIds.get(baseId) || 0;
+                        seenIds.set(baseId, seen + 1);
+                        const uniqueId = seen === 0 ? baseId : `${baseId}_${seen + 1}`;
+                        if (seen > 0) {
+                            console.warn(`Duplicate polygon ID "${baseId}" at row ${i} — assigned "${uniqueId}"`);
+                        }
+
                         this.polygons.push({
-                            id: row.Shape_ID || row.County || `Polygon ${i}`,
+                            id: uniqueId,
                             county: row.County || '',
                             district: row.District || '',
                             districtWard: row.District_Ward || '',
