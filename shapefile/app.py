@@ -39,19 +39,55 @@ app.add_middleware(NoCacheMiddleware)
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# On Render the repo filesystem is read-only; user-uploaded CSVs must go to /tmp.
+# On localhost, write alongside the committed CSV files so they show up immediately.
+IS_RENDER = bool(os.environ.get('RENDER'))
+TMP_CSV_DIR = '/tmp/csv_input' if IS_RENDER else os.path.join(BASE_DIR, 'csv_input')
+os.makedirs(TMP_CSV_DIR, exist_ok=True)
+
 # Mount static files (js, css, etc.)
 app.mount("/js", StaticFiles(directory=os.path.join(BASE_DIR, "js")), name="js")
-app.mount("/csv_input", StaticFiles(directory=os.path.join(BASE_DIR, "csv_input")), name="csv_input")
 
-# Allow legacy /shapefile path URL for direct file tempo
+# NOTE: /csv_input is served by a custom route below (not StaticFiles) so that
+# user-uploaded files saved to TMP_CSV_DIR are also reachable on Render.
+
+# Allow legacy /shapefile path URL for direct file access
 app.mount("/shapefile", StaticFiles(directory=BASE_DIR), name="shapefile")
+
 
 @app.get("/csv_files")
 async def list_csv_files():
-    csv_dir = os.path.join(BASE_DIR, 'csv_input')
-    os.makedirs(csv_dir, exist_ok=True)
-    files = [f for f in sorted(os.listdir(csv_dir)) if f.lower().endswith('.csv') and os.path.isfile(os.path.join(csv_dir, f))]
-    return {'files': files}
+    """List all available CSV files: committed ones from csv_input/ plus
+    any user-uploaded files saved to TMP_CSV_DIR."""
+    committed_dir = os.path.join(BASE_DIR, 'csv_input')
+    files: set[str] = set()
+
+    for d in [committed_dir, TMP_CSV_DIR]:
+        if os.path.isdir(d):
+            for f in os.listdir(d):
+                if f.lower().endswith('.csv') and os.path.isfile(os.path.join(d, f)):
+                    files.add(f)
+
+    return {'files': sorted(files)}
+
+
+@app.get("/csv_input/{filename}")
+async def serve_csv(filename: str):
+    """Serve a CSV file, checking TMP_CSV_DIR first (user uploads), then the
+    committed csv_input/ directory (files shipped with the repo)."""
+    if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+        raise HTTPException(status_code=400, detail='Invalid filename')
+
+    safe = os.path.basename(filename)
+
+    # Prefer a freshly uploaded file over the committed one
+    for directory in [TMP_CSV_DIR, os.path.join(BASE_DIR, 'csv_input')]:
+        path = os.path.join(directory, safe)
+        if os.path.isfile(path):
+            return FileResponse(path, media_type='text/csv')
+
+    raise HTTPException(status_code=404, detail=f'CSV file not found: {safe}')
+
 
 # Serve the main HTML file at the root
 @app.get("/")
@@ -246,15 +282,12 @@ async def merge_county(request: dict):
 
 @app.post('/save_csv')
 async def save_csv(req: SaveCSVRequest):
-    # Ensure no path traversal (safe-write in csv_input only)
+    """Save a CSV to TMP_CSV_DIR (writable on both localhost and Render)."""
     if '..' in req.filename or req.filename.startswith('/') or req.filename.startswith('\\'):
         raise HTTPException(status_code=400, detail='Invalid filename')
 
-    csv_dir = os.path.join(BASE_DIR, 'csv_input')
-    os.makedirs(csv_dir, exist_ok=True)
-
     safe_filename = os.path.basename(req.filename)
-    target_path = os.path.join(csv_dir, safe_filename)
+    target_path = os.path.join(TMP_CSV_DIR, safe_filename)
 
     try:
         with open(target_path, 'w', encoding='utf-8') as f:

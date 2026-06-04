@@ -15,7 +15,9 @@ Usage:
 
 import argparse
 import colorsys
+import os
 import sys
+import time
 
 import pandas as pd
 import geopandas as gpd
@@ -24,6 +26,21 @@ import osmnx as ox
 from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, box
 from shapely.ops import unary_union, voronoi_diagram
 from shapely.validation import make_valid
+
+# ---------------------------------------------------------------------------
+# osmnx runtime configuration
+# ---------------------------------------------------------------------------
+# On Render the repo filesystem is read-only; redirect the osmnx cache to /tmp
+# so downloaded street networks are cached for the lifetime of the instance.
+# On localhost the default cache location is used.
+_IS_RENDER = bool(os.environ.get('RENDER'))
+if _IS_RENDER:
+    _cache_dir = '/tmp/osmnx_cache'
+    os.makedirs(_cache_dir, exist_ok=True)
+    ox.settings.cache_folder = _cache_dir
+
+ox.settings.use_cache = True
+ox.settings.timeout = 180  # 3-minute per-request timeout (default is 180 s in newer osmnx)
 
 
 # ---------------------------------------------------------------------------
@@ -80,34 +97,49 @@ def hsl_colors(n: int, saturation: float = 0.55, lightness: float = 0.65) -> lis
 # Step 1 — download
 # ---------------------------------------------------------------------------
 
-def download_network(place: str, use_secondary: bool = False):
+def download_network(place: str, use_secondary: bool = False, max_retries: int = 3):
     print(f"  Downloading OSM network for: {place!r}")
-    # Support "north,south,east,west" bbox string as an alternative to place name
-    if "," in place and all(
-        _is_float(p.strip()) for p in place.split(",")
-    ):
-        parts = [float(p.strip()) for p in place.split(",")]
-        north, south, east, west = parts
-        # osmnx 2.x graph_from_bbox takes (left, bottom, right, top) = (west, south, east, north)
-        G = ox.graph_from_bbox(
-            bbox=(west, south, east, north),
-            network_type="drive", retain_all=True,
-        )
-    else:
-        G = ox.graph_from_place(place, network_type="drive", retain_all=True)
-    G = ox.project_graph(G)          # project to local UTM (metres)
-    _, edges = ox.graph_to_gdfs(G)
 
-    edges = edges.copy()
-    edges["hw"] = edges["highway"].apply(_normalise_highway)
+    last_err: Exception = RuntimeError("No attempts made")
+    for attempt in range(max_retries):
+        try:
+            # Support "north,south,east,west" bbox string as an alternative to place name
+            if "," in place and all(_is_float(p.strip()) for p in place.split(",")):
+                parts = [float(p.strip()) for p in place.split(",")]
+                north, south, east, west = parts
+                # osmnx 2.x graph_from_bbox takes (left, bottom, right, top)
+                G = ox.graph_from_bbox(
+                    bbox=(west, south, east, north),
+                    network_type="drive", retain_all=True,
+                )
+            else:
+                G = ox.graph_from_place(place, network_type="drive", retain_all=True)
 
-    major = edges[edges["hw"].isin(PRIMARY_TYPES)].copy()
-    minor = edges[edges["hw"].isin(SECONDARY_TYPES)].copy() if use_secondary else gpd.GeoDataFrame()
+            G = ox.project_graph(G)      # project to local UTM (metres)
+            _, edges = ox.graph_to_gdfs(G)
 
-    print(f"  Total edges: {len(edges)} | "
-          f"major (district boundaries): {len(major)} | "
-          f"minor (subdivision): {len(minor)}")
-    return major, minor, edges
+            edges = edges.copy()
+            edges["hw"] = edges["highway"].apply(_normalise_highway)
+
+            major = edges[edges["hw"].isin(PRIMARY_TYPES)].copy()
+            minor = edges[edges["hw"].isin(SECONDARY_TYPES)].copy() if use_secondary else gpd.GeoDataFrame()
+
+            print(f"  Total edges: {len(edges)} | "
+                  f"major (district boundaries): {len(major)} | "
+                  f"minor (subdivision): {len(minor)}")
+            return major, minor, edges
+
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries - 1:
+                wait = 10 * (attempt + 1)   # 10 s, 20 s back-off
+                print(f"  Attempt {attempt + 1}/{max_retries} failed: {e}. "
+                      f"Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"  All {max_retries} attempts failed. Last error: {e}")
+
+    raise last_err
 
 
 # ---------------------------------------------------------------------------
