@@ -318,7 +318,38 @@ class LayerManager {
             }
         }
 
+        // Remove rings that are fully surrounded by another ring in the same county.
+        // A surrounded sub-county polygon (e.g. an enclave) shares no edges with its
+        // outer neighbour, so all its edges appear exactly once → it passes the
+        // "outer boundary" filter above.  But its first vertex will lie inside the
+        // enclosing ring, so ray-casting correctly identifies it as an interior loop
+        // that must not be drawn as a county boundary.
+        if (allRings.length > 1) {
+            return allRings.filter((ring, i) =>
+                !allRings.some((other, j) => i !== j && this._isPointInRing(ring[0], other))
+            );
+        }
+
         return allRings;
+    }
+
+    /**
+     * Ray-casting point-in-polygon test.
+     * Returns true if point is strictly inside ring (not on boundary).
+     * Used to detect surrounded-polygon loops in the JS fallback boundary extractor.
+     */
+    _isPointInRing(point, ring) {
+        let inside = false;
+        const n = ring.length;
+        for (let i = 0, j = n - 1; i < n; j = i++) {
+            const xi = ring[i].x, yi = ring[i].y;
+            const xj = ring[j].x, yj = ring[j].y;
+            if (((yi > point.y) !== (yj > point.y)) &&
+                (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
     }
 
     /**
