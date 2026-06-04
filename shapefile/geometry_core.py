@@ -767,9 +767,32 @@ def split_polygon_by_osm(
     from shapely.affinity import affine_transform
     from svg_polygonize.osm_district_generator import download_network, generate_enclosures
 
+    import gc as _gc
+    import math as _math
+
     target_polygon = shape(geometry_geojson)
     if not isinstance(target_polygon, Polygon):
         raise ValueError("Only Polygon geometries are supported")
+
+    # ── Bbox area guard (production only) ────────────────────────────────────
+    # Tier 3 (residential) produces up to ~300 cells/km²; unary_union over
+    # thousands of cells across 17 pipeline passes quickly exceeds 1 GB.
+    # Limits are skipped in local development so large areas can be tested freely.
+    _IS_RENDER = bool(_os.environ.get('RENDER'))
+    _lat_c = (north + south) / 2
+    _bbox_km2 = (
+        (north - south) * 111.0
+        * (east - west) * 111.0 * _math.cos(_math.radians(_lat_c))
+    )
+    if _IS_RENDER:
+        _MAX_KM2 = {1: 2000.0, 2: 200.0, 3: 15.0}
+        _limit = _MAX_KM2.get(road_tier, 2000.0)
+        if _bbox_km2 > _limit:
+            raise ValueError(
+                f"Bounding box is too large for tier {road_tier} "
+                f"({_bbox_km2:.0f} km² > {_limit:.0f} km² limit). "
+                f"Zoom in or use a lower tier."
+            )
 
     # download_network accepts "N,S,E,W" string as bbox
     place = f"{north},{south},{east},{west}"
@@ -786,6 +809,10 @@ def split_polygon_by_osm(
     enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=road_tier)
     if enc.empty:
         raise ValueError("No enclosures generated from OSM data")
+
+    # Free road data — no longer needed once enclosures are built
+    del major, minor, tertiary, edges, bbox_gdf, raw_bbox
+    _gc.collect()
 
     # Build coordinate transform: UTM → data
     # UTM northing increases northward (Y-up), same as data Y → no Y-flip
@@ -821,6 +848,22 @@ def split_polygon_by_osm(
 
     if not cells:
         raise ValueError("No OSM enclosures overlapped with the target polygon after coordinate transform")
+
+    # Free the enclosure GeoDataFrame — cells list holds all we need
+    del enc
+    _gc.collect()
+
+    # ── Cell count cap (production only) ─────────────────────────────────────
+    # Each unary_union pass scales with cell count; >1500 cells across 17 passes
+    # reliably exceeds 1 GB on a 1-worker Render instance.
+    if _IS_RENDER:
+        _MAX_CELLS = {1: 5000, 2: 2000, 3: 1500}
+        _cell_limit = _MAX_CELLS.get(road_tier, 5000)
+        if len(cells) > _cell_limit:
+            raise ValueError(
+                f"Tier {road_tier} generated {len(cells)} cells for this area "
+                f"(limit {_cell_limit}). Reduce the bounding box or use a lower tier."
+            )
 
     _EPSILON = 150.0 * 8.01 / 1000.0
     _count_exterior = lambda lst: sum(len(list(c.exterior.coords)) for c in lst if hasattr(c, 'exterior'))
@@ -872,6 +915,7 @@ def split_polygon_by_osm(
             _distribute_gap_voronoi(gap, cells, gap_area_tol)
 
     _log_coverage(cells, target_polygon, "after-Stage1")
+    _gc.collect()
 
     # ── Stage 2: Simplify (150m rule) ────────────────────────────────────────
     _before = _count_exterior(cells)
@@ -888,6 +932,7 @@ def split_polygon_by_osm(
         _tb.print_exc()
 
     _log_coverage(cells, target_polygon, "after-Stage2")
+    _gc.collect()
 
     # ── Stage 3: Post-simplification hole check (holes metric) ───────────────
     # Uses the same detect_gaps.py metric: interior holes in hull.difference(union)
@@ -921,6 +966,7 @@ def split_polygon_by_osm(
             _distribute_gap_voronoi(gap, cells, gap_area_tol)
 
     _log_coverage(cells, target_polygon, "after-Stage3")
+    _gc.collect()
 
     # ── Stage 4: Remove nested polygons ──────────────────────────────────────
     # A cell entirely contained within another cell is a double-count artifact:
@@ -954,6 +1000,7 @@ def split_polygon_by_osm(
 
     n_nested = sum(1 for _ in to_remove) if 'to_remove' in dir() else 0
     print(f"[OSM Stage4] nested polygons removed and absorbed: {len(cells)} cells remaining")
+    _gc.collect()
 
     # ── Pre-Stage5 validation: fix invalid cells before gap detection ─────────
     # make_valid() must run BEFORE Stage 5 so that any gaps it opens by removing

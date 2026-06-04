@@ -138,6 +138,7 @@ def download_network(place: str, road_tier: int = 1, max_retries: int = 3):
 
             G = ox.project_graph(G)
             _, edges = ox.graph_to_gdfs(G)
+            del G   # free the NetworkX graph — GeoDataFrames are independent copies
 
             edges = edges.copy()
             edges["hw"] = edges["highway"].apply(_normalise_highway)

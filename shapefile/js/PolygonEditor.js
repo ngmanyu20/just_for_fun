@@ -2781,7 +2781,10 @@ class PolygonEditor {
                 this._splitSequence = [];
             }
 
-            // Clear vertex selection (important for undo after vertex deletion)
+            // Clear all selection state — indices from before undo are stale and
+            // would point to wrong polygons or trigger incorrect fill styles on draw.
+            this.selectedPolygonIndices.clear();
+            this.selectedPolygonIndex = null;
             this.vertexSelection.clearSelection();
             this._splitSequence = [];
             this.updateVertexSelectionInfo();
@@ -2823,7 +2826,10 @@ class PolygonEditor {
                 this._splitSequence = [];
             }
 
-            // Clear vertex selection (important for redo after vertex deletion)
+            // Clear all selection state — indices from before redo are stale and
+            // would point to wrong polygons or trigger incorrect fill styles on draw.
+            this.selectedPolygonIndices.clear();
+            this.selectedPolygonIndex = null;
             this.vertexSelection.clearSelection();
             this._splitSequence = [];
             this.updateVertexSelectionInfo();

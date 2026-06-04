@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 from schemas import SplitRequest, MergeRequest, SvgSplitRequest, OsmSplitRequest, OsmMultiSplitRequest
 from geometry_core import split_polygon_geojson, merge_polygons_geojson, split_polygon_by_svg, split_polygon_by_osm, split_polygons_by_osm_with_boundaries
+import gc
 import os
 
 
@@ -164,6 +165,8 @@ def split_polygon_osm(req: OsmSplitRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        gc.collect()
 
 
 @app.post("/split-osm-multi")
@@ -187,6 +190,8 @@ def split_polygons_osm_multi(req: OsmMultiSplitRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        gc.collect()
 
 
 @app.post("/merge")

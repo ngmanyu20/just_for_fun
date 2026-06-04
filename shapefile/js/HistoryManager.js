@@ -134,8 +134,12 @@ class HistoryManager {
             return [];
         }
 
-        // Build a mutable map from the base's stored (non-cloned) data
-        const polyMap = new Map(this.history[base].polygons.map(p => [p.id, p]));
+        // Deep-clone base polygons into polyMap so history objects are never
+        // reachable from live code — prevents in-place mutations (vertex moves,
+        // snap operations) from corrupting stored history during undo/redo.
+        const polyMap = new Map(
+            this.history[base].polygons.map(p => [p.id, JSON.parse(JSON.stringify(p))])
+        );
 
         // Apply each diff forward
         for (let i = base + 1; i <= index; i++) {
