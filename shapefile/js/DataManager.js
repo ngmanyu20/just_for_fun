@@ -240,14 +240,18 @@ class DataManager {
         // Get headers from original data
         const headers = Object.keys(this.originalData[0]);
 
+        // Build O(1) lookup maps once — replaces O(P) Array.find (+ O(P) indexOf) per polygon
+        const byShapeId  = new Map(this.originalData.filter(r => r.Shape_ID).map(r => [r.Shape_ID, r]));
+        const byCounty   = new Map(this.originalData.filter(r => !r.Shape_ID).map(r => [r.County, r]));
+        const byRowIndex = new Map(this.originalData.map((r, i) => [i, r]));
+
         // Export ALL current polygons (including new ones from splits)
         const exportData = polygons.map(polygon => {
-            // Try to find matching original row
-            const originalRow = this.originalData.find(row =>
-                (row.Shape_ID && polygon.id === row.Shape_ID) ||
-                (!row.Shape_ID && polygon.id === row.County) ||
-                polygon.rowIndex !== undefined && polygon.rowIndex === this.originalData.indexOf(row)
-            );
+            // O(1) lookup instead of O(P²) find+indexOf
+            const originalRow =
+                byShapeId.get(polygon.id) ||
+                byCounty.get(polygon.id) ||
+                (polygon.rowIndex !== undefined ? byRowIndex.get(polygon.rowIndex) : undefined);
 
             // If we found an original row, update its geometry and any runtime-set fields
             if (originalRow) {
