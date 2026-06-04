@@ -743,7 +743,7 @@ def split_polygon_by_osm(
     south: float,
     east: float,
     west: float,
-    use_secondary: bool = False,
+    road_tier: int = 1,
 ):
     """
     Split a polygon using OSM-derived enclosures as district boundaries.
@@ -773,7 +773,7 @@ def split_polygon_by_osm(
 
     # download_network accepts "N,S,E,W" string as bbox
     place = f"{north},{south},{east},{west}"
-    major, minor, edges = download_network(place, use_secondary)
+    major, minor, tertiary, edges = download_network(place, road_tier)
     if major.empty:
         raise ValueError("No major roads found in the specified bounding box")
 
@@ -783,7 +783,7 @@ def split_polygon_by_osm(
     bbox_gdf = bbox_gdf.to_crs(major.crs)
     bbox_proj = shapely_box(*bbox_gdf.geometry.iloc[0].bounds)
 
-    enc = generate_enclosures(major, minor, edges, bbox_poly=bbox_proj)
+    enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=road_tier)
     if enc.empty:
         raise ValueError("No enclosures generated from OSM data")
 
@@ -1093,7 +1093,7 @@ def split_polygons_by_osm_with_boundaries(
     south: float,
     east: float,
     west: float,
-    use_secondary: bool = False,
+    road_tier: int = 1,
 ):
     """
     Run the OSM pipeline on the union of all input polygons, then clip each
@@ -1132,7 +1132,7 @@ def split_polygons_by_osm_with_boundaries(
         south=south,
         east=east,
         west=west,
-        use_secondary=use_secondary,
+        road_tier=road_tier,
     )
 
     if osm_result.get("type") != "FeatureCollection":

@@ -335,14 +335,14 @@ class PolygonSplitter {
      * @param {number} south - Bounding box south latitude
      * @param {number} east  - Bounding box east longitude
      * @param {number} west  - Bounding box west longitude
-     * @param {boolean} useSecondary - Also use tertiary roads for subdivision
+     * @param {number} roadTier - 1=major only, 2=+tertiary, 3=+residential/unclassified
      * @returns {Promise<Object>} - { success, message, subPolygons }
      */
-    async splitByOsm(polygon, north, south, east, west, useSecondary = false) {
+    async splitByOsm(polygon, north, south, east, west, roadTier = 1) {
         try {
             const geometry = this.convertToGeoJSON(polygon);
 
-            const payload = { geometry, north, south, east, west, use_secondary: useSecondary };
+            const payload = { geometry, north, south, east, west, road_tier: roadTier };
 
             const controller = new AbortController();
             const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min for OSM download
@@ -407,15 +407,15 @@ class PolygonSplitter {
      * @param {number} south - Bounding box south latitude
      * @param {number} east  - Bounding box east longitude
      * @param {number} west  - Bounding box west longitude
-     * @param {boolean} useSecondary - Also use tertiary roads
+     * @param {number} roadTier - 1=major only, 2=+tertiary, 3=+residential/unclassified
      * @returns {Promise<Object>} - { success, message, resultsByIndex }
      *   resultsByIndex: [{ sourceIndex, subPolygons }] sorted DESCENDING by sourceIndex
      *   so PolygonEditor can safely splice from the end of the array.
      */
-    async splitMultipleByOsm(polygons, north, south, east, west, useSecondary = false) {
+    async splitMultipleByOsm(polygons, north, south, east, west, roadTier = 1) {
         try {
             const geometries = polygons.map(p => this.convertToGeoJSON(p));
-            const payload = { geometries, north, south, east, west, use_secondary: useSecondary };
+            const payload = { geometries, north, south, east, west, road_tier: roadTier };
 
             const controller = new AbortController();
             const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min

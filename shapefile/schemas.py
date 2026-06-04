@@ -46,7 +46,7 @@ class OsmSplitRequest(BaseModel):
     south: float
     east: float
     west: float
-    use_secondary: bool = False      # also use tertiary roads for subdivision
+    road_tier: int = 1               # 1=major only, 2=+tertiary, 3=+residential/unclassified
 
 
 class OsmMultiSplitRequest(BaseModel):
@@ -55,4 +55,4 @@ class OsmMultiSplitRequest(BaseModel):
     south: float
     east: float
     west: float
-    use_secondary: bool = False
+    road_tier: int = 1               # 1=major only, 2=+tertiary, 3=+residential/unclassified

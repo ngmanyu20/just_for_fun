@@ -1299,11 +1299,22 @@
             </div>
 
             <!-- Options -->
-            <div style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
-                <input type="checkbox" id="osmUseSecondary" />
-                <label for="osmUseSecondary" style="font-size:12px; color:#555; cursor:pointer;">
-                    Use tertiary roads (more subdivisions within districts)
-                </label>
+            <div style="margin-bottom:14px;">
+                <div style="font-size:12px; color:#555; font-weight:600; margin-bottom:6px;">Road detail level:</div>
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                        <input type="radio" name="osmRoadTier" value="1" checked />
+                        <span><strong>Tier 1</strong> — major roads only (large districts)</span>
+                    </label>
+                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                        <input type="radio" name="osmRoadTier" value="2" />
+                        <span><strong>Tier 2</strong> — + tertiary roads (smaller zones)</span>
+                    </label>
+                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                        <input type="radio" name="osmRoadTier" value="3" />
+                        <span><strong>Tier 3</strong> — + residential roads (city blocks)</span>
+                    </label>
+                </div>
             </div>
 
             <!-- Actions -->

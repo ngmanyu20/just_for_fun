@@ -38,7 +38,7 @@ N, S, E, W = 51.5787, 51.3986, 0.0692, -0.2202
 
 place = f"{N},{S},{E},{W}"
 print(f"Downloading OSM network for {place} ...")
-major, minor, edges = download_network(place, use_secondary=False)
+major, minor, tertiary, edges = download_network(place, road_tier=1)
 if major.empty:
     print("ERROR: no major roads found")
     sys.exit(1)
@@ -51,7 +51,7 @@ bbox_gdf = bbox_gdf.to_crs(major.crs)
 bbox_proj = shapely_box(*bbox_gdf.geometry.iloc[0].bounds)
 
 print("Generating enclosures ...")
-enc = generate_enclosures(major, minor, edges, bbox_poly=bbox_proj)
+enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=1)
 if enc.empty:
     print("ERROR: no enclosures generated")
     sys.exit(1)

@@ -56,9 +56,22 @@ PRIMARY_TYPES = {
     "secondary", "secondary_link",
 }
 
-# These optionally subdivide within districts (--secondary flag).
+# Tier 2: optionally subdivide within districts (road_tier >= 2).
 SECONDARY_TYPES = {
     "tertiary", "tertiary_link",
+}
+
+# Tier 3: fine-grained city-block subdivision (road_tier >= 3).
+TERTIARY_TYPES = {
+    "unclassified", "residential",
+}
+
+# Area filters per tier (min_m2, max_m2).
+# Smaller tiers produce smaller enclosures so thresholds scale down.
+_AREA_LIMITS = {
+    1: (10_000,   5_000_000),   # 1 ha – 5 km²  (large districts)
+    2: ( 5_000,   3_000_000),   # 0.5 ha – 3 km² (subdivided zones)
+    3: (   500,   1_000_000),   # 500 m² – 1 km² (city blocks)
 }
 
 
@@ -70,7 +83,7 @@ def _normalise_highway(val) -> str:
     """OSM highway tag can be a list; pick the most important value."""
     if isinstance(val, list):
         for tier in ["motorway", "trunk", "primary", "secondary",
-                     "tertiary", "residential", "unclassified"]:
+                     "tertiary", "unclassified", "residential"]:
             if tier in val:
                 return tier
         return val[0]
@@ -97,17 +110,25 @@ def hsl_colors(n: int, saturation: float = 0.55, lightness: float = 0.65) -> lis
 # Step 1 — download
 # ---------------------------------------------------------------------------
 
-def download_network(place: str, use_secondary: bool = False, max_retries: int = 3):
-    print(f"  Downloading OSM network for: {place!r}")
+def download_network(place: str, road_tier: int = 1, max_retries: int = 3):
+    """
+    Download OSM road network and classify edges by tier.
+
+    road_tier=1  — primary/secondary only (large districts)
+    road_tier=2  — + tertiary (smaller zones)
+    road_tier=3  — + unclassified/residential (city blocks)
+
+    Returns (major, minor, tertiary, edges) GeoDataFrames.
+    minor and tertiary are empty GeoDataFrames when not used by the chosen tier.
+    """
+    print(f"  Downloading OSM network for: {place!r} (tier {road_tier})")
 
     last_err: Exception = RuntimeError("No attempts made")
     for attempt in range(max_retries):
         try:
-            # Support "north,south,east,west" bbox string as an alternative to place name
             if "," in place and all(_is_float(p.strip()) for p in place.split(",")):
                 parts = [float(p.strip()) for p in place.split(",")]
                 north, south, east, west = parts
-                # osmnx 2.x graph_from_bbox takes (left, bottom, right, top)
                 G = ox.graph_from_bbox(
                     bbox=(west, south, east, north),
                     network_type="drive", retain_all=True,
@@ -115,24 +136,26 @@ def download_network(place: str, use_secondary: bool = False, max_retries: int =
             else:
                 G = ox.graph_from_place(place, network_type="drive", retain_all=True)
 
-            G = ox.project_graph(G)      # project to local UTM (metres)
+            G = ox.project_graph(G)
             _, edges = ox.graph_to_gdfs(G)
 
             edges = edges.copy()
             edges["hw"] = edges["highway"].apply(_normalise_highway)
 
-            major = edges[edges["hw"].isin(PRIMARY_TYPES)].copy()
-            minor = edges[edges["hw"].isin(SECONDARY_TYPES)].copy() if use_secondary else gpd.GeoDataFrame()
+            major    = edges[edges["hw"].isin(PRIMARY_TYPES)].copy()
+            minor    = edges[edges["hw"].isin(SECONDARY_TYPES)].copy() if road_tier >= 2 else gpd.GeoDataFrame()
+            tertiary = edges[edges["hw"].isin(TERTIARY_TYPES)].copy()  if road_tier >= 3 else gpd.GeoDataFrame()
 
             print(f"  Total edges: {len(edges)} | "
-                  f"major (district boundaries): {len(major)} | "
-                  f"minor (subdivision): {len(minor)}")
-            return major, minor, edges
+                  f"tier-1 (major): {len(major)} | "
+                  f"tier-2 (minor): {len(minor)} | "
+                  f"tier-3 (local): {len(tertiary)}")
+            return major, minor, tertiary, edges
 
         except Exception as e:
             last_err = e
             if attempt < max_retries - 1:
-                wait = 10 * (attempt + 1)   # 10 s, 20 s back-off
+                wait = 10 * (attempt + 1)
                 print(f"  Attempt {attempt + 1}/{max_retries} failed: {e}. "
                       f"Retrying in {wait}s...")
                 time.sleep(wait)
@@ -149,8 +172,10 @@ def download_network(place: str, use_secondary: bool = False, max_retries: int =
 def generate_enclosures(
     major: gpd.GeoDataFrame,
     minor: gpd.GeoDataFrame,
+    tertiary: gpd.GeoDataFrame,
     edges: gpd.GeoDataFrame,
     bbox_poly=None,
+    road_tier: int = 1,
 ) -> gpd.GeoDataFrame:
     # Study-area limit: convex hull of the full network
     limit = gpd.GeoDataFrame(
@@ -158,10 +183,11 @@ def generate_enclosures(
         crs=edges.crs,
     )
 
-    print("  Running momepy.enclosures()...")
+    print(f"  Running momepy.enclosures() (tier {road_tier})...")
     kwargs = dict(primary_barriers=major, limit=limit)
-    if len(minor) > 0:
-        kwargs["additional_barriers"] = [minor]   # momepy 0.9+ expects a list
+    additional = [df for df in (minor, tertiary) if len(df) > 0]
+    if additional:
+        kwargs["additional_barriers"] = additional   # momepy 0.9+ expects a list
 
     enc = momepy.enclosures(**kwargs)
     print(f"  {len(enc)} enclosures generated")
@@ -171,11 +197,7 @@ def generate_enclosures(
 
     areas = enc.geometry.area
 
-    # Keep district-scale enclosures only:
-    #   - min 1 ha (10 000 m2): city blocks are smaller and belong *inside* districts
-    #   - max 5 km2: removes the huge outer-boundary face momepy always produces
-    MIN_AREA_M2 = 10_000
-    MAX_AREA_M2 = 5_000_000
+    MIN_AREA_M2, MAX_AREA_M2 = _AREA_LIMITS.get(road_tier, _AREA_LIMITS[1])
     enc = enc[(areas >= MIN_AREA_M2) & (areas <= MAX_AREA_M2)].copy()
     enc = enc.reset_index(drop=True)
     print(f"  {len(enc)} district-scale enclosures retained")
@@ -324,35 +346,27 @@ def write_svg(
 # Main
 # ---------------------------------------------------------------------------
 
-def generate(place: str, output: str, use_secondary: bool = False) -> None:
+def generate(place: str, output: str, road_tier: int = 1) -> None:
     print(f"\nPlace  : {place}")
     print(f"Output : {output}")
-    print(f"Use secondary roads as subdivision: {use_secondary}\n")
+    print(f"Road tier: {road_tier}\n")
 
     print("Step 1 — downloading OSM network...")
-    major, minor, edges = download_network(place, use_secondary)
+    major, minor, tertiary, edges = download_network(place, road_tier)
     if major.empty:
         print("ERROR: no major roads found. Try a broader place name.")
         sys.exit(1)
 
     print("\nStep 2 — generating enclosures (momepy)...")
-    # Build projected bbox so gap-fill covers the exact requested rectangle.
-    # Use the axis-aligned UTM bounding box (box(*bounds)) rather than the
-    # projected lat/lon polygon, which is a trapezoid ~2-3% smaller than its
-    # own bounding box.  Using the axis-aligned rectangle ensures that the
-    # gap-fill and the SVG canvas mapping both use the same exact rectangle,
-    # giving 100% canvas coverage.
     bbox_proj = None
     if "," in place and all(_is_float(p.strip()) for p in place.split(",")):
         parts = [float(p.strip()) for p in place.split(",")]
         north, south, east, west = parts
-        raw_bbox = box(west, south, east, north)   # lon/lat (EPSG:4326)
+        raw_bbox = box(west, south, east, north)
         bbox_gdf = gpd.GeoDataFrame(geometry=[raw_bbox], crs="EPSG:4326")
-        bbox_gdf = bbox_gdf.to_crs(major.crs)      # project to UTM
-        # Use the axis-aligned bounding box of the UTM projection so the study
-        # area is a perfect rectangle in projected space (matching the SVG canvas).
+        bbox_gdf = bbox_gdf.to_crs(major.crs)
         bbox_proj = box(*bbox_gdf.geometry.iloc[0].bounds)
-    enc = generate_enclosures(major, minor, edges, bbox_poly=bbox_proj)
+    enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=road_tier)
     if enc.empty:
         print("ERROR: no enclosures generated.")
         sys.exit(1)
@@ -370,8 +384,8 @@ if __name__ == "__main__":
     parser.add_argument("place",  help='Place name, e.g. "Manchester City Centre, UK"')
     parser.add_argument("output", help="Output SVG file path")
     parser.add_argument(
-        "--secondary", action="store_true",
-        help="Also use tertiary roads to subdivide districts (more detail)",
+        "--tier", type=int, choices=[1, 2, 3], default=1,
+        help="Road detail level: 1=major only (default), 2=+tertiary, 3=+residential/unclassified",
     )
     args = parser.parse_args()
-    generate(args.place, args.output, use_secondary=args.secondary)
+    generate(args.place, args.output, road_tier=args.tier)

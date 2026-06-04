@@ -158,7 +158,7 @@ def split_polygon_osm(req: OsmSplitRequest):
             south=req.south,
             east=req.east,
             west=req.west,
-            use_secondary=req.use_secondary,
+            road_tier=req.road_tier,
         )
         return result
     except Exception as e:
@@ -181,7 +181,7 @@ def split_polygons_osm_multi(req: OsmMultiSplitRequest):
             south=req.south,
             east=req.east,
             west=req.west,
-            use_secondary=req.use_secondary,
+            road_tier=req.road_tier,
         )
         return result
     except Exception as e:

@@ -3329,8 +3329,9 @@ class PolygonEditor {
         const modal = document.getElementById('osmSplitModal');
         if (modal) modal.style.display = 'none';
 
-        const useSecondary = document.getElementById('osmUseSecondary')?.checked || false;
-        this.splitSelectedPolygonByOsm(this._osmBbox, useSecondary);
+        const tierEl = document.querySelector('input[name="osmRoadTier"]:checked');
+        const roadTier = tierEl ? parseInt(tierEl.value, 10) : 1;
+        this.splitSelectedPolygonByOsm(this._osmBbox, roadTier);
     }
 
     /**
@@ -3339,9 +3340,9 @@ class PolygonEditor {
      * then split) workflows.
      *
      * @param {{ north, south, east, west }} bbox - WGS84 bounding box
-     * @param {boolean} useSecondary - Include tertiary roads for subdivision
+     * @param {number} roadTier - 1=major only, 2=+tertiary, 3=+residential
      */
-    async splitSelectedPolygonByOsm(bbox, useSecondary = false) {
+    async splitSelectedPolygonByOsm(bbox, roadTier = 1) {
         const size = this.selectedPolygonIndices.size;
         if (size === 0) {
             this.uiController.showError('Select at least 1 polygon to split');
@@ -3371,10 +3372,10 @@ class PolygonEditor {
         try {
             const result = size === 1
                 ? await this.polygonSplitter.splitByOsm(
-                    selectedPolygons[0], bbox.north, bbox.south, bbox.east, bbox.west, useSecondary
+                    selectedPolygons[0], bbox.north, bbox.south, bbox.east, bbox.west, roadTier
                   )
                 : await this.polygonSplitter.splitMultipleByOsm(
-                    selectedPolygons, bbox.north, bbox.south, bbox.east, bbox.west, useSecondary
+                    selectedPolygons, bbox.north, bbox.south, bbox.east, bbox.west, roadTier
                   );
 
             if (!result.success) {
