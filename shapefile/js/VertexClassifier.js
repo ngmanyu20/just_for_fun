@@ -101,7 +101,43 @@ class VertexClassifier {
      * @param {Array<Object>} polygons
      * @returns {{ found: boolean, polygonIds: number[], counties: Set<string> }}
      */
-    resolveVertexInfo(x, y, polygons) {
+    /**
+     * Build a coordinate-key → entry[] Map for the given polygon array.
+     * Pass the result to resolveVertexInfo / classify as `vertexMap` to make
+     * those calls O(1) instead of O(P·V).  Build once per operation, reuse
+     * for every vertex in that operation's loop.
+     */
+    static buildVertexMap(polygons) {
+        const map = new Map();
+        for (let i = 0; i < polygons.length; i++) {
+            const polygon = polygons[i];
+            for (const ring of polygon.rings) {
+                for (const v of ring) {
+                    const key = `${v.x.toFixed(6)},${v.y.toFixed(6)}`;
+                    if (!map.has(key)) map.set(key, []);
+                    map.get(key).push({
+                        polygonIndex: i,
+                        polygonId:   polygon.id,
+                        county: (polygon.county && polygon.county !== polygon.id)
+                                    ? polygon.county : null,
+                    });
+                }
+            }
+        }
+        return map;
+    }
+
+    resolveVertexInfo(x, y, polygons, vertexMap = null) {
+        // Fast path: O(1) lookup when caller supplies a pre-built map.
+        if (vertexMap) {
+            const key = `${x.toFixed(6)},${y.toFixed(6)}`;
+            const entries = vertexMap.get(key) || [];
+            const polygonIds = entries.map(e => e.polygonIndex);
+            const counties   = new Set(entries.map(e => e.county).filter(Boolean));
+            return { found: polygonIds.length > 0, polygonIds, counties };
+        }
+
+        // Slow path: O(P·V) scan — kept for callers that don't pass a map.
         const polygonIds = [];
         const counties = new Set();
 

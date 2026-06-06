@@ -103,31 +103,37 @@ class SharedVertices {
      * @returns {Array<Object>} - Array of shared vertex groups
      */
     findAllSharedVertices(polygons) {
-        const sharedGroups = [];
-        const processed = new Set();
+        // Single O(P·V) pass: group every vertex by coordinate key.
+        // Old approach called findSharedVertices() (O(P·V)) for every unique
+        // position → O((P·V)²). This Map-based version is O(P·V) total.
+        const byKey = new Map();
 
         polygons.forEach((polygon, polygonIndex) => {
             polygon.rings.forEach((ring, ringIndex) => {
                 ring.forEach((vertex, vertexIndex) => {
                     const key = `${vertex.x.toFixed(6)},${vertex.y.toFixed(6)}`;
-                    
-                    if (!processed.has(key)) {
-                        const shared = this.findSharedVertices(vertex.x, vertex.y, polygons);
-                        
-                        if (shared.length > 1) {
-                            sharedGroups.push({
-                                position: { x: vertex.x, y: vertex.y },
-                                vertices: shared,
-                                count: shared.length
-                            });
-                        }
-                        
-                        processed.add(key);
-                    }
+                    if (!byKey.has(key)) byKey.set(key, []);
+                    byKey.get(key).push({
+                        polygonIndex,
+                        ringIndex,
+                        vertexIndex,
+                        vertex,
+                        polygonId: polygon.id,
+                    });
                 });
             });
         });
 
+        const sharedGroups = [];
+        for (const entries of byKey.values()) {
+            if (entries.length > 1) {
+                sharedGroups.push({
+                    position: { x: entries[0].vertex.x, y: entries[0].vertex.y },
+                    vertices: entries,
+                    count: entries.length,
+                });
+            }
+        }
         return sharedGroups;
     }
 

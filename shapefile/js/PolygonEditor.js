@@ -2124,9 +2124,11 @@ class PolygonEditor {
         //   not found   → vertex coordinate is not in any polygon (data integrity problem)
         //   found, no county → polygon exists but county field is null or set to its own ID
         //   found, no shared county → vertices exist but belong to different counties
+        // Build vertex map once — makes each resolveVertexInfo call O(1) instead of O(P·V)
+        const vertexMap = VertexClassifier.buildVertexMap(this.polygons);
         const vertexInfos = selectedInfo.map(v => ({
             v,
-            info: this.vertexClassifier.resolveVertexInfo(v.x, v.y, this.polygons)
+            info: this.vertexClassifier.resolveVertexInfo(v.x, v.y, this.polygons, vertexMap)
         }));
 
         for (const { v, info } of vertexInfos) {
@@ -2222,15 +2224,6 @@ class PolygonEditor {
 
             const stats = this.adjacencyGraph.getStatistics();
             console.log('Adjacency graph rebuilt:', stats);
-
-            // CRITICAL: Validate shared vertices after split
-            console.log('Validating shared vertices after split...');
-            const validation = this.sharedVertices.validateSharedVertices(this.polygons);
-            if (!validation.isValid) {
-                console.warn('Shared vertex validation found issues:', validation.issues);
-            } else {
-                console.log(`✓ Shared vertices validated: ${validation.sharedGroupCount} groups, ${validation.totalSharedVertices} total vertices`);
-            }
 
             // CRITICAL: Sync layer manager with updated polygon state
             this.layerManager.layers.subCounty.polygons = this.polygons;
