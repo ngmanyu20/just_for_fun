@@ -22,6 +22,21 @@ class PolygonSimplifier {
     // ─── Public API ──────────────────────────────────────────────────────────
 
     /**
+     * Return all removable collinear coordinates without mutating anything.
+     * Each entry is {x, y} for a vertex that satisfies all three removal conditions.
+     * @param   {Array}  polygons
+     * @returns {Array<{x:number, y:number}>}
+     */
+    findRedundantVertices(polygons) {
+        const unique   = this._collectUniqueCoords(polygons);
+        const toRemove = [];
+        for (const coord of unique.values()) {
+            if (this._isRemovable(coord, polygons)) toRemove.push(coord);
+        }
+        return toRemove;
+    }
+
+    /**
      * Simplify all polygons in-place.
      * @param   {Array}  polygons
      * @returns {{ polygons: Array, removedCount: number }}

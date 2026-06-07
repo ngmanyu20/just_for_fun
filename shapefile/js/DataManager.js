@@ -254,6 +254,19 @@ class DataManager {
         // Get headers from original data
         const headers = Object.keys(this.originalData[0]);
 
+        // Shoelace area in km² using the project scale: 8.01 data units = 1 km
+        const calcAreaKm2 = (rings) => {
+            const MPU = 1000 / 8.01;
+            let areaUnits = 0;
+            rings.forEach((ring, ri) => {
+                let a = 0;
+                for (let i = 0; i < ring.length - 1; i++)
+                    a += ring[i].x * ring[i + 1].y - ring[i + 1].x * ring[i].y;
+                areaUnits += ri === 0 ? Math.abs(a) / 2 : -Math.abs(a) / 2;
+            });
+            return areaUnits * MPU * MPU / 1_000_000;
+        };
+
         // Build O(1) lookup maps once — replaces O(P) Array.find (+ O(P) indexOf) per polygon
         const byShapeId  = new Map(this.originalData.filter(r => r.Shape_ID).map(r => [r.Shape_ID, r]));
         const byCounty   = new Map(this.originalData.filter(r => !r.Shape_ID).map(r => [r.County, r]));
@@ -261,6 +274,8 @@ class DataManager {
 
         // Export ALL current polygons (including new ones from splits)
         const exportData = polygons.map(polygon => {
+            const areaKm2 = calcAreaKm2(polygon.rings).toFixed(6);
+
             // O(1) lookup instead of O(P²) find+indexOf
             const originalRow =
                 byShapeId.get(polygon.id) ||
@@ -272,6 +287,7 @@ class DataManager {
                 return {
                     ...originalRow,
                     geometry:      this.ringsToWKT(polygon.rings),
+                    Area:          areaKm2,
                     District_Ward: polygon.districtWard || originalRow.District_Ward || ''
                 };
             }
@@ -293,6 +309,8 @@ class DataManager {
                     newRow[header] = polygon.id;
                 } else if (header === 'County') {
                     newRow[header] = polygon.county || extractCounty(polygon.id);
+                } else if (header === 'Area') {
+                    newRow[header] = areaKm2;
                 } else if (header === 'District_Ward') {
                     newRow[header] = polygon.districtWard || '';
                 } else if (polygon[header] !== undefined) {

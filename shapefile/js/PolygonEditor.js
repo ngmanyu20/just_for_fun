@@ -3712,9 +3712,8 @@ class PolygonEditor {
     // ─── Polygon Simplification ──────────────────────────────────────────────
 
     /**
-     * Simplify vertices of the selected polygon (RDP when tolerance > 0)
-     * or all polygons (exact collinear when tolerance == 0 / no selection).
-     * Saves an undo snapshot before modifying anything.
+     * Simplify vertices across all polygons: find every collinear (redundant)
+     * vertex, skip protected ones, then batch-remove the rest in a single pass.
      */
     handleSimplification() {
         if (!this.polygons || this.polygons.length === 0) {
@@ -3722,46 +3721,22 @@ class PolygonEditor {
             return;
         }
 
-        const tolInput  = document.getElementById('simplifyTolerance');
-        const tolMetres = tolInput ? (parseFloat(tolInput.value) || 0) : 0;
-        // Convert metres → data units (8.01 data units = 1 km)
-        const epsilon   = tolMetres * 8.01 / 1000;
+        // O(V²) detection scan — read-only, no mutation
+        const toRemove = this.polygonSimplifier.findRedundantVertices(this.polygons)
+            .filter(coord => !this.vertexClassifier.isProtected(coord.x, coord.y, this.polygons));
 
-        // ── RDP path: tolerance > 0 with exactly 1 polygon selected ──────────
-        if (epsilon > 0 && this.selectedPolygonIndices.size === 1) {
-            const idx = this.selectedPolygonIndex;
-            this.historyManager.saveToHistory(this.polygons, 'Before RDP simplification');
-
-            const removed = this.polygonSimplifier.simplifyRDP(this.polygons, idx, epsilon);
-
-            if (removed === 0) {
-                this.historyManager.undo();
-                this.uiController.showStatus(
-                    `No vertices removed at ${tolMetres}m — try a higher value`, 3000
-                );
-                return;
-            }
-
-            this.adjacencyGraph.buildAdjacencyList(this.polygons);
-            this.uiController.populatePolygonSelect(this.polygons);
-            this.updateUndoRedoButtons();
-            this.draw();
-            this.uiController.showSuccess(
-                `RDP simplified: removed ${removed} vertices (tolerance ${tolMetres}m)`
-            );
-            return;
-        }
-
-        // ── Exact collinear path: all polygons ────────────────────────────────
-        if (epsilon > 0 && this.selectedPolygonIndices.size !== 1) {
-            this.uiController.showStatus('Select exactly 1 polygon for RDP simplification', 3000);
+        if (toRemove.length === 0) {
+            this.uiController.showStatus('No redundant vertices found', 3000);
             return;
         }
 
         this.historyManager.saveToHistory(this.polygons, 'Before vertex simplification');
 
-        const { polygons, removedCount } = this.polygonSimplifier.simplify(this.polygons);
-        this.polygons = polygons;
+        // O(R · V_ring) batch removal — single pass, no deep copies
+        let removedCount = 0;
+        for (const coord of toRemove) {
+            removedCount += this.polygonSimplifier._removeFromAllRings(coord, this.polygons);
+        }
 
         if (removedCount === 0) {
             this.historyManager.undo();
@@ -3771,13 +3746,7 @@ class PolygonEditor {
 
         this.adjacencyGraph.buildAdjacencyList(this.polygons);
         this.uiController.populatePolygonSelect(this.polygons);
-        const stats = this.historyManager.getHistoryStats();
-        this.uiController.updateUndoRedoButtons(
-            this.historyManager.canUndo(),
-            this.historyManager.canRedo(),
-            stats.undoableActions,
-            stats.redoableActions
-        );
+        this.updateUndoRedoButtons();
         this.draw();
         this.uiController.showSuccess(
             `Simplification complete: removed ${removedCount} redundant vertex${removedCount !== 1 ? 'es' : ''}`

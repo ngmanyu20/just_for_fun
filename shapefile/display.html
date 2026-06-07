@@ -458,6 +458,55 @@
 
         let suppressChange = false;
 
+        /** Pan the main canvas so data point (cx, cy) is at the canvas centre. */
+        function panToDataPoint(cx, cy) {
+            try {
+                const opener = window.opener;
+                if (!opener || opener.closed) return;
+                const editor = opener.polygonEditor;
+                if (!editor || !editor.geometryOps || !editor.canvas) return;
+                const geo = editor.geometryOps;
+                geo.offsetX = editor.canvas.width  / 2 - cx * geo.scale;
+                geo.offsetY = editor.canvas.height / 2 + cy * geo.scale;
+                editor.draw();
+            } catch (_) {}
+        }
+
+        /** Centre on a single polygon's bounding-box midpoint. */
+        function panToPolygon(polygon) {
+            const ring = polygon.rings[0];
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            for (const p of ring) {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+            panToDataPoint((minX + maxX) / 2, (minY + maxY) / 2);
+        }
+
+        /** Centre on the bounding-box midpoint of all polygons in a county. */
+        function panToCounty(countyName) {
+            try {
+                const opener = window.opener;
+                if (!opener || opener.closed) return;
+                const editor = opener.polygonEditor;
+                if (!editor || !editor.polygons) return;
+                const polys = editor.polygons.filter(p => p.county === countyName);
+                if (!polys.length) return;
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                for (const poly of polys) {
+                    for (const p of poly.rings[0]) {
+                        if (p.x < minX) minX = p.x;
+                        if (p.x > maxX) maxX = p.x;
+                        if (p.y < minY) minY = p.y;
+                        if (p.y > maxY) maxY = p.y;
+                    }
+                }
+                panToDataPoint((minX + maxX) / 2, (minY + maxY) / 2);
+            } catch (_) {}
+        }
+
         displayCountySelect.addEventListener('change', () => {
             if (suppressChange) return;
             const opener = window.opener;
@@ -467,6 +516,7 @@
                 mainCounty.value = displayCountySelect.value;
                 mainCounty.dispatchEvent(new Event('change'));
             }
+            panToCounty(displayCountySelect.value);
         });
 
         displaySelect.addEventListener('change', () => {
@@ -478,6 +528,9 @@
                 mainSelect.value = displaySelect.value;
                 mainSelect.dispatchEvent(new Event('change'));
             }
+            const editor = opener.polygonEditor;
+            const idx = parseInt(displaySelect.value, 10);
+            if (editor && editor.polygons && !isNaN(idx)) panToPolygon(editor.polygons[idx]);
         });
 
         function syncOptions(source, dest) {
