@@ -105,10 +105,10 @@ class UIController {
 
         const filtered = polygons.filter(p => p.county === selectedCounty);
 
-        // Sort by numeric serial (handles NC1_001, NC1_023, etc.)
+        // Sort by numeric serial (handles NC1_001, NC1_023, NC1_1000, etc.)
         filtered.sort((a, b) => {
-            const numA = parseInt(a.id.split('_').pop(), 10) || 0;
-            const numB = parseInt(b.id.split('_').pop(), 10) || 0;
+            const numA = parseInt((a.id || '').split('_').pop(), 10) || 0;
+            const numB = parseInt((b.id || '').split('_').pop(), 10) || 0;
             return numA - numB;
         });
 
@@ -305,7 +305,7 @@ class UIController {
      */
     showStatus(message, duration = 3000) {
         if (!this.elements.status) return;
-        
+        console.log('[Status]', message);
         this.elements.status.textContent = message;
         this.elements.status.style.display = 'block';
         
@@ -324,7 +324,7 @@ class UIController {
      */
     showError(message) {
         if (!this.elements.status) return;
-        
+        console.error('[Error]', message);
         this.elements.status.textContent = message;
         this.elements.status.style.background = '#dc3545';
         this.elements.status.style.display = 'block';
@@ -343,7 +343,7 @@ class UIController {
      */
     showSuccess(message) {
         if (!this.elements.status) return;
-
+        console.log('[Success]', message);
         this.elements.status.textContent = message;
         this.elements.status.style.background = '#28a745';
         this.elements.status.style.display = 'block';
@@ -361,7 +361,7 @@ class UIController {
      */
     showMessage(message) {
         if (!this.elements.status) return;
-
+        console.log('[Info]', message);
         this.elements.status.textContent = message;
         this.elements.status.style.background = '#007bff'; // Blue for info
         this.elements.status.style.display = 'block';

@@ -103,8 +103,9 @@ class PolygonCombiner {
 
         // Create combined IDs
         const combinedIds = sourcePolygons.map(p => p.id).join('+');
-        const combinedCounties = [...new Set(sourcePolygons.map(p => p.county).filter(c => c))].join('+');
         const basePolygon = sourcePolygons[0];
+        // Preserve county from the first source polygon (validation already confirmed they match)
+        const mergedCounty = basePolygon.county || '';
 
         // Use shared parent if all source polygons have the same parent, else fall back to first
         const parentValues = [...new Set(sourcePolygons.map(p => p.parent).filter(p => p))];
@@ -112,7 +113,7 @@ class PolygonCombiner {
 
         return {
             id: combinedIds,
-            county: combinedCounties || combinedIds,
+            county: mergedCounty,
             parent: combinedParent,
             rings: [ring],
             isCombined: true,
@@ -148,14 +149,15 @@ class PolygonCombiner {
         // Get polygons to combine
         const polysToMerge = indices.map(i => polygons[i]);
 
-        // Check if all polygons have the same county
+        // Check if all polygons have the same county (normalise to ignore case/whitespace)
         const counties = polysToMerge.map(p => p.county).filter(c => c);
-        const uniqueCounties = [...new Set(counties)];
+        const uniqueNorm = [...new Set(counties.map(c => c.trim().toLowerCase()))];
 
-        if (uniqueCounties.length > 1) {
+        if (uniqueNorm.length > 1) {
+            const display = [...new Set(counties)].join(', ');
             return {
                 success: false,
-                message: `Cannot combine polygons from different counties: ${uniqueCounties.join(', ')}`,
+                message: `Cannot combine polygons from different counties: ${display}`,
                 newPolygon: null,
                 removedIndices: []
             };
@@ -223,7 +225,7 @@ class PolygonCombiner {
 
             return {
                 success: true,
-                message: `Successfully combined ${indices.length} polygons from ${uniqueCounties[0]}`,
+                message: `Successfully combined ${indices.length} polygons from ${counties[0]}`,
                 newPolygon: mergedPolygon,
                 removedIndices: indices.slice(1) // Keep first polygon, remove others
             };
@@ -263,15 +265,16 @@ class PolygonCombiner {
             };
         }
 
-        // Check if all polygons have the same county
+        // Check if all polygons have the same county (normalise to ignore case/whitespace)
         const polysToCheck = indices.map(i => polygons[i]);
         const counties = polysToCheck.map(p => p.county).filter(c => c);
-        const uniqueCounties = [...new Set(counties)];
+        const uniqueNorm = [...new Set(counties.map(c => c.trim().toLowerCase()))];
 
-        if (uniqueCounties.length > 1) {
+        if (uniqueNorm.length > 1) {
+            const display = [...new Set(counties)].join(', ');
             return {
                 valid: false,
-                message: `Cannot combine polygons from different counties: ${uniqueCounties.join(', ')}`
+                message: `Cannot combine polygons from different counties: ${display}`
             };
         }
 
@@ -294,7 +297,7 @@ class PolygonCombiner {
 
         return {
             valid: true,
-            message: `Ready to combine ${indices.length} connected polygons from ${uniqueCounties[0]}`
+            message: `Ready to combine ${indices.length} connected polygons from ${counties[0]}`
         };
     }
 }

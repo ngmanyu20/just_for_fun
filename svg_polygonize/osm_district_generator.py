@@ -75,6 +75,7 @@ _AREA_LIMITS = {
 }
 
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,6 +138,20 @@ def download_network(place: str, road_tier: int = 1, max_retries: int = 3):
                 G = ox.graph_from_place(place, network_type="drive", retain_all=True)
 
             G = ox.project_graph(G)
+
+            # Consolidate near-miss intersection nodes (within 15 m of each other).
+            # OSM commonly has junction nodes a few metres apart due to roundabout
+            # encodings and imprecise mapping — these produce tiny triangle enclosures.
+            # consolidate_intersections merges them into a single node so the planar
+            # graph is clean before momepy sees it.
+            try:
+                G = ox.consolidate_intersections(
+                    G, tolerance=15, rebuild_graph=True, dead_ends=False
+                )
+                print("  Intersection consolidation applied (tolerance=15 m)")
+            except Exception as _ci_err:
+                print(f"  consolidate_intersections skipped: {_ci_err}")
+
             _, edges = ox.graph_to_gdfs(G)
             del G   # free the NetworkX graph — GeoDataFrames are independent copies
 
@@ -151,7 +166,33 @@ def download_network(place: str, road_tier: int = 1, max_retries: int = 3):
                   f"tier-1 (major): {len(major)} | "
                   f"tier-2 (minor): {len(minor)} | "
                   f"tier-3 (local): {len(tertiary)}")
-            return major, minor, tertiary, edges
+
+            # ── Waterways as additional barriers ──────────────────────────────
+            # Rivers, canals, and coastlines form hard geographic boundaries
+            # (e.g. Bristol's River Avon) that roads alone cannot capture.
+            waterways = gpd.GeoDataFrame(geometry=[], crs=edges.crs)
+            if "," in place and all(_is_float(p.strip()) for p in place.split(",")):
+                try:
+                    _parts = [float(p.strip()) for p in place.split(",")]
+                    _n, _s, _e, _w = _parts
+                    wf = ox.features_from_bbox(
+                        bbox=(_w, _s, _e, _n),
+                        tags={"waterway": ["river", "canal", "stream"],
+                              "natural":  ["coastline"]},
+                    )
+                    # Keep only line features (river centrelines, not water-area polygons)
+                    wf = wf[wf.geometry.geom_type.isin(
+                        ["LineString", "MultiLineString"]
+                    )].copy()
+                    if len(wf) > 0:
+                        waterways = gpd.GeoDataFrame(
+                            geometry=wf.geometry.values, crs="EPSG:4326"
+                        ).to_crs(edges.crs)
+                        print(f"  Downloaded {len(waterways)} waterway line barriers")
+                except Exception as _we:
+                    print(f"  Waterway fetch skipped: {_we}")
+
+            return major, minor, tertiary, edges, waterways
 
         except Exception as e:
             last_err = e
@@ -177,6 +218,7 @@ def generate_enclosures(
     edges: gpd.GeoDataFrame,
     bbox_poly=None,
     road_tier: int = 1,
+    waterways: gpd.GeoDataFrame = None,
 ) -> gpd.GeoDataFrame:
     # Study-area limit: convex hull of the full network
     limit = gpd.GeoDataFrame(
@@ -187,6 +229,9 @@ def generate_enclosures(
     print(f"  Running momepy.enclosures() (tier {road_tier})...")
     kwargs = dict(primary_barriers=major, limit=limit)
     additional = [df for df in (minor, tertiary) if len(df) > 0]
+    # Add waterways (rivers, canals) as hard geographic barriers
+    if waterways is not None and len(waterways) > 0:
+        additional.append(waterways[["geometry"]].copy())
     if additional:
         kwargs["additional_barriers"] = additional   # momepy 0.9+ expects a list
 
@@ -196,57 +241,112 @@ def generate_enclosures(
     # Drop degenerate / empty geometry
     enc = enc[enc.geometry.is_valid & ~enc.geometry.is_empty].copy()
 
-    areas = enc.geometry.area
+    # ── Area filtering ────────────────────────────────────────────────────────
+    # Keep ALL road-bounded enclosures regardless of size — rural areas produce
+    # legitimately large cells and discarding them leaves vast gaps that the
+    # Voronoi gap-fill then fills with starburst/thin-wedge artifacts.
+    # Only sub-100 m² slivers (pure geometric noise) are dropped outright.
+    # Cells below the per-tier minimum (junction triangles) are MERGED into
+    # the neighbor with the longest shared road boundary so no gap is created.
+    MIN_AREA_M2, _ = _AREA_LIMITS.get(road_tier, _AREA_LIMITS[1])
 
-    MIN_AREA_M2, MAX_AREA_M2 = _AREA_LIMITS.get(road_tier, _AREA_LIMITS[1])
-    enc = enc[(areas >= MIN_AREA_M2) & (areas <= MAX_AREA_M2)].copy()
-    enc = enc.reset_index(drop=True)
+    enc = enc[enc.geometry.area >= 100].copy().reset_index(drop=True)
+
+    small_mask = enc.geometry.area < MIN_AREA_M2
+    n_small = int(small_mask.sum())
+    if n_small > 0 and (~small_mask).any():
+        print(f"  Merging {n_small} sub-minimum junction cells into neighbors...")
+        large_indices = enc.index[~small_mask].tolist()
+        merged = {i: enc.geometry.at[i] for i in large_indices}
+
+        for si in enc.index[small_mask]:
+            sg = enc.geometry.at[si]
+            best_idx = None
+            best_shared = 0.0
+            for li in large_indices:
+                try:
+                    shared = sg.boundary.intersection(merged[li].boundary).length
+                except Exception:
+                    shared = 0.0
+                if shared > best_shared:
+                    best_shared = shared
+                    best_idx = li
+            if best_idx is None:
+                best_idx = min(large_indices, key=lambda i: sg.distance(merged[i]))
+            try:
+                merged[best_idx] = make_valid(merged[best_idx].union(sg))
+            except Exception:
+                pass
+
+        rows = []
+        for li in large_indices:
+            row = enc.loc[li].copy()
+            row["geometry"] = merged[li]
+            rows.append(row)
+        enc = gpd.GeoDataFrame(rows, crs=enc.crs).reset_index(drop=True)
+
     print(f"  {len(enc)} district-scale enclosures retained")
 
-    # --- Fill gaps so the full bounding box is covered ----------------------
-    # Any area inside the bbox but outside all enclosures (rivers, parks,
-    # peripheral zones) is assigned to its nearest district via Voronoi.
+    # ── Gap fill: road-edge-seeded Voronoi ───────────────────────────────────
+    # Seeds are placed along actual road segments near the gap so Voronoi
+    # boundaries run perpendicular to roads rather than straight across open
+    # countryside.  Each Voronoi cell is assigned to its nearest enclosure
+    # centroid, making gap-fill cells follow the road-network pattern.
     study_area = bbox_poly if bbox_poly is not None else unary_union(edges.geometry.values).convex_hull
-    # Reproject study_area to the same CRS as enc (UTM)
-    covered   = unary_union(enc.geometry.values)
-    gap       = study_area.difference(covered)
+    covered = unary_union(enc.geometry.values)
+    gap     = study_area.difference(covered)
+
+    def _iter_polygons(geom):
+        if isinstance(geom, Polygon):
+            yield geom
+        elif hasattr(geom, "geoms"):
+            for g in geom.geoms:
+                yield from _iter_polygons(g)
 
     if not gap.is_empty and gap.area > 1000:
-        print(f"  Filling {gap.area/1e6:.2f} km2 of gaps via Voronoi assignment...")
-        centroids = list(enc.geometry.centroid.values)
-        vd = voronoi_diagram(GeometryCollection(centroids), envelope=study_area)
+        print(f"  Filling {gap.area/1e6:.2f} km² of gaps via road-seeded Voronoi...")
 
-        centroid_series = enc.geometry.centroid
-        extra_geoms  = []   # gap pieces as NEW rows (same district colour)
-        extra_owner  = []   # which district index owns each piece
+        # Sample points along road edges that lie within 500 m of the gap.
+        # Using road-edge seeds (not enclosure centroids) makes the Voronoi
+        # boundaries approximate the road network rather than the centroid grid.
+        _GAP_BUFFER_M  = 500
+        _SEED_SPACING_M = 200   # one seed per this many metres along each edge
+        gap_buf = gap.buffer(_GAP_BUFFER_M)
+        nearby  = edges[edges.geometry.intersects(gap_buf)]
+        if len(nearby) == 0:
+            nearby = edges  # fallback: use all edges
 
+        seeds = []
+        for geom in nearby.geometry:
+            length = geom.length
+            n = max(1, int(length / _SEED_SPACING_M))
+            for k in range(n + 1):
+                pt = geom.interpolate(k / n, normalized=True)
+                seeds.append(pt)
+
+        print(f"  Road-seeded Voronoi: {len(seeds)} seeds from "
+              f"{len(nearby)} nearby edges")
+
+        vd = voronoi_diagram(GeometryCollection(seeds), envelope=study_area)
+
+        # Pre-compute enclosure centroids for owner lookup
+        enc_centroids = enc.geometry.centroid
+
+        new_rows = []
         for vcell in vd.geoms:
-            gap_piece = gap.intersection(vcell)
-            if gap_piece.is_empty or gap_piece.area < 100:
+            gp = gap.intersection(vcell)
+            if gp.is_empty or gp.area < 100:
                 continue
-            gap_piece = make_valid(gap_piece)
-            # Explode MultiPolygons from intersection into individual parts
-            parts = list(gap_piece.geoms) if isinstance(gap_piece, MultiPolygon) else [gap_piece]
+            gp = make_valid(gp)
+            # Nearest enclosure centroid to this Voronoi cell's centroid
+            owner = enc_centroids.distance(vcell.centroid).idxmin()
+            for part in _iter_polygons(gp):
+                if part.area >= 100:
+                    row = enc.loc[owner].copy()
+                    row["geometry"] = part
+                    new_rows.append(row)
 
-            owner = None
-            for idx in enc.index:
-                if vcell.contains(centroid_series.at[idx]):
-                    owner = idx
-                    break
-            if owner is None:
-                continue
-            for part in parts:
-                if not part.is_empty and part.area > 100 and isinstance(part, Polygon):
-                    extra_geoms.append(part)
-                    extra_owner.append(owner)
-
-        if extra_geoms:
-            # Build new rows inheriting the owner district's attributes
-            new_rows = []
-            for geom, owner in zip(extra_geoms, extra_owner):
-                row = enc.loc[owner].copy()
-                row["geometry"] = geom
-                new_rows.append(row)
+        if new_rows:
             extra_gdf = gpd.GeoDataFrame(new_rows, crs=enc.crs)
             enc = pd.concat([enc, extra_gdf], ignore_index=True)
 
@@ -255,7 +355,6 @@ def generate_enclosures(
         print(f"  Coverage after gap-fill: {100-pct:.3f}% of bounding box")
 
     # --- Final validity pass ------------------------------------------------
-    # make_valid() on every polygon; discard any that are still degenerate
     fixed = []
     for geom in enc.geometry:
         g = make_valid(geom)
@@ -265,10 +364,10 @@ def generate_enclosures(
             g = unary_union(polys) if polys else None
         if g is None or g.is_empty:
             fixed.append(None)
-        elif isinstance(g, MultiPolygon):
-            fixed.append(max(g.geoms, key=lambda p: p.area))
-        else:
-            fixed.append(g)
+            continue
+        if isinstance(g, MultiPolygon):
+            g = max(g.geoms, key=lambda p: p.area)
+        fixed.append(g)
 
     enc = enc.copy()
     enc["geometry"] = fixed

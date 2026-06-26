@@ -2,6 +2,7 @@
 import numpy as np
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon, Point
 from shapely.ops import unary_union, snap
+from shapely.strtree import STRtree
 from scipy.spatial import Voronoi
 
 
@@ -576,9 +577,11 @@ def _simplify_osm_cells(cells, target_polygon, epsilon):
 def _safe_merge(cells, idx, piece):
     """Union piece into cells[idx], always keeping a simple Polygon.
 
-    When the union is disconnected (MultiPolygon), keep the piece that contains
-    the original cell's centroid so we never swap the cell body for a distant
-    gap slice — which would create a floating island polygon inside another cell.
+    When the plain union produces a disconnected MultiPolygon (piece and cell
+    touch only at a corner point, not along an edge), the old code discarded
+    the piece — leaving a permanent gap.  Fix: expand piece by a tiny adaptive
+    buffer (0.1 % of its perimeter) to convert point-contact to edge-overlap,
+    then retry the union.  This fills the gap without any visible distortion.
     """
     try:
         orig_centroid = cells[idx].centroid
@@ -587,14 +590,23 @@ def _safe_merge(cells, idx, piece):
             return
         if merged.geom_type == 'Polygon':
             cells[idx] = merged
-        elif merged.geom_type == 'MultiPolygon':
-            # Keep whichever piece still contains the original cell centroid.
-            for geom in sorted(merged.geoms, key=lambda g: g.area, reverse=True):
-                if geom.distance(orig_centroid) < 1e-8:
-                    cells[idx] = geom
-                    return
-            # Fallback: centroid not found in any piece — keep largest
-            cells[idx] = max(merged.geoms, key=lambda g: g.area)
+            return
+        # MultiPolygon — piece only touches cell at a corner.
+        # Expand piece by a tiny adaptive amount to force edge overlap.
+        try:
+            buf_r = max(1e-9, piece.length * 1e-3)
+            merged2 = cells[idx].union(piece.buffer(buf_r)).buffer(0)
+            if merged2.geom_type == 'Polygon' and not merged2.is_empty:
+                cells[idx] = merged2
+                return
+        except Exception:
+            pass
+        # Buffer fallback also failed: keep the sub-polygon containing orig centroid.
+        for geom in sorted(merged.geoms, key=lambda g: g.area, reverse=True):
+            if geom.distance(orig_centroid) < 1e-8:
+                cells[idx] = geom
+                return
+        cells[idx] = max(merged.geoms, key=lambda g: g.area)
     except Exception:
         pass
 
@@ -631,10 +643,14 @@ def _distribute_gap_voronoi(gap, cells, gap_area_tol):
     SAMPLES = 10        # seed points sampled per shared segment
 
     # --- find border cells -------------------------------------------------
+    # STRtree prefilter: any cell that shares a boundary with the gap must have
+    # a bbox overlapping the gap's bbox (shared points lie in both bboxes).
+    # No false negatives → result is bit-exact identical to the linear scan.
+    _ctree = STRtree(cells)
     border = []   # (cell_index, shared_segment, shared_length)
-    for i, cell in enumerate(cells):
+    for i in _ctree.query(gap):
         try:
-            shared = gap.boundary.intersection(cell.boundary)
+            shared = gap.boundary.intersection(cells[i].boundary)
             L = shared.length if not shared.is_empty else 0.0
         except Exception:
             L = 0.0
@@ -734,6 +750,170 @@ def _distribute_gap_voronoi(gap, cells, gap_area_tol):
         _safe_merge(cells, best, gap)
 
 
+def _thin_osm_cells_anchored(cells, threshold_canvas):
+    """
+    Anchor-aware vertex thinning for a mesh of OSM-derived cells.
+
+    Complexity: O(V) total, where V = sum of all ring vertex counts.
+      - Snapped coordinates are pre-computed once per ring (no repeated rounding
+        inside inner loops).
+      - Each vertex is visited at most once in the main scan.
+      - The anchor look-ahead is at most 10 steps (O(1) amortised per vertex).
+
+    Shared-vertex consistency:
+      When vertex V is removed from cell A, its snapped coordinate is added to
+      the global removal_set.  Cell B (sharing that boundary) pre-marks V for
+      removal before it even runs its distance checks, so later cells need
+      progressively less work.  A final sweep (Phase 4) catches any vertices
+      that were added to removal_set by cells processed *after* the cell that
+      originally contained them.
+
+    Junction vertices (degree >= 3, i.e. shared by 3+ cells) are never removed.
+    """
+    from collections import Counter
+
+    if not cells or threshold_canvas <= 0:
+        return list(cells)
+
+    SNAP = 4  # decimal places for coordinate snapping
+
+    def _s(c):
+        return (round(c[0], SNAP), round(c[1], SNAP))
+
+    # ── Phase 1: open rings + degree map ─────────────────────────────────────
+    degree     = Counter()
+    open_rings = []
+    for cell in cells:
+        pts = list(cell.exterior.coords)[:-1] if isinstance(cell, Polygon) else None
+        open_rings.append(pts)
+        if pts:
+            for p in pts:
+                degree[_s(p)] += 1
+
+    # ── Phase 2: pre-compute snapped coords and anchor flags per ring ─────────
+    # Done once so inner loops only do list indexing, no rounding.
+    ring_snaps   = []
+    ring_anchors = []
+    for ring in open_rings:
+        if ring is None:
+            ring_snaps.append(None)
+            ring_anchors.append(None)
+        else:
+            snaps = [_s(v) for v in ring]
+            ring_snaps.append(snaps)
+            ring_anchors.append([degree[s] >= 3 for s in snaps])
+
+    # ── Phase 3: process rings in order, building removal_set ────────────────
+    # removal_set grows as we process cells; later cells skip already-decided
+    # vertices immediately (no distance check needed).
+    min_d2      = threshold_canvas * threshold_canvas
+    removal_set = set()          # snapped coords of vertices decided to remove
+    all_to_rm   = []             # per-ring: set of local vertex indices to remove
+
+    for ring, snaps, anchors in zip(open_rings, ring_snaps, ring_anchors):
+        if ring is None:
+            all_to_rm.append(None)
+            continue
+
+        n         = len(ring)
+        to_rm     = set()
+
+        # Pre-mark vertices already decided by earlier rings
+        for vi in range(n):
+            if snaps[vi] in removal_set:
+                to_rm.add(vi)
+
+        i = 0
+        while i < n:
+            if i in to_rm:          # skip already-removed origin candidates
+                i += 1
+                continue
+
+            origin   = ring[i]
+            max_look = min(10, n - i - 1)
+
+            # Find next anchor, skipping pre-removed vertices
+            anchor_j = None
+            for j in range(1, max_look + 1):
+                vi = i + j
+                if vi in to_rm:
+                    continue        # already removed — don't count as anchor
+                if anchors[vi]:
+                    anchor_j = j
+                    break
+
+            if anchor_j is not None:
+                # Thin vertices between origin and anchor
+                for j in range(1, anchor_j):
+                    vi = i + j
+                    if vi in to_rm:
+                        continue    # already removed — skip
+                    v  = ring[vi]
+                    dx = v[0] - origin[0]
+                    dy = v[1] - origin[1]
+                    if dx * dx + dy * dy >= min_d2:
+                        break       # far enough — keep this and the rest
+                    to_rm.add(vi)
+                    removal_set.add(snaps[vi])
+                i += anchor_j       # always advance to the anchor
+
+            else:
+                # No anchor in window — thin and advance to first far vertex
+                advanced = False
+                for j in range(1, max_look + 1):
+                    vi = i + j
+                    if vi in to_rm:
+                        continue    # already removed — keep scanning for far vertex
+                    v  = ring[vi]
+                    dx = v[0] - origin[0]
+                    dy = v[1] - origin[1]
+                    if dx * dx + dy * dy >= min_d2:
+                        i        = vi
+                        advanced = True
+                        break
+                    to_rm.add(vi)
+                    removal_set.add(snaps[vi])
+                if not advanced:
+                    i += max_look + 1
+
+        all_to_rm.append(to_rm)
+
+    # ── Phase 4: second sweep — apply late removal_set entries ───────────────
+    # Vertices added to removal_set by *later* rings must also be removed from
+    # rings that were processed earlier (ensuring full shared-vertex consistency).
+    for snaps, to_rm in zip(ring_snaps, all_to_rm):
+        if snaps is None or to_rm is None:
+            continue
+        for vi, s in enumerate(snaps):
+            if s in removal_set:
+                to_rm.add(vi)
+
+    # ── Phase 5: rebuild cells ───────────────────────────────────────────────
+    new_cells = []
+    for cell, ring, to_rm in zip(cells, open_rings, all_to_rm):
+        if ring is None or to_rm is None:
+            new_cells.append(cell)
+            continue
+
+        n    = len(ring)
+        kept = [ring[k] for k in range(n) if k not in to_rm]
+
+        if len(kept) < 3:
+            new_cells.append(cell)  # ring collapsed — keep original
+            continue
+
+        kept.append(kept[0])        # re-close
+        try:
+            nc = Polygon(kept)
+            if not nc.is_valid:
+                nc = nc.buffer(0)
+            new_cells.append(nc if (nc.is_valid and not nc.is_empty) else cell)
+        except Exception:
+            new_cells.append(cell)
+
+    return new_cells
+
+
 # -----------------------------
 # OSM-based polygon splitter
 # -----------------------------
@@ -744,15 +924,22 @@ def split_polygon_by_osm(
     east: float,
     west: float,
     road_tier: int = 1,
+    simplify_spacing: float | None = 150.0,
+    data_source: str = "osm",
+    min_area_km2: float | None = None,
+    preloaded_waterways=None,
 ):
     """
-    Split a polygon using OSM-derived enclosures as district boundaries.
+    Split a polygon using road-network enclosures as district boundaries.
 
-    Downloads OSM road data for the given WGS84 bounding box, uses momepy
-    enclosures to create district zones, transforms UTM→data coordinates
-    (no Y-flip: UTM northing and data Y both increase upward), clips each
-    zone against the target polygon, then runs multi-pass gap absorption so
-    the entire polygon is covered without any blank gaps.
+    data_source="osm"      — download via Overpass API (global coverage)
+    data_source="os_roads" — read from local OS Open Roads GeoPackage (UK only,
+                             requires shapefile/os_data/oproad_gb.gpkg)
+
+    Downloads/loads road data for the given WGS84 bounding box, uses momepy
+    enclosures to create district zones, transforms projected→data coordinates,
+    clips each zone against the target polygon, then runs multi-pass gap
+    absorption so the entire polygon is covered without any blank gaps.
 
     Input : GeoJSON Polygon geometry + WGS84 bounding box
     Output: GeoJSON FeatureCollection of district polygons
@@ -765,38 +952,26 @@ def split_polygon_by_osm(
     import geopandas as gpd
     from shapely.geometry import box as shapely_box
     from shapely.affinity import affine_transform
-    from svg_polygonize.osm_district_generator import download_network, generate_enclosures
+    from svg_polygonize.osm_district_generator import download_network, generate_enclosures  # noqa: E501
 
     import gc as _gc
-    import math as _math
 
     target_polygon = shape(geometry_geojson)
     if not isinstance(target_polygon, Polygon):
         raise ValueError("Only Polygon geometries are supported")
 
-    # ── Bbox area guard (production only) ────────────────────────────────────
-    # Tier 3 (residential) produces up to ~300 cells/km²; unary_union over
-    # thousands of cells across 17 pipeline passes quickly exceeds 1 GB.
-    # Limits are skipped in local development so large areas can be tested freely.
-    _IS_RENDER = bool(_os.environ.get('RENDER'))
-    _lat_c = (north + south) / 2
-    _bbox_km2 = (
-        (north - south) * 111.0
-        * (east - west) * 111.0 * _math.cos(_math.radians(_lat_c))
-    )
-    if _IS_RENDER:
-        _MAX_KM2 = {1: 2000.0, 2: 200.0, 3: 15.0}
-        _limit = _MAX_KM2.get(road_tier, 2000.0)
-        if _bbox_km2 > _limit:
-            raise ValueError(
-                f"Bounding box is too large for tier {road_tier} "
-                f"({_bbox_km2:.0f} km² > {_limit:.0f} km² limit). "
-                f"Zoom in or use a lower tier."
-            )
+    if data_source == "os_roads":
+        from os_roads import load_os_network
+        print(f"  [UK mode] Loading OS Open Roads (tier {road_tier})")
+        major, minor, tertiary, edges, waterways = load_os_network(
+            north, south, east, west, road_tier,
+            preloaded_waterways=preloaded_waterways,
+        )
+    else:
+        # download_network accepts "N,S,E,W" string as bbox
+        place = f"{north},{south},{east},{west}"
+        major, minor, tertiary, edges, waterways = download_network(place, road_tier)
 
-    # download_network accepts "N,S,E,W" string as bbox
-    place = f"{north},{south},{east},{west}"
-    major, minor, tertiary, edges = download_network(place, road_tier)
     if major.empty:
         raise ValueError("No major roads found in the specified bounding box")
 
@@ -806,30 +981,76 @@ def split_polygon_by_osm(
     bbox_gdf = bbox_gdf.to_crs(major.crs)
     bbox_proj = shapely_box(*bbox_gdf.geometry.iloc[0].bounds)
 
-    enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=road_tier)
+    enc = generate_enclosures(major, minor, tertiary, edges, bbox_poly=bbox_proj, road_tier=road_tier, waterways=waterways)
     if enc.empty:
         raise ValueError("No enclosures generated from OSM data")
 
     # Free road data — no longer needed once enclosures are built
-    del major, minor, tertiary, edges, bbox_gdf, raw_bbox
+    del major, minor, tertiary, edges, waterways, bbox_gdf, raw_bbox
     _gc.collect()
 
     # Build coordinate transform: UTM → data
     # UTM northing increases northward (Y-up), same as data Y → no Y-flip
-    utm_minx, utm_miny, utm_maxx, utm_maxy = enc.total_bounds
+    #
+    # Use the geographic bbox (N/S/E/W) projected to UTM as the transform
+    # reference, NOT enc.total_bounds.  OS Roads bbox queries return entire
+    # road links even when only a small part intersects the bbox (e.g. the
+    # M1 motorway can push enc.total_bounds ~15 km beyond the actual area),
+    # producing a false stretch ratio that maps enclosures into only a thin
+    # band of the data polygon and leaves the centre empty.
+    _geo_ref = gpd.GeoDataFrame(
+        geometry=[shapely_box(west, south, east, north)], crs="EPSG:4326"
+    ).to_crs(enc.crs)
+    utm_minx, utm_miny, utm_maxx, utm_maxy = _geo_ref.geometry.iloc[0].bounds
     poly_minx, poly_miny, poly_maxx, poly_maxy = target_polygon.bounds
 
     sx = (poly_maxx - poly_minx) / (utm_maxx - utm_minx) if utm_maxx != utm_minx else 1.0
     sy = (poly_maxy - poly_miny) / (utm_maxy - utm_miny) if utm_maxy != utm_miny else 1.0
-    xoff = poly_minx - utm_minx * sx
-    yoff = poly_miny - utm_miny * sy
 
-    min_area = target_polygon.area * 0.0001
+    # Diagnostic: log the raw per-axis scales before correction
+    _data_w   = poly_maxx - poly_minx
+    _data_h   = poly_maxy - poly_miny
+    _utm_w_km = (utm_maxx - utm_minx) / 1000.0
+    _utm_h_km = (utm_maxy - utm_miny) / 1000.0
+    _raw_stretch = (sx / sy) if sy else float('inf')
+    print(f"[OSM transform] data bbox: {_data_w:.3f} × {_data_h:.3f} units "
+          f"({_data_w/_data_h:.3f}:1 aspect)")
+    print(f"[OSM transform] UTM bbox:  {_utm_w_km:.2f} × {_utm_h_km:.2f} km "
+          f"({_utm_w_km/_utm_h_km:.3f}:1 aspect)")
+    print(f"[OSM transform] raw sx={sx:.5f}  sy={sy:.5f}  stretch={_raw_stretch:.3f}"
+          + (f"  ← correcting to uniform scale" if abs(_raw_stretch - 1.0) > 0.02 else "  ← OK"))
+
+    # Use a single uniform scale factor so every OSM block keeps its real-world
+    # proportions regardless of whether the data polygon is conformal.
+    # max(sx, sy) is chosen so the enclosures cover the full data polygon in
+    # both dimensions; any overhang is clipped by target_polygon below.
+    # Centre the UTM bounding box onto the data polygon centre so the clipping
+    # is symmetric and gap-fill has equal work on all sides.
+    s = max(sx, sy)
+    _cx_utm  = (utm_minx + utm_maxx) / 2.0
+    _cy_utm  = (utm_miny + utm_maxy) / 2.0
+    _cx_data = (poly_minx + poly_maxx) / 2.0
+    _cy_data = (poly_miny + poly_maxy) / 2.0
+    xoff = _cx_data - _cx_utm * s
+    yoff = _cy_data - _cy_utm * s
+
+    # s² converts km² to data-units² accurately for this polygon's actual scale.
+    _s2 = s * s * 1e6   # (data-units/m)² × 1e6 m²/km² = data-units²/km²
+    # Floor: prevents near-zero threshold for very small polygons.
+    # Cap: prevents threshold growing with union size (multi-polygon splits)
+    # so city enclosures inside a large union are not discarded.
+    # Cap = 7.58 km² reference in data units²
+    _min_area_cap = 7.58 * _s2 * 0.0001
+    if min_area_km2 is not None:
+        min_area = min_area_km2 * _s2
+        print(f"[OSM min_area] user override: {min_area_km2} km² → {min_area:.5f} data units²")
+    else:
+        min_area = min(max(7.58 * 0.0001, target_polygon.area * 0.0001), _min_area_cap)
     cells = []
 
     for geom in enc.geometry:
         try:
-            transformed = affine_transform(geom, [sx, 0, 0, sy, xoff, yoff])
+            transformed = affine_transform(geom, [s, 0, 0, s, xoff, yoff])
             if not transformed.is_valid:
                 transformed = transformed.buffer(0)
             if transformed.is_empty:
@@ -853,20 +1074,6 @@ def split_polygon_by_osm(
     del enc
     _gc.collect()
 
-    # ── Cell count cap (production only) ─────────────────────────────────────
-    # Each unary_union pass scales with cell count; >1500 cells across 17 passes
-    # reliably exceeds 1 GB on a 1-worker Render instance.
-    if _IS_RENDER:
-        _MAX_CELLS = {1: 5000, 2: 2000, 3: 1500}
-        _cell_limit = _MAX_CELLS.get(road_tier, 5000)
-        if len(cells) > _cell_limit:
-            raise ValueError(
-                f"Tier {road_tier} generated {len(cells)} cells for this area "
-                f"(limit {_cell_limit}). Reduce the bounding box or use a lower tier."
-            )
-
-    _EPSILON = 150.0 * 8.01 / 1000.0
-    _count_exterior = lambda lst: sum(len(list(c.exterior.coords)) for c in lst if hasattr(c, 'exterior'))
 
     def _log_coverage(cells, target, label):
         # Primary metric (same as before): union vs target
@@ -893,8 +1100,14 @@ def split_polygon_by_osm(
                 n_holes += 1
                 hole_area += _g.area
 
+        # Overlap metric: if sum(cell areas) > union area, cells overlap.
+        # overlap_area > 0 means duplicate/overlapping polygons exist.
+        sum_areas   = sum(c.area for c in cells if not c.is_empty)
+        overlap_area = max(0.0, sum_areas - covered.area)
+
         n_empty = sum(1 for c in cells if c.is_empty or c.area < 1e-15)
         print(f"[OSM {label}] coverage={pct:.4f}%  gap={gap_area:.4e}  "
+              f"overlap={overlap_area:.4e}  "
               f"holes={n_holes}  hole_area={hole_area:.4e}  "
               f"cells={len(cells)}  empty={n_empty}")
 
@@ -917,51 +1130,21 @@ def split_polygon_by_osm(
     _log_coverage(cells, target_polygon, "after-Stage1")
     _gc.collect()
 
-    # ── Stage 2: Simplify (150m rule) ────────────────────────────────────────
-    _before = _count_exterior(cells)
-    _simplify_error = None
-    _after = _before
-    try:
-        cells = _simplify_osm_cells(cells, target_polygon, _EPSILON)
-        _after = _count_exterior(cells)
-        print(f"[OSM simplify] vertices before={_before} after={_after} removed={_before - _after} epsilon={_EPSILON:.4f}")
-    except Exception as _e:
-        import traceback as _tb
-        _simplify_error = str(_e)
-        print(f"[OSM simplify] FAILED — simplification skipped: {_e}")
-        _tb.print_exc()
-
-    _log_coverage(cells, target_polygon, "after-Stage2")
-    _gc.collect()
-
-    # ── Stage 3: Post-simplification hole check (holes metric) ───────────────
-    # Uses the same detect_gaps.py metric: interior holes in hull.difference(union)
-    # NOT the coverage metric — coverage can show 100% while real visible holes
-    # still exist (e.g. when overlapping cells hide a hole from unary_union).
+    # ── Stage 3: Post-clip hole check ────────────────────────────────────────
+    # Detect ALL uncovered area inside target_polygon — including gaps that touch
+    # the polygon boundary, which the old hull.difference() approach missed.
     _prev_hole_area = float('inf')
     for _pass in range(10):
         _cov3 = unary_union(cells).buffer(0)
-        _hull3 = _cov3.convex_hull
-        _hull3_bnd = _hull3.boundary
-        _all_missing3 = _hull3.difference(_cov3).buffer(0)
-        # Only interior holes (fully surrounded — not touching hull boundary)
-        pending = []
-        for _g in _explode_to_polygons(_all_missing3):
-            if _g.area <= gap_area_tol:
-                continue
-            try:
-                _touches = _g.boundary.intersection(_hull3_bnd).length > 1e-6
-            except Exception:
-                _touches = True
-            if not _touches:
-                pending.append(_g)
+        _all_missing3 = target_polygon.difference(_cov3).buffer(0)
+        pending = [g for g in _explode_to_polygons(_all_missing3) if g.area > gap_area_tol]
         if not pending:
             break
         _total_hole = sum(g.area for g in pending)
         if _total_hole >= _prev_hole_area:
             break
         _prev_hole_area = _total_hole
-        print(f"[OSM Stage3] pass {_pass+1}: {len(pending)} hole(s), total area={_total_hole:.4e}")
+        print(f"[OSM Stage3] pass {_pass+1}: {len(pending)} gap(s), total area={_total_hole:.4e}")
         for gap in pending:
             _distribute_gap_voronoi(gap, cells, gap_area_tol)
 
@@ -969,28 +1152,27 @@ def split_polygon_by_osm(
     _gc.collect()
 
     # ── Stage 4: Remove nested polygons ──────────────────────────────────────
-    # A cell entirely contained within another cell is a double-count artifact:
-    # the outer cell already covers that area, so the inner cell adds nothing to
-    # coverage but inflates the polygon count and confuses the renderer.
-    # Fix: absorb any inner cell into its containing outer cell (merge as extension)
-    # so no polygon is ever bounded entirely within another polygon.
+    # A cell whose area is ≥90% covered by another cell is effectively nested —
+    # it contributes no unique coverage but creates a visible inner boundary.
+    # Use intersection-area rather than exact contains() so floating-point gaps
+    # at shared edges don't cause genuine nested cells to be missed.
     changed = True
     while changed:
         changed = False
-        to_remove = []
+        to_remove = set()
+        _s4_tree = STRtree(cells)
         for i in range(len(cells)):
             if i in to_remove:
                 continue
-            for j in range(len(cells)):
-                if i == j or j in to_remove:
+            for j in _s4_tree.query(cells[i]):
+                if i == j or j in to_remove or i in to_remove:
                     continue
                 try:
-                    if cells[j].contains(cells[i]):
-                        # cells[i] is entirely inside cells[j] — merge into cells[j]
-                        merged = cells[j].union(cells[i]).buffer(0)
-                        if not merged.is_empty and merged.geom_type == 'Polygon':
-                            cells[j] = merged
-                        to_remove.append(i)
+                    ix = cells[j].intersection(cells[i])
+                    if ix.area >= cells[i].area * 0.9:
+                        # cells[i] is nested inside cells[j]: absorb it
+                        _safe_merge(cells, j, cells[i])
+                        to_remove.add(i)
                         changed = True
                         break
                 except Exception:
@@ -998,7 +1180,6 @@ def split_polygon_by_osm(
         if to_remove:
             cells = [c for k, c in enumerate(cells) if k not in to_remove]
 
-    n_nested = sum(1 for _ in to_remove) if 'to_remove' in dir() else 0
     print(f"[OSM Stage4] nested polygons removed and absorbed: {len(cells)} cells remaining")
     _gc.collect()
 
@@ -1031,17 +1212,14 @@ def split_polygon_by_osm(
     print(f"[OSM pre-validate] fixed {_n_pre_fixed} invalid/MultiPolygon cells")
 
     # ── Stage 5: Final gap detection and fill ────────────────────────────────
-    # Same approach as detect_gaps.py: reference = convex_hull(union) so edge
-    # gaps that drift slightly outside target_polygon are still caught.
+    # Use target_polygon as reference so boundary-touching gaps are detected.
     # Convergence check: stop as soon as total gap area stops decreasing.
     # Residual micro-gaps (floating-point artifacts) that survive Voronoi are
-    # closed with a tiny outward buffer-snap on the nearest cell.
-    _target_boundary = target_polygon.boundary
+    # closed with a boundary-snap on the nearest cell.
     _prev_gap_area5 = float('inf')
     for _pass in range(5):
         _union = unary_union(cells).buffer(0)
-        _hull = _union.convex_hull
-        _all_missing = _hull.difference(_union).buffer(0)
+        _all_missing = target_polygon.difference(_union).buffer(0)
         _pending = [g for g in _explode_to_polygons(_all_missing) if g.area > gap_area_tol]
         if not _pending:
             break
@@ -1051,11 +1229,12 @@ def split_polygon_by_osm(
             # Last resort: for each residual gap find the cell with the longest
             # shared boundary (same criterion as Voronoi stage, not centroid distance)
             # and force-union the gap into it regardless of MultiPolygon result.
+            _s5_noprog_tree = STRtree(cells)
             for _gap in _pending:
                 _best_i, _best_L = None, -1.0
-                for _i, _cell in enumerate(cells):
+                for _i in _s5_noprog_tree.query(_gap):
                     try:
-                        _L = _gap.boundary.intersection(_cell.boundary).length
+                        _L = _gap.boundary.intersection(cells[_i].boundary).length
                     except Exception:
                         _L = 0.0
                     if _L > _best_L:
@@ -1065,50 +1244,350 @@ def split_polygon_by_osm(
                     _best_i = min(range(len(cells)),
                                   key=lambda _i: _gc.distance(cells[_i].centroid))
                 try:
-                    _snapped = cells[_best_i].union(_gap).buffer(0)
+                    _gap_buf = _gap.buffer(max(1e-9, _gap.length * 1e-3))
+                    _snapped = cells[_best_i].union(_gap_buf).buffer(0)
                     if not _snapped.is_empty:
                         if _snapped.geom_type == 'Polygon':
                             cells[_best_i] = _snapped
                         elif _snapped.geom_type == 'MultiPolygon':
-                            # keep largest piece — residual is absorbed even if disconnected
                             cells[_best_i] = max(_snapped.geoms, key=lambda g: g.area)
                 except Exception:
                     pass
             print(f"[OSM Stage5] pass {_pass+1}: no Voronoi progress — applied boundary snap fill")
             break
         _prev_gap_area5 = _total_gap
-        _n_int = _n_bnd = 0
-        for _gap in _pending:
-            try:
-                _touches = _gap.boundary.intersection(_target_boundary).length > 1e-6
-            except Exception:
-                _touches = True
-            if _touches:
-                _n_bnd += 1
-            else:
-                _n_int += 1
-        print(f"[OSM Stage5] pass {_pass+1}: {len(_pending)} gap(s) "
-              f"(interior={_n_int} boundary={_n_bnd}) total={_total_gap:.4e}")
+        print(f"[OSM Stage5] pass {_pass+1}: {len(_pending)} gap(s) total={_total_gap:.4e}")
         for _gap in _pending:
             _distribute_gap_voronoi(_gap, cells, gap_area_tol)
 
     _log_coverage(cells, target_polygon, "after-Stage5")
 
+    # ── Stage 6: connectivity-based floating island absorption ───────────────
+    # Every legitimate district cell must be reachable from the target polygon
+    # boundary through a chain of shared edges (boundary → cell A → cell B …).
+    # The old Stage 6 only caught cells with ZERO neighbours. Floating CLUSTERS
+    # (cells that share edges with each other but whose entire group is
+    # disconnected from the boundary) were missed because each cell in the
+    # cluster does have neighbours — just not boundary-touching ones.
+    #
+    # Algorithm: BFS from all cells that touch the target polygon boundary.
+    # Any cell not reached by the BFS is a floating island (possibly part of a
+    # disconnected cluster). Merge each floating cell into the nearest
+    # boundary-connected (anchored) cell by centroid distance.
+    # Repeat until the cell list stabilises.
+    _tgt_bnd6 = target_polygon.boundary
+    _iso_total = 0
+    _iso_passes = 0
+
+    while _iso_passes < 8:
+        _iso_passes += 1
+        n6 = len(cells)
+
+        # ── Build edge-sharing adjacency using STRtree spatial index ─────
+        # STRtree prefilter: two cells can only share a boundary if their bboxes
+        # overlap. Same correctness guarantee as the O(N²) scan — no false negatives.
+        _adj6 = [set() for _ in range(n6)]
+        _touches_tgt = [False] * n6
+        _tree6 = STRtree(cells)
+        for _i in range(n6):
+            try:
+                if cells[_i].boundary.intersection(_tgt_bnd6).length > 1e-8:
+                    _touches_tgt[_i] = True
+            except Exception:
+                pass
+            for _j in _tree6.query(cells[_i]):
+                if _j <= _i:
+                    continue
+                try:
+                    if cells[_j].boundary.intersection(cells[_i].boundary).length > 1e-8:
+                        _adj6[_i].add(_j)
+                        _adj6[_j].add(_i)
+                except Exception:
+                    pass
+
+        # ── BFS from boundary-touching seeds ─────────────────────────────
+        from collections import deque as _deque
+        _anchored = set(i for i in range(n6) if _touches_tgt[i])
+        _queue6   = _deque(_anchored)
+        while _queue6:
+            _cur = _queue6.popleft()
+            for _nb in _adj6[_cur]:
+                if _nb not in _anchored:
+                    _anchored.add(_nb)
+                    _queue6.append(_nb)
+
+        _floating = [i for i in range(n6) if i not in _anchored]
+        if not _floating:
+            break  # all cells are reachable from boundary — done
+
+        print(f"[OSM Stage6] pass {_iso_passes}: {len(_floating)} floating cell(s) "
+              f"not reachable from boundary — absorbing into nearest anchored cell")
+
+        # Merge each floating cell into the nearest anchored cell
+        _to_remove = set()
+        for _fi in _floating:
+            _cc = cells[_fi].centroid
+            _best = min(
+                (_a for _a in _anchored if _a not in _to_remove),
+                key=lambda _a: _cc.distance(cells[_a].centroid),
+                default=None,
+            )
+            if _best is not None:
+                _safe_merge(cells, _best, cells[_fi])
+                _to_remove.add(_fi)
+                _iso_total += 1
+
+        cells = [c for _k, c in enumerate(cells) if _k not in _to_remove]
+
+    if _iso_total:
+        print(f"[OSM Stage6] absorbed {_iso_total} floating cell(s) total, "
+              f"{len(cells)} cells remaining")
+
     # ── Strip interior rings ──────────────────────────────────────────────────
-    # Gap merge operations (Voronoi, snap fill) can punch interior rings into
-    # cells. These holes are covered by the union (detect_gaps reports 0 gaps)
-    # but make individual cells look corrupt. Keep only the exterior ring.
-    # Any area formerly in the holes is already covered by adjacent cells.
+    # Voronoi/snap gap-fill can punch interior rings into cells. We must NOT
+    # strip holes that are already covered by another cell — those holes are
+    # legitimate topological boundaries. Stripping them makes the cell expand
+    # to fill the hole and immediately overlap the inner neighbour (the source
+    # of the large overlap jump seen in the logs after this step).
+    # Rule: only strip a hole if the union of ALL cells covers < 1% of that
+    # hole (i.e. it is genuinely empty — no other cell sits inside it).
+    _union_for_holes = unary_union(cells).buffer(0)
     _n_stripped = 0
+    _n_kept = 0
     for _i in range(len(cells)):
         try:
-            if list(cells[_i].interiors):
-                cells[_i] = Polygon(cells[_i].exterior.coords)
+            _ints = list(cells[_i].interiors)
+            if not _ints:
+                continue
+            keep_rings = []
+            strip_count = 0
+            for _ring in _ints:
+                _hole_poly = Polygon(_ring)
+                # cells[_i] does not cover its own hole, so this measures
+                # coverage purely from other cells.
+                try:
+                    _covered = _union_for_holes.intersection(_hole_poly).area
+                except Exception:
+                    _covered = 0.0
+                if _covered > _hole_poly.area * 0.01:
+                    keep_rings.append(_ring)   # another cell fills this — keep boundary
+                    _n_kept += 1
+                else:
+                    strip_count += 1           # genuinely empty hole — fill it
+            if strip_count:
+                cells[_i] = Polygon(cells[_i].exterior.coords, keep_rings)
                 _n_stripped += 1
         except Exception:
             pass
-    if _n_stripped:
-        print(f"[OSM strip-holes] removed interior rings from {_n_stripped} cells")
+    print(f"[OSM strip-holes] stripped empty holes from {_n_stripped} cells, "
+          f"kept {_n_kept} occupied hole boundaries")
+    _log_coverage(cells, target_polygon, "after-strip-holes")
+
+    # ── Final vertex thinning: anchor-aware (canvas coords) ──────────────────
+    # Preserves junction vertices (shared by 3+ cells) and removes only
+    # the cluster of over-dense vertices between consecutive junctions.
+    _log_coverage(cells, target_polygon, "PRE-thinning")
+    if simplify_spacing is not None:
+        # s is data-units per UTM metre; simplify_spacing is in metres
+        _threshold_canvas = simplify_spacing * s
+        # Scale threshold down for sparse-cell results (rural / gorge areas).
+        # With few large cells the base threshold removes too many vertices,
+        # collapsing shared edges into straight chords that cross neighbours
+        # and produce the gap+overlap explosion seen in POST-thinning logs.
+        # Formula: full threshold at ≥200 cells; scale linearly to 10% at ≤10.
+        _n_cells = len(cells)
+        if _n_cells < 200:
+            _scale = max(0.1, _n_cells / 200.0)
+            _threshold_canvas *= _scale
+            print(f"[OSM thinning] {_n_cells} cells → threshold scaled to "
+                  f"{_threshold_canvas:.4f} (×{_scale:.2f})")
+        cells = _thin_osm_cells_anchored(cells, _threshold_canvas)
+    _log_coverage(cells, target_polygon, "POST-thinning")
+
+    # ── Stage 4b: Post-thinning overlap resolution ────────────────────────────
+    # Thinning processes each cell independently. Two adjacent cells share a
+    # boundary segment [v1..vN]. Cell A (left→right) may keep v3; cell B
+    # (right→left) may keep v5. Phase 4 of the thinning only propagates
+    # *removals* — it cannot add back vertices the other cell decided to keep.
+    # Result: A's and B's simplified boundaries cross each other → overlap on
+    # one side of the crossing, gap on the other side.
+    # Fix: for each overlapping pair, trim the smaller cell (difference from the
+    # larger cell). The overlap area stays with the larger cell — no new gap.
+    _4b_total = 0
+    _4b_pass  = 0
+    _4b_changed = True
+    while _4b_changed and _4b_pass < 4:
+        _4b_changed = False
+        _4b_pass += 1
+        _s4b_tree = STRtree(cells)
+        for _i in range(len(cells)):
+            for _j in _s4b_tree.query(cells[_i]):
+                if _j <= _i:
+                    continue
+                try:
+                    _ovlp = cells[_i].intersection(cells[_j]).buffer(0)
+                    if _ovlp.area <= 1e-10:
+                        continue
+                    # Trim the smaller cell; overlap area stays with the larger
+                    if cells[_i].area >= cells[_j].area:
+                        _loser, _winner = _j, _i
+                    else:
+                        _loser, _winner = _i, _j
+                    _trimmed = cells[_loser].difference(cells[_winner]).buffer(0)
+                    if _trimmed.is_empty:
+                        continue
+                    if _trimmed.geom_type == 'Polygon':
+                        cells[_loser] = _trimmed
+                    elif _trimmed.geom_type == 'MultiPolygon':
+                        cells[_loser] = max(_trimmed.geoms, key=lambda g: g.area)
+                    else:
+                        continue
+                    _4b_changed = True
+                    _4b_total += 1
+                except Exception:
+                    pass
+    if _4b_total:
+        print(f"[OSM Stage4b] resolved {_4b_total} thinning overlap(s) in {_4b_pass} pass(es)")
+    _log_coverage(cells, target_polygon, "after-Stage4b")
+
+    # ── Stage 7: Pre-publish gap guarantee ───────────────────────────────────
+    # Runs after vertex thinning and strip-holes. Catches micro-gaps opened
+    # by simplification (each cell simplified independently → shared edges
+    # drift slightly) and any hole that strip-holes exposed without a
+    # covering neighbour.
+    #
+    # NO buffer on the gap — buffering expands the gap past the true edge
+    # and the union absorbs area already owned by an adjacent cell, creating
+    # the visible blue overlap duplicates.  Instead: try each candidate cell
+    # (ranked by shared boundary length) with a plain union; if every
+    # candidate produces a MultiPolygon (true corner-only contact) fall back
+    # to shapely.snap() which nudges the gap to the cell boundary without
+    # expanding it outward.
+    _s7_union = unary_union(cells).buffer(0)
+    _s7_missing = target_polygon.difference(_s7_union).buffer(0)
+    _s7_pending = [g for g in _explode_to_polygons(_s7_missing) if g.area > 1e-12]
+    if _s7_pending:
+        from shapely.ops import snap as _shp_snap
+        print(f"[OSM Stage7] {len(_s7_pending)} residual gap(s) — force-filling before publish")
+        _s7_tree = STRtree(cells)
+        for _gap7 in _s7_pending:
+            # Rank candidate cells by shared boundary length with this gap
+            _candidates7 = []
+            for _i7 in _s7_tree.query(_gap7):
+                try:
+                    _L7 = _gap7.boundary.intersection(cells[_i7].boundary).length
+                except Exception:
+                    _L7 = 0.0
+                if _L7 > 0:
+                    _candidates7.append((_L7, _i7))
+            _candidates7.sort(reverse=True)
+
+            # Centroid fallback if no shared boundary found at all
+            if not _candidates7:
+                _cp7 = _gap7.centroid
+                _fallback = min(range(len(cells)), key=lambda _ii: _cp7.distance(cells[_ii].centroid))
+                _candidates7 = [(0.0, _fallback)]
+
+            _filled7 = False
+            for _, _ci7 in _candidates7:
+                try:
+                    _merged7 = cells[_ci7].union(_gap7).buffer(0)
+                    if _merged7.is_empty:
+                        continue
+                    if _merged7.geom_type == 'Polygon':
+                        cells[_ci7] = _merged7
+                        _filled7 = True
+                        break
+                    # MultiPolygon: corner-touch only — try snap instead of buffer
+                    _snapped_gap = _shp_snap(_gap7, cells[_ci7], tolerance=1e-6)
+                    _merged7s = cells[_ci7].union(_snapped_gap).buffer(0)
+                    if _merged7s.geom_type == 'Polygon' and not _merged7s.is_empty:
+                        cells[_ci7] = _merged7s
+                        _filled7 = True
+                        break
+                except Exception:
+                    continue
+
+            if not _filled7 and _candidates7:
+                # All candidates produce MultiPolygon — keep largest piece
+                _ci7 = _candidates7[0][1]
+                try:
+                    _merged7 = cells[_ci7].union(_gap7).buffer(0)
+                    if not _merged7.is_empty:
+                        cells[_ci7] = max(_merged7.geoms, key=lambda g: g.area) \
+                            if _merged7.geom_type == 'MultiPolygon' else _merged7
+                except Exception:
+                    pass
+
+        _log_coverage(cells, target_polygon, "after-Stage7")
+
+    # ── Stage 8: Final connectivity guarantee ────────────────────────────────
+    # Strip-holes and thinning run AFTER Stage 6's BFS check. Thinning can
+    # simplify a shared edge out of existence, severing a cell from its
+    # boundary-connected neighbours. Strip-holes can expand a cell across what
+    # was a shared boundary, causing its former neighbours to become
+    # disconnected. Neither case is caught by any earlier stage.
+    # This is an exact repeat of Stage 6's BFS, run after all post-processing.
+    _tgt_bnd8 = target_polygon.boundary
+    _s8_total  = 0
+    _s8_passes = 0
+    while _s8_passes < 5:
+        _s8_passes += 1
+        _n8 = len(cells)
+
+        _adj8        = [set() for _ in range(_n8)]
+        _touches8    = [False] * _n8
+        _tree8 = STRtree(cells)
+        for _i8 in range(_n8):
+            try:
+                if cells[_i8].boundary.intersection(_tgt_bnd8).length > 1e-8:
+                    _touches8[_i8] = True
+            except Exception:
+                pass
+            for _j8 in _tree8.query(cells[_i8]):
+                if _j8 <= _i8:
+                    continue
+                try:
+                    if cells[_j8].boundary.intersection(cells[_i8].boundary).length > 1e-8:
+                        _adj8[_i8].add(_j8)
+                        _adj8[_j8].add(_i8)
+                except Exception:
+                    pass
+
+        from collections import deque as _dq8
+        _anch8  = set(i for i in range(_n8) if _touches8[i])
+        _q8     = _dq8(_anch8)
+        while _q8:
+            _c8 = _q8.popleft()
+            for _nb8 in _adj8[_c8]:
+                if _nb8 not in _anch8:
+                    _anch8.add(_nb8)
+                    _q8.append(_nb8)
+
+        _float8 = [i for i in range(_n8) if i not in _anch8]
+        if not _float8:
+            break
+
+        print(f"[OSM Stage8] pass {_s8_passes}: {len(_float8)} cell(s) disconnected "
+              f"from boundary after post-processing — absorbing")
+        _rm8 = set()
+        for _fi8 in _float8:
+            _cc8  = cells[_fi8].centroid
+            _best8 = min(
+                (_a8 for _a8 in _anch8 if _a8 not in _rm8),
+                key=lambda _a8: _cc8.distance(cells[_a8].centroid),
+                default=None,
+            )
+            if _best8 is not None:
+                _safe_merge(cells, _best8, cells[_fi8])
+                _rm8.add(_fi8)
+                _s8_total += 1
+        cells = [c for _k8, c in enumerate(cells) if _k8 not in _rm8]
+
+    if _s8_total:
+        print(f"[OSM Stage8] absorbed {_s8_total} post-processing floater(s), "
+              f"{len(cells)} cells remaining")
+        _log_coverage(cells, target_polygon, "after-Stage8")
 
     features = []
     for i, cell in enumerate(cells, start=1):
@@ -1121,13 +1600,6 @@ def split_polygon_by_osm(
     return {
         "type": "FeatureCollection",
         "features": features,
-        "simplify_stats": {
-            "vertices_before": _before,
-            "vertices_after": _after,
-            "removed": _before - _after,
-            "epsilon": round(_EPSILON, 4),
-            "error": _simplify_error,
-        },
     }
 
 
@@ -1141,94 +1613,131 @@ def split_polygons_by_osm_with_boundaries(
     east: float,
     west: float,
     road_tier: int = 1,
+    simplify_spacing: float | None = 150.0,
+    data_source: str = "osm",
+    polygon_configs: list | None = None,
 ):
     """
-    Run the OSM pipeline on the union of all input polygons, then clip each
-    resulting OSM district against each original polygon boundary.
+    Union all input polygons into connected components and run ONE OSM pipeline
+    per component.  Running a separate pipeline per input polygon causes visible
+    seams/gaps at shared boundaries because road enclosures are generated
+    independently and don't tile perfectly.  A single pipeline over the union
+    produces a seamless continuous road-network split.
 
-    This preserves every original boundary: OSM road enclosures provide the
-    internal subdivision pattern, but pieces of each district are assigned to
-    whichever original polygon they fall within.
+    Road tier and simplify spacing apply to the whole combined area (global
+    road_tier / simplify_spacing from the request).  per-polygon min_area_km2
+    is ignored in favour of auto-sizing from the combined polygon area.
 
     Each output Feature carries:
-        properties.source_index  — index into geometries_geojson (0-based)
-        properties.kind          — 'district'
-
-    If no OSM district intersects a particular input polygon the original
-    shape is returned as a single-piece fallback so no polygon disappears.
+        properties.source_index   — index of the original polygon it overlaps
+                                    most (0-based), for frontend compatibility
+        properties.subdivision_id — 1-based integer across all output features
+        properties.kind           — 'district'
     """
-    # Parse and repair input geometries
-    original_shapes = []
+    import gc as _gc
+    from shapely.ops import unary_union as _unary_union
+
+    n = len(geometries_geojson)
+
+    # Parse input geometries
+    _shapes = []
     for g in geometries_geojson:
-        s = shape(g)
-        if not s.is_valid:
-            s = s.buffer(0)
-        if not s.is_empty:
-            original_shapes.append(s)
+        _s = shape(g)
+        if not _s.is_valid:
+            _s = _s.buffer(0)
+        _shapes.append(_s if not _s.is_empty else None)
 
-    if not original_shapes:
-        raise ValueError("No valid geometries provided")
+    _valid = [_s for _s in _shapes if _s is not None]
+    if not _valid:
+        return {"type": "FeatureCollection", "features": []}
 
-    # Build the union for the OSM pipeline
-    combined = unary_union(original_shapes).buffer(0)
+    # Union → list of connected components (usually one Polygon for adjacent inputs)
+    _combined = _unary_union(_valid)
+    if not _combined.is_valid:
+        _combined = _combined.buffer(0)
+    _components = (list(_combined.geoms)
+                   if _combined.geom_type == "MultiPolygon"
+                   else [_combined])
 
-    # Run OSM on the combined polygon
-    osm_result = split_polygon_by_osm(
-        geometry_geojson=mapping(combined),
-        north=north,
-        south=south,
-        east=east,
-        west=west,
-        road_tier=road_tier,
-    )
+    print(f"[OSM multi] {n} input polygon(s) → {len(_components)} connected component(s) — single pipeline each")
+    print(f"[OSM multi] geo bbox: N={north} S={south} E={east} W={west}")
+    print(f"[OSM multi] tier={road_tier}  simplify={simplify_spacing}m")
 
-    if osm_result.get("type") != "FeatureCollection":
-        raise ValueError("OSM pipeline did not return a FeatureCollection")
+    # UK mode: one waterway fetch for the full bbox, reused across all components
+    _cached_waterways = None
+    if data_source == "os_roads":
+        from os_roads import fetch_waterways as _fetch_waterways
+        print(f"[OSM multi] fetching waterway barriers (once for full bbox)…")
+        _cached_waterways = _fetch_waterways(north, south, east, west)
+        print(f"[OSM multi] waterway done — {len(_cached_waterways)} features")
 
-    osm_districts = [
-        shape(f["geometry"])
-        for f in osm_result["features"]
-        if not shape(f["geometry"]).is_empty
-    ]
+    # --- Step 1: run pipeline per connected component, collect all districts ---
+    _all_districts = []
+    for _ci, _comp in enumerate(_components):
+        print(f"[OSM multi] component {_ci+1}/{len(_components)}: {_comp.geom_type} "
+              f"area={_comp.area:.1f} data-units²")
+        try:
+            _result = split_polygon_by_osm(
+                geometry_geojson=mapping(_comp),
+                north=north, south=south, east=east, west=west,
+                road_tier=road_tier,
+                simplify_spacing=simplify_spacing,
+                data_source=data_source,
+                min_area_km2=None,
+                preloaded_waterways=_cached_waterways,
+            )
+            for _feat in _result.get("features", []):
+                try:
+                    _dg = shape(_feat["geometry"])
+                    if not _dg.is_empty:
+                        _all_districts.append(_dg)
+                except Exception:
+                    pass
+        except Exception as _e:
+            import traceback as _tb
+            print(f"[OSM multi] component {_ci+1} pipeline failed: {_e}")
+            _tb.print_exc()
+            # fall through — fallback handled per-source below
+        _gc.collect()
 
-    if not osm_districts:
-        raise ValueError("OSM pipeline returned no districts")
+    print(f"[OSM multi] {len(_all_districts)} total districts from {len(_components)} component(s)")
 
+    # --- Step 2: clip each OSM district against each original polygon boundary ---
+    # (restores the county-split rule: any district that crosses a polygon
+    #  boundary is split along it, not just assigned to the "best" polygon)
     output_features = []
-    for orig_idx, orig_shape in enumerate(original_shapes):
-        min_area = orig_shape.area * 1e-8
-        pieces = []
-
-        for district in osm_districts:
+    for _i, _s in enumerate(_shapes):
+        if _s is None:
+            continue
+        _min_area = _s.area * 1e-8
+        _pieces = []
+        for _dist in _all_districts:
             try:
-                piece = orig_shape.intersection(district).buffer(0)
-                if piece.is_empty or piece.area < min_area:
+                _piece = _s.intersection(_dist).buffer(0)
+                if _piece.is_empty or _piece.area < _min_area:
                     continue
-                for sub in _explode_to_polygons(piece):
-                    if sub.area >= min_area:
-                        pieces.append(sub)
+                for _sub in _explode_to_polygons(_piece):
+                    if _sub.area >= _min_area:
+                        _pieces.append(_sub)
             except Exception:
                 continue
 
-        # Fallback: if OSM data didn't cover this polygon, keep original shape
-        if not pieces:
-            pieces = list(_explode_to_polygons(orig_shape)) or [orig_shape]
+        # Fallback: OSM didn't cover this polygon — return its original shape
+        if not _pieces:
+            _pieces = list(_explode_to_polygons(_s)) or [_s]
 
-        for sub_idx, sub in enumerate(pieces):
+        for _sub_idx, _sub in enumerate(_pieces):
             output_features.append({
                 "type": "Feature",
                 "properties": {
-                    "source_index": orig_idx,
-                    "subdivision_id": sub_idx + 1,
+                    "source_index": _i,
+                    "subdivision_id": _sub_idx + 1,
                     "kind": "district",
                 },
-                "geometry": mapping(sub),
+                "geometry": mapping(_sub),
             })
 
-    return {
-        "type": "FeatureCollection",
-        "features": output_features,
-    }
+    return {"type": "FeatureCollection", "features": output_features}
 
 
 # -----------------------------

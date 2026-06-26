@@ -1,4 +1,20 @@
 /**
+ * Ray-casting point-in-polygon test.
+ * ring is an array of {x, y}. Works for both polygon rings and the lasso path.
+ */
+function _pointInRing(px, py, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i].x, yi = ring[i].y;
+        const xj = ring[j].x, yj = ring[j].y;
+        if (((yi > py) !== (yj > py)) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+/**
  * PolygonEditor - Main application class that coordinates all modules
  * Complete version with midpoint vertex insertion support
  */
@@ -52,6 +68,9 @@ class PolygonEditor {
         // Measure tool drag state
         this._measureDragIndex = -1;
         this._measureDragMoved = false;
+
+        // Freehand lasso state: screen-space [{x,y}] points while Ctrl+dragging
+        this.lassoPath = null;
 
         this._pendingDensityPolygonIndex = null;
 
@@ -710,6 +729,14 @@ class PolygonEditor {
                 }
                 if (!isVertexEditAllowed()) return;
                 this.handleMidpointCreate();
+            },
+            onRectSelectUpdate: (lassoPath) => {
+                this.lassoPath = lassoPath;
+                this.draw();
+            },
+            onRectSelect: (lassoPath) => {
+                this.lassoPath = null;
+                this.handleLassoSelect(lassoPath);
             }
         });
     }
@@ -2078,25 +2105,22 @@ class PolygonEditor {
 
         const used = new Set();
         for (const p of this.polygons) {
+            if (!p.id) continue;
             const m = p.id.match(pattern);
             if (m) {
                 const n = parseInt(m[1], 10);
-                if (n >= 1 && n <= 999) used.add(n);
+                if (n >= 1) used.add(n);
             }
         }
 
         const ids = [];
         let candidate = 1;
-        while (ids.length < count && candidate <= 999) {
+        while (ids.length < count) {
             if (!used.has(candidate)) {
                 ids.push(`${county}_${String(candidate).padStart(3, '0')}`);
-                used.add(candidate); // reserve within this batch
+                used.add(candidate);
             }
             candidate++;
-        }
-
-        if (ids.length < count) {
-            console.warn(`nextPolygonIds: could only generate ${ids.length} of ${count} IDs for county "${county}"`);
         }
 
         return ids;
@@ -2578,6 +2602,48 @@ class PolygonEditor {
         } else if (count === 1) {
             this.uiController.showStatus(`Selected polygon: ${this.polygons[this.selectedPolygonIndex].id}`);
         }
+    }
+
+    /**
+     * Handle a completed Ctrl+drag freehand lasso selection.
+     * Selects (toggles) every polygon that the lasso path touches or encloses.
+     * @param {Array<{x: number, y: number}>} screenPath - Screen-space lasso points
+     */
+    handleLassoSelect(screenPath) {
+        if (!screenPath || screenPath.length < 2) { this.draw(); return; }
+
+        // Too short to be a real lasso (long press then immediate release) — ignore
+        if (screenPath.length < 4) { this.draw(); return; }
+
+        // Convert lasso to data coordinates
+        const lassoData = screenPath.map(p => this.geometryOps.screenToData(p.x, p.y));
+
+        let found = 0;
+        this.polygons.forEach((polygon, index) => {
+            if (!polygon.rings || polygon.rings.length === 0) return;
+            const ring = polygon.rings[0];
+
+            // Test A: any lasso point lies inside the polygon (sample every 2nd point)
+            for (let i = 0; i < lassoData.length; i += 2) {
+                if (_pointInRing(lassoData[i].x, lassoData[i].y, ring)) {
+                    this.togglePolygonSelection(index);
+                    found++;
+                    return;
+                }
+            }
+
+            // Test B: any polygon vertex lies inside the closed lasso shape
+            for (const v of ring) {
+                if (_pointInRing(v.x, v.y, lassoData)) {
+                    this.togglePolygonSelection(index);
+                    found++;
+                    return;
+                }
+            }
+        });
+
+        if (found === 0) this.uiController.showStatus('No polygons in lasso area');
+        this.draw();
     }
 
     /**
@@ -3202,14 +3268,18 @@ class PolygonEditor {
                 if (polyEl) polyEl.setAttribute('points', '');
                 if (polyGroup) {
                     polyGroup.innerHTML = '';
-                    for (const ring of rings) {
+                    this._osmPolyGroupEls = [];
+                    for (let ri = 0; ri < rings.length; ri++) {
+                        const isHl = this._osmPPSelected && this._osmPPSelected.has(ri);
                         const el = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                        el.setAttribute('points', toSvgPts(ring));
-                        el.setAttribute('fill', 'rgba(39,174,96,0.12)');
-                        el.setAttribute('stroke', '#27ae60');
-                        el.setAttribute('stroke-width', '2.5');
+                        el.setAttribute('points', toSvgPts(rings[ri]));
+                        el.setAttribute('fill',   isHl ? 'rgba(230,126,34,0.22)' : 'rgba(39,174,96,0.12)');
+                        el.setAttribute('stroke', isHl ? '#e67e22' : '#27ae60');
+                        el.setAttribute('stroke-width', isHl ? '3.5' : '2.5');
                         el.setAttribute('stroke-linejoin', 'round');
+                        el.dataset.polyIdx = ri;
                         polyGroup.appendChild(el);
+                        this._osmPolyGroupEls.push(el);
                     }
                 }
             }
@@ -3304,7 +3374,30 @@ class PolygonEditor {
                 : `${size} selected polygons will be merged and re-split using OSM road data. Pan the map to position the combined frame over the target area.`;
         }
 
-        const selectedPolygons = [...this.selectedPolygonIndices].map(i => this.polygons[i]);
+        // Sort indices so the panel order matches the geometry order sent to the backend.
+        // splitSelectedPolygonByOsm sorts before sending, so panel[i] must equal geometry[i].
+        const selectedPolygons = [...this.selectedPolygonIndices].sort((a, b) => a - b).map(i => this.polygons[i]);
+
+        // Initialize per-polygon config state (fresh each modal open)
+        this._perPolyConfigs = new Map();
+        this._osmPPSelected  = new Set();
+        this._osmPPModified  = new Set();
+        this._osmPPPolygons  = size > 1 ? selectedPolygons : null;
+
+        const perPolySection = document.getElementById('osmPerPolySection');
+        if (perPolySection) {
+            if (size > 1) {
+                perPolySection.style.display = 'block';
+                // Collapsed by default — user expands only if they need per-polygon control
+                const panel   = document.getElementById('osmPerPolyPanel');
+                const chevron = document.getElementById('osmPerPolyChevron');
+                if (panel)   panel.style.display = 'none';
+                if (chevron) chevron.textContent  = '▶ expand';
+                this._setupOsmPerPolyPanel(selectedPolygons);
+            } else {
+                perPolySection.style.display = 'none';
+            }
+        }
 
         setTimeout(() => {
             this._initOsmMap();
@@ -3315,6 +3408,168 @@ class PolygonEditor {
                 this._updateFrameRect();
             }
         }, 120);
+    }
+
+    /**
+     * Wire the per-polygon panel controls and build the initial list.
+     * Called once per modal open when >1 polygon is selected.
+     */
+    _setupOsmPerPolyPanel(selectedPolygons) {
+        // Seed right-panel controls from current global settings
+        const globalTierEl = document.querySelector('input[name="osmRoadTier"]:checked');
+        if (globalTierEl) {
+            const el = document.querySelector(`input[name="ppRoadTier"][value="${globalTierEl.value}"]`);
+            if (el) el.checked = true;
+        }
+        const globalSimpEl = document.getElementById('osmSimplifySpacing');
+        const ppSimpEl     = document.getElementById('ppSimplifyInput');
+        if (globalSimpEl && ppSimpEl) ppSimpEl.value = globalSimpEl.value;
+        const ppAreaEl = document.getElementById('ppMinAreaInput');
+        if (ppAreaEl) ppAreaEl.value = '';
+
+        // Toggle expand / collapse
+        const toggleBtn = document.getElementById('osmPerPolyToggle');
+        const panel     = document.getElementById('osmPerPolyPanel');
+        const chevron   = document.getElementById('osmPerPolyChevron');
+        if (toggleBtn && panel && chevron) {
+            toggleBtn.onclick = () => {
+                const open = panel.style.display !== 'none';
+                panel.style.display = open ? 'none' : 'block';
+                chevron.textContent  = open ? '▶ expand' : '▲ collapse';
+            };
+        }
+
+        // Select all / none
+        const selAllBtn  = document.getElementById('osmPPSelectAll');
+        const selNoneBtn = document.getElementById('osmPPSelectNone');
+        if (selAllBtn) selAllBtn.onclick = () => {
+            selectedPolygons.forEach((_, i) => this._osmPPSelected.add(i));
+            this._refreshOsmPPList(selectedPolygons);
+            this._updateFrameRect();
+        };
+        if (selNoneBtn) selNoneBtn.onclick = () => {
+            this._osmPPSelected.clear();
+            this._refreshOsmPPList(selectedPolygons);
+            this._updateFrameRect();
+        };
+
+        // Apply to selected
+        const applyBtn = document.getElementById('osmPPApplyBtn');
+        if (applyBtn) {
+            applyBtn.onclick = () => {
+                // If nothing is selected, treat as "apply to all"
+                const targets = this._osmPPSelected.size > 0
+                    ? [...this._osmPPSelected]
+                    : selectedPolygons.map((_, i) => i);
+
+                const tierEl = document.querySelector('input[name="ppRoadTier"]:checked');
+                const tier   = tierEl ? parseInt(tierEl.value, 10) : 1;
+                const simpEl = document.getElementById('ppSimplifyInput');
+                const simp   = simpEl ? (simpEl.value.trim() === '' ? null : Math.max(1, parseFloat(simpEl.value) || 150)) : 150;
+                const areaEl  = document.getElementById('ppMinAreaInput');
+                const areaRaw = areaEl ? areaEl.value.trim() : '';
+                // Input is in m²; backend expects km²
+                const area    = areaRaw === '' ? null : (parseFloat(areaRaw) / 1e6) || null;
+
+                targets.forEach(i => {
+                    this._perPolyConfigs.set(i, { road_tier: tier, simplify_spacing: simp, min_area_km2: area });
+                    this._osmPPModified.add(i);
+                });
+                this._refreshOsmPPList(selectedPolygons);
+            };
+        }
+
+        this._refreshOsmPPList(selectedPolygons);
+    }
+
+    /** Shoelace area in km² using the project scale (8.01 data units = 1 km). */
+    _polyAreaKm2(poly) {
+        const ring = poly.rings[0];
+        let a = 0;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            a += (ring[j].x + ring[i].x) * (ring[j].y - ring[i].y);
+        }
+        return Math.abs(a) / 2 / (8.01 * 8.01);
+    }
+
+    /** Format an area in km² for compact display. */
+    _fmtArea(km2) {
+        if (km2 >= 10) return `${km2.toFixed(0)} km²`;
+        if (km2 >= 1)  return `${km2.toFixed(1)} km²`;
+        return `${km2.toFixed(2)} km²`;
+    }
+
+    /**
+     * Estimated auto min-area threshold in m² for a polygon.
+     * Mirrors the Python formula: min(max(0.01% of area, 12 m²), 758 m²).
+     */
+    _autoAreaM2(poly) {
+        const m2 = this._polyAreaKm2(poly) * 1e6;
+        return Math.round(Math.min(Math.max(m2 * 0.0001, 12), 758));
+    }
+
+    /**
+     * Re-render the polygon list rows inside the per-polygon panel.
+     * Preserves current selection and reflects latest _perPolyConfigs values.
+     */
+    _refreshOsmPPList(selectedPolygons) {
+        const list = document.getElementById('osmPPList');
+        if (!list) return;
+        list.innerHTML = '';
+
+        selectedPolygons.forEach((poly, i) => {
+            const cfg      = this._perPolyConfigs.get(i);
+            const modified = this._osmPPModified && this._osmPPModified.has(i);
+            const selected = this._osmPPSelected.has(i);
+
+            const item = document.createElement('div');
+            item.dataset.polyIdx = i;
+            item.style.cssText = `padding:5px 8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:${selected ? '#e8f5ee' : 'white'}; border-bottom:1px solid #f2f2f2; user-select:none;`;
+
+            const nameEl = document.createElement('span');
+            nameEl.style.cssText = 'display:flex; flex-direction:column; gap:1px;';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.style.cssText = 'font-size:11px; font-family:monospace; font-weight:600; color:#333;';
+            labelSpan.textContent = poly.id || `poly_${i}`;
+
+            const areaSpan = document.createElement('span');
+            areaSpan.style.cssText = 'font-size:9px; color:#888;';
+            areaSpan.textContent = `${this._fmtArea(this._polyAreaKm2(poly))}  ·  auto ≈ ${this._autoAreaM2(poly)} m²`;
+
+            nameEl.appendChild(labelSpan);
+            nameEl.appendChild(areaSpan);
+
+            const badgeEl = document.createElement('span');
+            badgeEl.style.cssText = `font-size:10px; margin-left:6px; color:${modified ? '#27ae60' : '#bbb'};`;
+            if (cfg && modified) {
+                const sStr = cfg.simplify_spacing != null ? `${cfg.simplify_spacing}m` : 'off';
+                const aStr = cfg.min_area_km2     != null
+                    ? `${Math.round(cfg.min_area_km2 * 1e6)} m²`
+                    : `auto(≈${this._autoAreaM2(poly)} m²)`;
+                badgeEl.textContent = `T${cfg.road_tier}  ${sStr}  ${aStr}`;
+            } else {
+                badgeEl.textContent = 'global';
+            }
+
+            item.appendChild(nameEl);
+            item.appendChild(badgeEl);
+
+            item.addEventListener('click', () => {
+                if (this._osmPPSelected.has(i)) this._osmPPSelected.delete(i);
+                else                             this._osmPPSelected.add(i);
+                this._refreshOsmPPList(selectedPolygons);
+                this._updateFrameRect();   // repaint SVG polygon highlights
+            });
+
+            list.appendChild(item);
+        });
+
+        const countEl = document.getElementById('osmPPSelCount');
+        if (countEl) {
+            const n = this._osmPPSelected.size;
+            countEl.textContent = n > 0 ? `${n} selected` : '';
+        }
     }
 
     /**
@@ -3330,7 +3585,34 @@ class PolygonEditor {
 
         const tierEl = document.querySelector('input[name="osmRoadTier"]:checked');
         const roadTier = tierEl ? parseInt(tierEl.value, 10) : 1;
-        this.splitSelectedPolygonByOsm(this._osmBbox, roadTier);
+
+        const simplifyCheck = document.getElementById('osmSimplifyCheck');
+        const simplifyInput = document.getElementById('osmSimplifySpacing');
+        const simplifySpacing = (simplifyCheck && simplifyCheck.checked)
+            ? Math.max(1, parseFloat(simplifyInput?.value) || 150)
+            : null;
+
+        const sourceEl = document.querySelector('input[name="osmDataSource"]:checked');
+        const dataSource = sourceEl ? sourceEl.value : 'osm';
+
+        // Build per-polygon configs: only send if user explicitly modified any polygon
+        let polygonConfigs = null;
+        const _ppPolys = this._osmPPPolygons;
+        if (_ppPolys && _ppPolys.length > 1 && this._osmPPModified && this._osmPPModified.size > 0) {
+            polygonConfigs = _ppPolys.map((_, i) => {
+                if (this._osmPPModified.has(i)) {
+                    const c = this._perPolyConfigs.get(i) || {};
+                    return {
+                        road_tier:        c.road_tier        ?? roadTier,
+                        simplify_spacing: c.simplify_spacing ?? simplifySpacing,
+                        min_area_km2:     c.min_area_km2     ?? null,
+                    };
+                }
+                return { road_tier: roadTier, simplify_spacing: simplifySpacing, min_area_km2: null };
+            });
+        }
+
+        this.splitSelectedPolygonByOsm(this._osmBbox, roadTier, simplifySpacing, dataSource, polygonConfigs);
     }
 
     /**
@@ -3340,8 +3622,9 @@ class PolygonEditor {
      *
      * @param {{ north, south, east, west }} bbox - WGS84 bounding box
      * @param {number} roadTier - 1=major only, 2=+tertiary, 3=+residential
+     * @param {Array|null} polygonConfigs - per-polygon overrides for multi-split
      */
-    async splitSelectedPolygonByOsm(bbox, roadTier = 1) {
+    async splitSelectedPolygonByOsm(bbox, roadTier = 1, simplifySpacing = 150, dataSource = 'osm', polygonConfigs = null) {
         const size = this.selectedPolygonIndices.size;
         if (size === 0) {
             this.uiController.showError('Select at least 1 polygon to split');
@@ -3362,19 +3645,20 @@ class PolygonEditor {
         }
         const parentNeighborIds = [...extNeighborSet];
 
+        const srcLabel = dataSource === 'os_roads' ? 'OS Open Roads' : 'OSM';
         this.uiController.showMessage(
             size === 1
-                ? 'Downloading OSM data and generating districts… (30–90 s)'
-                : `Downloading OSM data for ${size} polygons (boundaries preserved)… (30–90 s)`
+                ? `Loading ${srcLabel} data and generating districts… (30–90 s)`
+                : `Loading ${srcLabel} data for ${size} polygons (boundaries preserved)… (30–90 s)`
         );
 
         try {
             const result = size === 1
                 ? await this.polygonSplitter.splitByOsm(
-                    selectedPolygons[0], bbox.north, bbox.south, bbox.east, bbox.west, roadTier
+                    selectedPolygons[0], bbox.north, bbox.south, bbox.east, bbox.west, roadTier, simplifySpacing, dataSource
                   )
                 : await this.polygonSplitter.splitMultipleByOsm(
-                    selectedPolygons, bbox.north, bbox.south, bbox.east, bbox.west, roadTier
+                    selectedPolygons, bbox.north, bbox.south, bbox.east, bbox.west, roadTier, simplifySpacing, dataSource, polygonConfigs
                   );
 
             if (!result.success) {
@@ -3963,6 +4247,26 @@ class PolygonEditor {
         // Draw virtual nodes on top of everything else
         if (this.virtualNodeManager && this.virtualNodeManager.count > 0) {
             this.renderVirtualNodeOverlay();
+        }
+
+        // Draw the Ctrl+drag freehand lasso overlay
+        if (this.lassoPath && this.lassoPath.length > 1) {
+            const ctx = this.ctx;
+            ctx.save();
+            ctx.fillStyle   = 'rgba(0, 100, 255, 0.08)';
+            ctx.strokeStyle = 'rgba(0, 100, 255, 0.85)';
+            ctx.lineWidth   = 1.5;
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.moveTo(this.lassoPath[0].x, this.lassoPath[0].y);
+            for (let i = 1; i < this.lassoPath.length; i++) {
+                ctx.lineTo(this.lassoPath[i].x, this.lassoPath[i].y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
         }
     }
 

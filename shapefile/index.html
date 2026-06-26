@@ -476,6 +476,13 @@
             color: white;
             border-radius: 8px;
             display: none;
+            max-width: 420px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            z-index: 9999;
+            font-size: 13px;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         
         #sharedInfo {
@@ -1261,67 +1268,221 @@
         });
     </script>
 
+    <script>
+        // Data source toggle: highlight active label and show/hide UK file note
+        document.addEventListener('DOMContentLoaded', () => {
+            const radios = document.querySelectorAll('input[name="osmDataSource"]');
+            const osmLabel = document.getElementById('osmSrcOsmLabel');
+            const ukLabel  = document.getElementById('osmSrcUkLabel');
+            const ukNote   = document.getElementById('osmSrcUkNote');
+
+            let osRoadsAvailable = null; // null = not yet checked
+
+            async function checkOsRoadsAvailable() {
+                if (osRoadsAvailable !== null) return osRoadsAvailable;
+                try {
+                    const res = await fetch('/os_roads_available');
+                    const data = await res.json();
+                    osRoadsAvailable = data.available;
+                } catch {
+                    osRoadsAvailable = false;
+                }
+                return osRoadsAvailable;
+            }
+
+            async function updateSourceUI() {
+                const val = document.querySelector('input[name="osmDataSource"]:checked')?.value;
+                const isUk = val === 'os_roads';
+                osmLabel.style.borderColor = isUk ? '#ddd'     : '#27ae60';
+                osmLabel.style.background  = isUk ? '#fff'     : '#eafaf1';
+                ukLabel.style.borderColor  = isUk ? '#2980b9'  : '#ddd';
+                ukLabel.style.background   = isUk ? '#eaf4fb'  : '#fff';
+
+                if (!isUk) {
+                    ukNote.style.display = 'none';
+                    return;
+                }
+
+                const available = await checkOsRoadsAvailable();
+                if (available) {
+                    ukNote.style.display = 'block';
+                    ukNote.style.background = '#eafaf1';
+                    ukNote.style.borderLeftColor = '#27ae60';
+                    ukNote.style.color = '#1a6b3a';
+                    ukNote.innerHTML = 'OS Open Roads file found &mdash; ready to use.';
+                } else {
+                    ukNote.style.display = 'block';
+                    ukNote.style.background = '#fff8e1';
+                    ukNote.style.borderLeftColor = '#f39c12';
+                    ukNote.style.color = '#7d5a00';
+                    ukNote.innerHTML = 'Requires <code>shapefile/os_data/oproad_gb.gpkg</code>. Download free from <strong>OS Data Hub &rarr; OS Open Roads</strong> (GeoPackage format).';
+                }
+            }
+
+            radios.forEach(r => r.addEventListener('change', updateSourceUI));
+        });
+    </script>
+
     <!-- Split by OSM Modal -->
     <div id="osmSplitModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
-        <div style="background:white; border-radius:12px; padding:22px 24px; width:640px; max-width:95vw; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
-            <div id="osmSplitTitle" style="font-weight:700; font-size:13px; color:#333; margin-bottom:6px;">Split Polygon by OSM Districts</div>
-            <div id="osmSplitSubtitle" style="font-size:11px; color:#888; margin-bottom:10px;">
-                Pan and zoom the map to position the green frame over your target area.
-                The frame is sized to match the selected polygon's real-world dimensions.
-                OSM road data will be downloaded for the framed area.
-            </div>
+        <div style="background:white; border-radius:12px; width:940px; max-width:98vw; height:88vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.3); overflow:hidden;">
 
-            <!-- Leaflet map with fixed frame overlay -->
-            <div style="position:relative; width:100%; height:380px; margin-bottom:8px;">
-                <div id="osmSplitMap" style="width:100%; height:100%; border-radius:8px; border:1.5px solid #ddd;"></div>
-                <!-- SVG overlay mirrors the actual polygon shape, not just its bounding box -->
-                <svg id="osmFrameSvg" style="position:absolute; top:0; left:0; pointer-events:none; z-index:1000; overflow:visible;">
-                    <!-- Single polygon shape (used when 1 polygon selected) -->
-                    <polygon id="osmFramePoly"
-                             fill="rgba(39,174,96,0.12)" stroke="#27ae60" stroke-width="2.5" stroke-linejoin="round"/>
-                    <!-- Multi-polygon outlines (used when >1 polygon selected) -->
-                    <g id="osmFramePolyGroup"></g>
-                    <!-- Dashed bounding box to show OSM download area -->
-                    <rect id="osmFrameBbox"
-                          fill="none" stroke="#27ae60" stroke-width="1" stroke-dasharray="6,4" opacity="0.5"/>
-                </svg>
-            </div>
-
-            <!-- Live bbox display -->
-            <div style="margin-bottom:10px;">
-                <span id="osmBboxDisplay" style="font-size:11px; color:#555; font-family:monospace;"></span>
-            </div>
-
-            <!-- Options -->
-            <div style="margin-bottom:14px;">
-                <div style="font-size:12px; color:#555; font-weight:600; margin-bottom:6px;">Road detail level:</div>
-                <div style="display:flex; flex-direction:column; gap:5px;">
-                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                        <input type="radio" name="osmRoadTier" value="1" checked />
-                        <span><strong>Tier 1</strong> — major roads only (large districts)</span>
-                    </label>
-                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                        <input type="radio" name="osmRoadTier" value="2" />
-                        <span><strong>Tier 2</strong> — + tertiary roads (smaller zones)</span>
-                    </label>
-                    <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                        <input type="radio" name="osmRoadTier" value="3" />
-                        <span><strong>Tier 3</strong> — + residential roads (city blocks)</span>
-                    </label>
+            <!-- ── Header ─────────────────────────────────────────────── -->
+            <div style="padding:16px 22px 12px; border-bottom:1px solid #eee; flex-shrink:0;">
+                <div id="osmSplitTitle" style="font-weight:700; font-size:13px; color:#333; margin-bottom:3px;">Split Polygon by OSM Districts</div>
+                <div id="osmSplitSubtitle" style="font-size:11px; color:#888;">
+                    Pan and zoom the map to position the green frame over your target area.
+                    The frame is sized to match the selected polygon's real-world dimensions.
                 </div>
             </div>
 
-            <!-- Actions -->
-            <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <!-- ── Body: map (left) + settings (right) ────────────────── -->
+            <div style="display:flex; flex:1; min-height:0; overflow:hidden;">
+
+                <!-- LEFT: Leaflet map -->
+                <div style="flex:0 0 490px; display:flex; flex-direction:column; padding:12px 12px 10px 20px;">
+                    <!-- Map + SVG overlay -->
+                    <div style="flex:1; min-height:0; position:relative; border-radius:8px; overflow:hidden; border:1.5px solid #ddd;">
+                        <div id="osmSplitMap" style="width:100%; height:100%;"></div>
+                        <svg id="osmFrameSvg" style="position:absolute; top:0; left:0; pointer-events:none; z-index:1000; overflow:visible;">
+                            <polygon id="osmFramePoly" fill="rgba(39,174,96,0.12)" stroke="#27ae60" stroke-width="2.5" stroke-linejoin="round"/>
+                            <g id="osmFramePolyGroup"></g>
+                            <rect id="osmFrameBbox" fill="none" stroke="#27ae60" stroke-width="1" stroke-dasharray="6,4" opacity="0.5"/>
+                        </svg>
+                    </div>
+                    <!-- Live bbox coordinates -->
+                    <div style="margin-top:6px; padding:0 2px;">
+                        <span id="osmBboxDisplay" style="font-size:10px; color:#888; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <!-- Vertical divider -->
+                <div style="width:1px; background:#eeeeee; margin:10px 0; flex-shrink:0;"></div>
+
+                <!-- RIGHT: Settings panel (scrollable) -->
+                <div style="flex:1; min-width:0; overflow-y:auto; padding:14px 20px; display:flex; flex-direction:column; gap:14px;">
+
+                    <!-- Data source -->
+                    <div>
+                        <div style="font-size:12px; color:#555; font-weight:600; margin-bottom:6px;">Data source:</div>
+                        <div style="display:flex; gap:6px;">
+                            <label id="osmSrcOsmLabel" style="flex:1; display:flex; align-items:center; gap:6px; padding:7px 8px; border:1.5px solid #27ae60; border-radius:6px; cursor:pointer; background:#eafaf1; font-size:11px;">
+                                <input type="radio" name="osmDataSource" value="osm" checked style="margin:0;" />
+                                <span>🌍 International (OSM)</span>
+                            </label>
+                            <label id="osmSrcUkLabel" style="flex:1; display:flex; align-items:center; gap:6px; padding:7px 8px; border:1.5px solid #ddd; border-radius:6px; cursor:pointer; background:#fff; font-size:11px;">
+                                <input type="radio" name="osmDataSource" value="os_roads" style="margin:0;" />
+                                <span>🇬🇧 UK (OS Open Roads)</span>
+                            </label>
+                        </div>
+                        <div id="osmSrcUkNote" style="display:none; margin-top:6px; padding:6px 9px; border-left:3px solid #f39c12; border-radius:0 4px 4px 0; font-size:11px;"></div>
+                    </div>
+
+                    <!-- Road detail level -->
+                    <div>
+                        <div style="font-size:12px; color:#555; font-weight:600; margin-bottom:6px;">Road detail level:</div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="radio" name="osmRoadTier" value="1" checked />
+                                <span><strong>Tier 1</strong> — major roads only</span>
+                            </label>
+                            <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="radio" name="osmRoadTier" value="2" />
+                                <span><strong>Tier 2</strong> — + tertiary roads</span>
+                            </label>
+                            <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="radio" name="osmRoadTier" value="3" />
+                                <span><strong>Tier 3</strong> — + residential roads</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Vertex simplification -->
+                    <div>
+                        <label style="font-size:12px; color:#555; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                            <input type="checkbox" id="osmSimplifyCheck" checked
+                                   onchange="document.getElementById('osmSimplifyOptions').style.display=this.checked?'flex':'none'" />
+                            <span style="font-weight:600;">Simplify vertices</span>
+                        </label>
+                        <div id="osmSimplifyOptions" style="display:flex; align-items:center; gap:6px; margin-top:5px; margin-left:20px; flex-wrap:wrap;">
+                            <span style="font-size:11px; color:#888;">Remove vertices closer than</span>
+                            <input type="number" id="osmSimplifySpacing" value="150" min="1" max="10000" step="1"
+                                   style="width:58px; padding:2px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                            <span style="font-size:11px; color:#888;">m</span>
+                        </div>
+                    </div>
+
+                    <!-- Per-polygon settings panel (multi-polygon mode only) -->
+                    <div id="osmPerPolySection" style="display:none;">
+                        <button id="osmPerPolyToggle"
+                                style="width:100%; text-align:left; padding:7px 12px; border:1.5px solid #ddd; border-radius:6px; background:#fafafa; font-size:12px; cursor:pointer; color:#444; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:600;">Per-polygon settings</span>
+                            <span id="osmPerPolyChevron" style="font-size:10px; color:#888;">▶ expand</span>
+                        </button>
+                        <div id="osmPerPolyPanel" style="display:none; margin-top:6px; border:1.5px solid #e0e0e0; border-radius:6px; padding:10px; background:#fafafa;">
+                            <div style="display:flex; gap:10px; align-items:flex-start;">
+                                <!-- Polygon list -->
+                                <div style="flex:1; min-width:0;">
+                                    <div style="display:flex; gap:4px; margin-bottom:5px; align-items:center;">
+                                        <button id="osmPPSelectAll"  style="padding:2px 8px; border:1px solid #ccc; border-radius:3px; background:white; font-size:11px; cursor:pointer;">All</button>
+                                        <button id="osmPPSelectNone" style="padding:2px 8px; border:1px solid #ccc; border-radius:3px; background:white; font-size:11px; cursor:pointer;">None</button>
+                                        <span id="osmPPSelCount" style="font-size:11px; color:#27ae60; margin-left:4px; font-weight:600;"></span>
+                                    </div>
+                                    <div id="osmPPList" style="max-height:150px; overflow-y:auto; border:1px solid #e0e0e0; border-radius:4px; background:white;"></div>
+                                    <div style="font-size:10px; color:#bbb; margin-top:4px;">Click row to select/highlight on map</div>
+                                </div>
+                                <!-- Per-polygon controls -->
+                                <div style="width:150px; flex-shrink:0; border-left:1px solid #ebebeb; padding-left:10px;">
+                                    <div style="font-size:11px; font-weight:600; color:#555; margin-bottom:4px;">Road tier</div>
+                                    <div style="display:flex; flex-direction:column; gap:3px; margin-bottom:9px;">
+                                        <label style="font-size:11px; color:#555; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                            <input type="radio" name="ppRoadTier" value="1" checked /> Tier 1
+                                        </label>
+                                        <label style="font-size:11px; color:#555; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                            <input type="radio" name="ppRoadTier" value="2" /> Tier 2
+                                        </label>
+                                        <label style="font-size:11px; color:#555; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                            <input type="radio" name="ppRoadTier" value="3" /> Tier 3
+                                        </label>
+                                    </div>
+                                    <div style="margin-bottom:6px;">
+                                        <div style="font-size:11px; font-weight:600; color:#555; margin-bottom:2px;">Simplify</div>
+                                        <input type="number" id="ppSimplifyInput" value="150" min="1" max="10000" step="1"
+                                               style="width:55px; padding:2px 4px; border:1px solid #ccc; border-radius:3px; font-size:11px;" />
+                                        <span style="font-size:10px; color:#888;"> m</span>
+                                    </div>
+                                    <div style="margin-bottom:10px;">
+                                        <div style="font-size:11px; font-weight:600; color:#555; margin-bottom:2px;">Min area</div>
+                                        <input type="number" id="ppMinAreaInput" placeholder="auto" min="0" step="1"
+                                               style="width:65px; padding:2px 4px; border:1px solid #ccc; border-radius:3px; font-size:11px;" />
+                                        <span style="font-size:10px; color:#888;"> m²</span>
+                                        <div style="font-size:9px; color:#aaa; margin-top:3px;">Higher = fewer, larger districts</div>
+                                    </div>
+                                    <button id="osmPPApplyBtn"
+                                            style="width:100%; padding:5px 8px; border:none; border-radius:4px; background:#27ae60; color:white; font-size:11px; cursor:pointer; font-weight:600;">
+                                        Apply to selected
+                                    </button>
+                                    <div style="font-size:10px; color:#aaa; margin-top:4px; text-align:center;">No selection = apply to all</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- end right panel -->
+            </div><!-- end body row -->
+
+            <!-- ── Footer: action buttons ─────────────────────────────── -->
+            <div style="padding:12px 22px; border-top:1px solid #eee; display:flex; gap:8px; justify-content:flex-end; flex-shrink:0;">
                 <button id="osmSplitCancelBtn"
-                        style="padding:6px 18px; border:1.5px solid #ddd; border-radius:6px; background:white; font-size:12px; cursor:pointer;">
+                        style="padding:6px 22px; border:1.5px solid #ddd; border-radius:6px; background:white; font-size:12px; cursor:pointer;">
                     Cancel
                 </button>
                 <button id="osmSplitConfirmBtn"
-                        style="padding:6px 18px; border:none; border-radius:6px; background:#27ae60; color:white; font-size:12px; cursor:pointer; font-weight:600;">
+                        style="padding:6px 22px; border:none; border-radius:6px; background:#27ae60; color:white; font-size:12px; cursor:pointer; font-weight:600;">
                     Split
                 </button>
             </div>
+
         </div>
     </div>
 

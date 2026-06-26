@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.zip
 
 # Virtual environments
 .venv/
@@ -42,3 +43,6 @@ Thumbs.db
 
 # SVG files
 *.svg
+
+# Large geodata files
+*.gpkg

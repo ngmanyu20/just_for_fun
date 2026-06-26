@@ -14,9 +14,17 @@ class MouseHandler {
         // Interaction state
         this.isDragging = false;
         this.isPanning = false;
+        this.isRectSelecting = false;
+        this.lassoPath = []; // screen-coord [{x,y}] points for current freehand lasso
         this.selectedVertex = null;
         this.lastMousePos = { x: 0, y: 0 };
         this.isReplacementDrag = false; // Track if this is a vertex replacement drag
+
+        // Long-press detection state
+        this._longPressTimer  = null;
+        this._longPressOrigin = null; // {x,y} screen coords at mousedown
+        this._longPressData   = null; // {x,y} data coords at mousedown
+        this._longPressCtrl   = false;
 
         // Keyboard navigation state
         this.keysPressed = new Set();
@@ -35,7 +43,9 @@ class MouseHandler {
             onDragEnd: null,
             onVertexDelete: null,
             onReplacementDragEnd: null, // Callback for vertex replacement drag
-            onMidpointCreate: null // Callback for midpoint creation (M key)
+            onMidpointCreate: null,     // Callback for midpoint creation (M key)
+            onRectSelectUpdate: null,   // (lassoPath) called each frame while lasso is drawing
+            onRectSelect: null          // (lassoPath) called when lasso drag ends
         };
 
         // Setup event listeners
@@ -113,12 +123,8 @@ class MouseHandler {
             console.log('onVertexClick result:', vertexResult);
             if (vertexResult.vertexFound) {
                 console.log('Vertex selection triggered (Shift+Click)');
-
-                // Shift+Click ONLY selects vertices - no drag replacement
-                // Use keyboard keys '1' and '2' to replace with previous/next vertex
-
-                e.preventDefault(); // Prevent any default behavior
-                return; // Exit immediately - don't check other handlers
+                e.preventDefault();
+                return;
             } else {
                 console.log('No vertex found at this position during Shift+Click');
             }
@@ -138,29 +144,22 @@ class MouseHandler {
             }
         }
 
-        // Try polygon selection (for both regular selection and Ctrl+Click multi-selection)
-        if (this.callbacks.onPolygonSelect) {
-            const polygonResult = this.callbacks.onPolygonSelect(dataPos.x, dataPos.y, false, isCtrlPressed);
-            if (polygonResult.polygonSelected) {
-                return;
+        // Start long-press timer.  Resolves into one of three gestures:
+        //   • mouse-up before timer  → quick click  (polygon select / Ctrl-toggle)
+        //   • movement before timer  → pan
+        //   • 300 ms hold            → freehand lasso selection
+        this._longPressCtrl   = isCtrlPressed;
+        this._longPressOrigin = { x: screenX, y: screenY };
+        this._longPressData   = { x: dataPos.x, y: dataPos.y };
+        this._longPressTimer  = setTimeout(() => {
+            this._longPressTimer = null;
+            this.isRectSelecting = true;
+            this.lassoPath = [{ x: this._longPressOrigin.x, y: this._longPressOrigin.y }];
+            this.canvas.style.cursor = 'crosshair';
+            if (this.callbacks.onRectSelectUpdate) {
+                this.callbacks.onRectSelectUpdate(this.lassoPath);
             }
-
-            // If no polygon found at this position, deselect current selection
-            // This allows clicking on white/empty area to deselect
-            if (!polygonResult.polygonFound && !isCtrlPressed) {
-                // Call onPolygonSelect with null to deselect
-                if (this.callbacks.onDeselectPolygon) {
-                    this.callbacks.onDeselectPolygon();
-                }
-            }
-        }
-
-        // If no vertex, midpoint, or polygon selected, start panning (but not when Ctrl is pressed)
-        // This allows dragging on white space to pan the map
-        if (!isCtrlPressed) {
-            this.isPanning = true;
-            this.canvas.style.cursor = 'grabbing';
-        }
+        }, 100);
     }
 
     /**
@@ -171,12 +170,36 @@ class MouseHandler {
         if (this.blocked) return;
         const { x: screenX, y: screenY } = this.getCanvasPos(e);
 
+        // Waiting for long-press decision — cancel into pan if the mouse moved enough
+        if (this._longPressTimer !== null) {
+            const dx = screenX - this._longPressOrigin.x;
+            const dy = screenY - this._longPressOrigin.y;
+            if (dx * dx + dy * dy > 25) { // > 5 px
+                clearTimeout(this._longPressTimer);
+                this._longPressTimer = null;
+                this.isPanning = true;
+                this.lastMousePos = { x: screenX, y: screenY };
+                this.canvas.style.cursor = 'grabbing';
+            }
+            return;
+        }
+
         if (this.isDragging && this.selectedVertex !== null) {
             // Dragging existing vertex
             const dataPos = this.geometryOps.screenToData(screenX, screenY);
 
             if (this.callbacks.onVertexDrag) {
                 this.callbacks.onVertexDrag(this.selectedVertex, dataPos.x, dataPos.y);
+            }
+
+        } else if (this.isRectSelecting) {
+            const last = this.lassoPath[this.lassoPath.length - 1];
+            const dx = screenX - last.x, dy = screenY - last.y;
+            if (dx * dx + dy * dy > 9) { // only append if moved > 3 px
+                this.lassoPath.push({ x: screenX, y: screenY });
+            }
+            if (this.callbacks.onRectSelectUpdate) {
+                this.callbacks.onRectSelectUpdate(this.lassoPath);
             }
 
         } else if (this.isPanning) {
@@ -203,25 +226,71 @@ class MouseHandler {
     handleMouseUp(e) {
         if (this.blocked) return;
         const wasDragging = this.isDragging;
+        const wasRectSelecting = this.isRectSelecting;
 
-        // Get mouse position for replacement target detection
         const { x: screenX, y: screenY } = this.getCanvasPos(e);
-        const dataPos = this.geometryOps.screenToData(screenX, screenY);
 
+        // Capture lasso before clearing state
+        const finishedLasso = wasRectSelecting ? this.lassoPath.slice() : null;
+
+        // Quick release — timer still pending, treat as a click
+        if (this._longPressTimer !== null) {
+            clearTimeout(this._longPressTimer);
+            this._longPressTimer = null;
+            this._commitPendingClick();
+            this.isDragging = false;
+            this.isPanning = false;
+            this.selectedVertex = null;
+            this.canvas.style.cursor = 'grab';
+            if (this.callbacks.onViewUpdate) this.callbacks.onViewUpdate();
+            return;
+        }
+
+        // Clear state
         this.isDragging = false;
         this.isPanning = false;
+        this.isRectSelecting = false;
+        this.lassoPath = [];
         this.selectedVertex = null;
         this.canvas.style.cursor = 'grab';
 
-        // Call drag end callback if we were dragging
+        // Lasso finished
+        if (wasRectSelecting && this.callbacks.onRectSelect) {
+            this.callbacks.onRectSelect(finishedLasso);
+            return;
+        }
+
+        // Vertex drag finished
         if (wasDragging && this.callbacks.onDragEnd) {
             this.callbacks.onDragEnd();
         }
 
-        // Notify that interaction ended
         if (this.callbacks.onViewUpdate) {
             this.callbacks.onViewUpdate();
         }
+    }
+
+    /**
+     * Commit a pending long-press as a plain click:
+     * single-select or Ctrl-toggle the polygon at the stored origin position.
+     */
+    _commitPendingClick() {
+        if (!this._longPressOrigin) return;
+        if (this.callbacks.onPolygonSelect) {
+            const result = this.callbacks.onPolygonSelect(
+                this._longPressData.x, this._longPressData.y,
+                false, this._longPressCtrl
+            );
+            // Deselect only when nothing was found or selected under the cursor
+            if (!result.polygonFound && !result.polygonSelected && !this._longPressCtrl) {
+                if (this.callbacks.onDeselectPolygon) {
+                    this.callbacks.onDeselectPolygon();
+                }
+            }
+        }
+        this._longPressOrigin = null;
+        this._longPressData   = null;
+        this._longPressCtrl   = false;
     }
 
     /**
@@ -234,7 +303,7 @@ class MouseHandler {
 
         const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const applied = this.geometryOps.applyZoom(mouseX, mouseY, scaleFactor);
-        
+
         if (applied && this.callbacks.onViewUpdate) {
             this.callbacks.onViewUpdate();
         }
@@ -246,6 +315,7 @@ class MouseHandler {
      * @param {number} screenY - Screen Y coordinate
      */
     updateCursor(screenX, screenY) {
+        if (this.isRectSelecting || this._longPressTimer !== null) return;
         const dataPos = this.geometryOps.screenToData(screenX, screenY);
         // Check if over a vertex (in edit mode)
         if (this.callbacks.onVertexSelect) {
@@ -255,7 +325,7 @@ class MouseHandler {
                 return;
             }
         }
-        
+
         // Check if over a polygon (in edit mode)
         if (this.callbacks.onPolygonSelect) {
             const polygonResult = this.callbacks.onPolygonSelect(dataPos.x, dataPos.y, true);
@@ -264,7 +334,7 @@ class MouseHandler {
                 return;
             }
         }
-        
+
         // Default cursor
         this.canvas.style.cursor = 'grab';
     }
@@ -302,18 +372,27 @@ class MouseHandler {
      * Force end any current interaction
      */
     endInteraction() {
+        if (this._longPressTimer !== null) {
+            clearTimeout(this._longPressTimer);
+            this._longPressTimer = null;
+        }
+        this._longPressOrigin = null;
+        this._longPressData   = null;
+        this._longPressCtrl   = false;
         this.isDragging = false;
         this.isPanning = false;
+        this.isRectSelecting = false;
+        this.lassoPath = [];
         this.selectedVertex = null;
         this.canvas.style.cursor = 'grab';
     }
 
     /**
      * Check if currently interacting
-     * @returns {boolean} - True if currently dragging or panning
+     * @returns {boolean} - True if currently dragging, panning, or lasso-selecting
      */
     isInteracting() {
-        return this.isDragging || this.isPanning;
+        return this.isDragging || this.isPanning || this.isRectSelecting || this._longPressTimer !== null;
     }
 
     /**

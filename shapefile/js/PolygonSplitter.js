@@ -86,7 +86,7 @@ class PolygonSplitter {
 
             return {
                 id: `${sourcePolygon.id}_sub${subdivisionId}`,
-                county: baseCounty,  // Use extracted base county (e.g., "NC8" or "AC12")
+                county: sourcePolygon.county || baseCounty,  // Inherit original county field
                 parent: sourcePolygon.parent || '',
                 rings: [ring],
                 layerType: 'subCounty',  // Mark as sub-county layer for proper rendering
@@ -338,14 +338,14 @@ class PolygonSplitter {
      * @param {number} roadTier - 1=major only, 2=+tertiary, 3=+residential/unclassified
      * @returns {Promise<Object>} - { success, message, subPolygons }
      */
-    async splitByOsm(polygon, north, south, east, west, roadTier = 1) {
+    async splitByOsm(polygon, north, south, east, west, roadTier = 1, simplifySpacing = 150, dataSource = 'osm') {
         try {
             const geometry = this.convertToGeoJSON(polygon);
 
-            const payload = { geometry, north, south, east, west, road_tier: roadTier };
+            const payload = { geometry, north, south, east, west, road_tier: roadTier, simplify_spacing: simplifySpacing, data_source: dataSource };
 
             const controller = new AbortController();
-            const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min for OSM download
+            const timeoutId  = setTimeout(() => controller.abort(), 900000); // 15 min for OSM download
 
             let response;
             try {
@@ -412,13 +412,16 @@ class PolygonSplitter {
      *   resultsByIndex: [{ sourceIndex, subPolygons }] sorted DESCENDING by sourceIndex
      *   so PolygonEditor can safely splice from the end of the array.
      */
-    async splitMultipleByOsm(polygons, north, south, east, west, roadTier = 1) {
+    async splitMultipleByOsm(polygons, north, south, east, west, roadTier = 1, simplifySpacing = 150, dataSource = 'osm', polygonConfigs = null) {
         try {
             const geometries = polygons.map(p => this.convertToGeoJSON(p));
-            const payload = { geometries, north, south, east, west, road_tier: roadTier };
+            const payload = { geometries, north, south, east, west, road_tier: roadTier, simplify_spacing: simplifySpacing, data_source: dataSource };
+            if (polygonConfigs && polygonConfigs.length > 0) {
+                payload.polygon_configs = polygonConfigs;
+            }
 
             const controller = new AbortController();
-            const timeoutId  = setTimeout(() => controller.abort(), 300000); // 5 min
+            const timeoutId  = setTimeout(() => controller.abort(), 900000); // 15 min
 
             let response;
             try {

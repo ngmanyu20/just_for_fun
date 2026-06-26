@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 from schemas import SplitRequest, MergeRequest, SvgSplitRequest, OsmSplitRequest, OsmMultiSplitRequest
 from geometry_core import split_polygon_geojson, merge_polygons_geojson, split_polygon_by_svg, split_polygon_by_osm, split_polygons_by_osm_with_boundaries
+import os_roads
 import gc
 import os
 
@@ -160,6 +161,8 @@ def split_polygon_osm(req: OsmSplitRequest):
             east=req.east,
             west=req.west,
             road_tier=req.road_tier,
+            simplify_spacing=req.simplify_spacing,
+            data_source=req.data_source,
         )
         return result
     except Exception as e:
@@ -185,6 +188,9 @@ def split_polygons_osm_multi(req: OsmMultiSplitRequest):
             east=req.east,
             west=req.west,
             road_tier=req.road_tier,
+            simplify_spacing=req.simplify_spacing,
+            data_source=req.data_source,
+            polygon_configs=[c.model_dump() for c in req.polygon_configs] if req.polygon_configs else None,
         )
         return result
     except Exception as e:
@@ -283,6 +289,11 @@ async def merge_county(request: dict):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/os_roads_available')
+def os_roads_available():
+    return {"available": os_roads.is_available()}
 
 
 @app.post('/save_csv')
