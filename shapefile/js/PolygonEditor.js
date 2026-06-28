@@ -2618,16 +2618,34 @@ class PolygonEditor {
         // Convert lasso to data coordinates
         const lassoData = screenPath.map(p => this.geometryOps.screenToData(p.x, p.y));
 
+        // In redistricting create mode, delegate toggling to WardManager
+        const isRedistrictingCreate = window.AppMode && window.AppMode.current === 'redistricting' &&
+            window.WardManager && window.WardManager.isCreateMode();
+
+        // In redistricting mode restrict candidates to the active district (mirrors handlePolygonSelection)
+        let candidates = this.polygons.map((polygon, index) => ({ polygon, index }));
+        if (isRedistrictingCreate && this.districtFilter) {
+            candidates = candidates.filter(({ polygon }) => polygon.district === this.districtFilter);
+        }
+
         let found = 0;
-        this.polygons.forEach((polygon, index) => {
+        candidates.forEach(({ polygon, index }) => {
             if (!polygon.rings || polygon.rings.length === 0) return;
             const ring = polygon.rings[0];
+
+            const _toggle = () => {
+                if (isRedistrictingCreate) {
+                    window.WardManager.togglePolygon(polygon.id);
+                } else {
+                    this.togglePolygonSelection(index);
+                }
+                found++;
+            };
 
             // Test A: any lasso point lies inside the polygon (sample every 2nd point)
             for (let i = 0; i < lassoData.length; i += 2) {
                 if (_pointInRing(lassoData[i].x, lassoData[i].y, ring)) {
-                    this.togglePolygonSelection(index);
-                    found++;
+                    _toggle();
                     return;
                 }
             }
@@ -2635,8 +2653,7 @@ class PolygonEditor {
             // Test B: any polygon vertex lies inside the closed lasso shape
             for (const v of ring) {
                 if (_pointInRing(v.x, v.y, lassoData)) {
-                    this.togglePolygonSelection(index);
-                    found++;
+                    _toggle();
                     return;
                 }
             }

@@ -6,7 +6,7 @@ class PolygonCombiner {
     constructor(adjacencyGraph, serviceUrl = (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')) {
         this.adjacencyGraph = adjacencyGraph;
         this.serviceUrl = serviceUrl;
-        this.timeout = 30000; // 30 seconds
+        this.timeout = 120000; // 2 minutes — large polygon sets need more time
     }
 
     /**

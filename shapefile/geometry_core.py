@@ -1789,11 +1789,12 @@ def merge_polygons_geojson(features, snap_tol=1e-6, require_single=True):
         raise ValueError("Not enough valid polygons to merge after geometry repair")
 
     # Use Shapely's unary_union for robust merging
-    merged = unary_union(fixed).buffer(0)
+    base_union = unary_union(fixed)
+    merged = base_union.buffer(0)
 
-    # Optional snapping to clean up tiny gaps
+    # Optional snapping to clean up tiny gaps — reuse base_union boundary, don't recompute
     if snap_tol and snap_tol > 0:
-        merged = snap(merged, unary_union(fixed).boundary, snap_tol).buffer(0)
+        merged = snap(merged, base_union.boundary, snap_tol).buffer(0)
 
     if merged.is_empty:
         raise ValueError("Merge produced empty geometry")
