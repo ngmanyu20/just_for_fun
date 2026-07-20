@@ -603,6 +603,15 @@
                     <input type="number" id="numDistricts" min="2" max="20" value="8" placeholder="# Districts" style="flex: 1; padding: 4px 6px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px;" />
                     <button id="splitBtn" class="btn-secondary" disabled style="white-space: nowrap; flex: 0 0 auto; width: auto; padding: 4px 10px; font-size: 11px;">Split</button>
                 </div>
+
+                <!-- Grid Split Controls -->
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                    <span style="font-weight: 700; font-size: 12px; color: #667eea; white-space: nowrap;">Grid Split:</span>
+                    <input type="number" id="gridSplitCols" min="1" max="20" value="3" placeholder="Cols (X)" style="flex: 1; padding: 4px 6px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px;" title="Number of columns along the X-axis" />
+                    <span style="font-size: 11px; color: #999;">×</span>
+                    <input type="number" id="gridSplitRows" min="1" max="20" value="4" placeholder="Rows (Y)" style="flex: 1; padding: 4px 6px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px;" title="Number of rows along the Y-axis" />
+                    <button id="gridSplitBtn" class="btn-secondary" disabled style="white-space: nowrap; flex: 0 0 auto; width: auto; padding: 4px 10px; font-size: 11px;" title="Select exactly 1 rectangular (4-vertex) polygon to enable">▦ Split (G)</button>
+                </div>
                 <button id="splitByOsmBtn" class="btn-secondary" disabled style="width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 10px; border-color: #27ae60; color: #27ae60;">🌍 Split by OSM</button>
                 <button id="deletePolygonBtn" class="btn-danger" disabled style="width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 10px;">🗑️ Delete Polygon</button>
 
@@ -987,6 +996,7 @@
     <script src="js/VertexReplacement.js"></script>
     <script src="js/MidpointCreation.js"></script>
     <script src="js/VertexSplitter.js"></script>
+    <script src="js/GridSplitter.js"></script>
     <script src="js/PolygonSimplifier.js"></script>
     <script src="js/MeasureTool.js"></script>
     <script src="js/UIController.js"></script>

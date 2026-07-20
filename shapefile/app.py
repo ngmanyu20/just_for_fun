@@ -108,6 +108,11 @@ async def read_examples():
     """Serve the example_usage.html file"""
     return FileResponse(os.path.join(BASE_DIR, "example_usage.html"))
 
+@app.get("/display.html")
+async def read_display():
+    """Serve the display.html popup so it works from either the root or /shapefile entry point"""
+    return FileResponse(os.path.join(BASE_DIR, "display.html"))
+
 
 @app.post("/split")
 def split_polygon(req: SplitRequest):

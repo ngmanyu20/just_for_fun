@@ -46,6 +46,7 @@ class PolygonEditor {
         this.vertexReplacement = new VertexReplacement(this.vertexClassifier);
         this.midpointCreation = new MidpointCreation(this.vertexClassifier, this.fixedCountyVertices);
         this.vertexSplitter = new VertexSplitter(this.vertexClassifier);
+        this.gridSplitter = new GridSplitter();
         this.polygonSimplifier = new PolygonSimplifier();
         this.measureTool = new MeasureTool();
         this.streetLayer = new StreetLayer();
@@ -141,6 +142,11 @@ class PolygonEditor {
             splitByVerticesBtn.addEventListener('click', () => this.handleSplitByVertices());
         }
 
+        const gridSplitBtn = document.getElementById('gridSplitBtn');
+        if (gridSplitBtn) {
+            gridSplitBtn.addEventListener('click', () => this.handleGridSplit());
+        }
+
         const splitByOsmBtn = document.getElementById('splitByOsmBtn');
         if (splitByOsmBtn) {
             splitByOsmBtn.addEventListener('click', () => this.showOsmSplitDialog());
@@ -216,6 +222,9 @@ class PolygonEditor {
         if (e.code === 'KeyS' || e.key === 's' || e.key === 'S') {
             this.keysPressed.add('KeyS');
         }
+        if (e.code === 'KeyG' || e.key === 'g' || e.key === 'G') {
+            this.keysPressed.add('KeyG');
+        }
         if (e.code === 'Digit1' || e.key === '1') {
             this.keysPressed.add('Digit1');
         }
@@ -228,6 +237,7 @@ class PolygonEditor {
         const hasY = this.keysPressed.has('KeyY');
         const hasC = this.keysPressed.has('KeyC');
         const hasS = this.keysPressed.has('KeyS');
+        const hasG = this.keysPressed.has('KeyG');
         const has1 = this.keysPressed.has('Digit1');
         const has2 = this.keysPressed.has('Digit2');
 
@@ -321,6 +331,25 @@ class PolygonEditor {
                 this.showSplitDialog();
             } else {
                 this.uiController.showError('Select exactly 1 polygon to split');
+            }
+
+            this.keysPressed.clear();
+            return false;
+        }
+
+        // G key: Grid split polygon into an NxM grid (polygon mode only)
+        if (hasG && !hasCtrlOrMeta && inPolygonMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            console.log('>>> G: Grid split polygon triggered');
+
+            const gridSplitBtn = document.getElementById('gridSplitBtn');
+            if (gridSplitBtn && !gridSplitBtn.disabled) {
+                this.handleGridSplit();
+            } else {
+                this.uiController.showError('Select exactly 1 rectangular polygon to grid-split');
             }
 
             this.keysPressed.clear();
@@ -2276,6 +2305,98 @@ class PolygonEditor {
     }
 
     /**
+     * Split the single selected polygon into a cols x rows grid of new
+     * rectangular polygons, reading dimensions from the Grid Split toolbar inputs.
+     */
+    handleGridSplit() {
+        if (this.selectedPolygonIndices.size !== 1) {
+            this.uiController.showError('Select exactly 1 polygon to grid-split');
+            return;
+        }
+
+        const sourcePolyIndex = this.selectedPolygonIndex;
+        const polygon = this.polygons[sourcePolyIndex];
+
+        const cols = parseInt(document.getElementById('gridSplitCols').value);
+        const rows = parseInt(document.getElementById('gridSplitRows').value);
+
+        if (isNaN(cols) || cols < 1 || cols > 20 || isNaN(rows) || rows < 1 || rows > 20) {
+            this.uiController.showError('Please enter Cols and Rows between 1 and 20');
+            return;
+        }
+        if (cols === 1 && rows === 1) {
+            this.uiController.showError('Enter more than 1 column or row to split');
+            return;
+        }
+
+        console.log(`Grid-splitting polygon ${polygon.id}: cols=${cols}, rows=${rows}`);
+        const existingIds = new Set(this.polygons.map(p => p.id));
+
+        // Capture source polygon and its current neighbors BEFORE the split so
+        // vertexSync can propagate boundary vertices to those neighbors afterward.
+        const sourcePolygonSnapshot = JSON.parse(JSON.stringify(polygon));
+        const parentNeighborIds = this.adjacencyGraph.getNeighbors(polygon.id);
+
+        const result = this.gridSplitter.splitPolygon(this.polygons, sourcePolyIndex, cols, rows);
+
+        if (result.success) {
+            this.polygons = result.polygons;
+
+            // Rename new polygons with consistent {County}_NNN IDs (gap-filling from 001).
+            const newPolygons = this.polygons.filter(p => !existingIds.has(p.id));
+            const gridSplitIds = this.nextPolygonIds(polygon.county, newPolygons.length);
+            newPolygons.forEach((p, i) => { p.id = gridSplitIds[i]; });
+
+            // CRITICAL: Clear polygon selection since the original polygon was removed
+            this.selectedPolygonIndex = null;
+            this.selectedPolygonIndices.clear();
+
+            this.vertexSelection.clearSelection();
+            this.updateVertexSelectionInfo();
+
+            // STEP 1: Rebuild adjacency for new polygons + their known neighbors only
+            const gridSplitZoneIds = [...gridSplitIds, ...parentNeighborIds];
+            this.adjacencyGraph.rebuildForAffected(this.polygons, gridSplitIds, gridSplitZoneIds);
+
+            // STEP 2: Sync new polygon boundary vertices into all neighboring polygons.
+            if (newPolygons.length > 0) {
+                const startIndex = this.polygons.indexOf(newPolygons[0]);
+                this.polygons = this.vertexSync.syncAfterSplit(
+                    this.polygons,
+                    this.adjacencyGraph,
+                    startIndex,
+                    newPolygons.length,
+                    sourcePolygonSnapshot,
+                    parentNeighborIds
+                );
+            }
+
+            // STEP 3: Rebuild adjacency again after vertex sync (same zone)
+            this.adjacencyGraph.rebuildForAffected(this.polygons, gridSplitIds, gridSplitZoneIds);
+
+            // CRITICAL: Sync layer manager with updated polygon state
+            this.layerManager.layers.subCounty.polygons = this.polygons;
+
+            this.historyManager.saveToHistory(this.polygons, result.message);
+            this.updateUndoRedoButtons();
+
+            this.uiController.populatePolygonSelect(this.polygons);
+            this.uiController.setSelectedPolygon(null);
+
+            this.updateCombineButton();
+            this.updateSplitButton();
+
+            this.draw();
+
+            console.log('Grid split completed:', result.message);
+            this.uiController.showStatus(result.message);
+        } else {
+            console.log('Grid split failed:', result.message);
+            this.uiController.showError(result.message);
+        }
+    }
+
+    /**
      * Update vertex selection info in the UI
      */
     updateVertexSelectionInfo() {
@@ -2681,6 +2802,7 @@ class PolygonEditor {
         this.uiController.setSplitEnabled(canSplit);
         this.uiController.setOsmSplitEnabled(canOsmSplit);
         this.uiController.setDeletePolygonEnabled(canSplit);
+        this.uiController.setGridSplitEnabled(canSplit);
 
         // Disable regenerate if selection changes (unless exactly 1 polygon selected)
         if (!canSplit) {

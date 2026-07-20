@@ -13,6 +13,7 @@ class UIController {
             redoBtn: document.getElementById('redoBtn'),
             combineBtn: document.getElementById('combineBtn'),
             splitBtn: document.getElementById('splitBtn'),
+            gridSplitBtn: document.getElementById('gridSplitBtn'),
             splitByOsmBtn: document.getElementById('splitByOsmBtn'),
             deletePolygonBtn: document.getElementById('deletePolygonBtn'),
             regenerateBtn: document.getElementById('regenerateBtn'),
@@ -409,6 +410,21 @@ class UIController {
             this.elements.splitBtn.title = 'Select exactly 1 polygon to split';
         } else {
             this.elements.splitBtn.title = 'Split selected polygon into districts';
+        }
+    }
+
+    /**
+     * Enable or disable the Grid Split button
+     * @param {boolean} enabled - Whether to enable the grid split button
+     */
+    setGridSplitEnabled(enabled) {
+        if (!this.elements.gridSplitBtn) return;
+
+        this.elements.gridSplitBtn.disabled = !enabled;
+        if (!enabled) {
+            this.elements.gridSplitBtn.title = 'Select exactly 1 polygon to grid-split';
+        } else {
+            this.elements.gridSplitBtn.title = 'Split selected polygon into a Cols x Rows grid (G)';
         }
     }
 

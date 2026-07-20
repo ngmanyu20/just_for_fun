@@ -449,6 +449,7 @@
             displayCountyInfo.innerHTML = `
                 <table class="info-table">
                     <tr><td>County</td><td>${countyName}</td></tr>
+                    <tr><td>No. of Polygons</td><td>${countyPolygons.length}</td></tr>
                     <tr><td>Area</td><td>${fmt(totalAreaKm2)} km²</td></tr>
                     <tr><td>${popRowLabel}</td><td>${Math.round(totalPop).toLocaleString()}</td></tr>
                     <tr><td>${densRowLabel}</td><td>${fmt(popDensity, 2)} /km²</td></tr>

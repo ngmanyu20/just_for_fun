@@ -20,7 +20,12 @@ class AdjacencyGraph {
     }
 
     /**
-     * Build adjacency list for all polygons
+     * Build adjacency list for all polygons.
+     * Uses a bounding-box spatial grid to skip pairs that can't possibly share a
+     * boundary (their boxes don't overlap within tolerance), cutting the naive
+     * O(n²) pair scan down to roughly O(n) for typical geographic layouts, without
+     * changing which pairs are ultimately found adjacent — the edge-overlap test
+     * (calculateSharedBoundaryLength) is unchanged.
      * @param {Array<Object>} polygons - Array of polygon objects with rings
      * @returns {Object} - Adjacency list mapping polygon IDs to neighbor IDs
      */
@@ -32,19 +37,72 @@ class AdjacencyGraph {
             this.adjacencyList[polygon.id] = new Set();
         });
 
-        // Compare each pair of polygons
-        for (let i = 0; i < polygons.length; i++) {
-            for (let j = i + 1; j < polygons.length; j++) {
-                const poly1 = polygons[i];
-                const poly2 = polygons[j];
+        if (polygons.length === 0) {
+            return this.adjacencyList;
+        }
 
-                // Check if these polygons share a boundary
-                const sharedLength = this.calculateSharedBoundaryLength(poly1, poly2);
+        // Compute per-polygon bounding boxes once
+        const bounds = polygons.map(p => this.getPolygonBounds(p));
 
-                if (sharedLength > this.lengthTolerance) {
-                    // They are adjacent
-                    this.adjacencyList[poly1.id].add(poly2.id);
-                    this.adjacencyList[poly2.id].add(poly1.id);
+        // Overall extent (only over polygons with finite/valid bounds)
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        bounds.forEach(b => {
+            if (!b) return;
+            minX = Math.min(minX, b.minX);
+            minY = Math.min(minY, b.minY);
+            maxX = Math.max(maxX, b.maxX);
+            maxY = Math.max(maxY, b.maxY);
+        });
+
+        if (!isFinite(minX)) {
+            // No polygon had any vertices — nothing can be adjacent
+            return this.adjacencyList;
+        }
+
+        const width = Math.max(maxX - minX, this.tolerance);
+        const height = Math.max(maxY - minY, this.tolerance);
+
+        // Aim for roughly one polygon per cell on average
+        const cellSize = Math.max(Math.sqrt((width * height) / polygons.length), this.tolerance * 4);
+
+        // Bucket every polygon into the grid cells its (tolerance-padded) bbox touches
+        const grid = new Map(); // "cx,cy" -> array of polygon indices
+        bounds.forEach((b, i) => {
+            if (!b) return;
+            const minCx = Math.floor((b.minX - this.tolerance - minX) / cellSize);
+            const maxCx = Math.floor((b.maxX + this.tolerance - minX) / cellSize);
+            const minCy = Math.floor((b.minY - this.tolerance - minY) / cellSize);
+            const maxCy = Math.floor((b.maxY + this.tolerance - minY) / cellSize);
+
+            for (let cx = minCx; cx <= maxCx; cx++) {
+                for (let cy = minCy; cy <= maxCy; cy++) {
+                    const key = `${cx},${cy}`;
+                    let bucket = grid.get(key);
+                    if (!bucket) { bucket = []; grid.set(key, bucket); }
+                    bucket.push(i);
+                }
+            }
+        });
+
+        // Test each candidate pair once (a polygon can appear in multiple shared
+        // cells if its bbox spans more than one, so dedupe with a tested-pairs set)
+        const tested = new Set();
+        for (const bucket of grid.values()) {
+            for (let a = 0; a < bucket.length; a++) {
+                for (let b = a + 1; b < bucket.length; b++) {
+                    const i = bucket[a], j = bucket[b];
+                    const pairKey = i < j ? `${i}_${j}` : `${j}_${i}`;
+                    if (tested.has(pairKey)) continue;
+                    tested.add(pairKey);
+
+                    const poly1 = polygons[i];
+                    const poly2 = polygons[j];
+                    const sharedLength = this.calculateSharedBoundaryLength(poly1, poly2);
+
+                    if (sharedLength > this.lengthTolerance) {
+                        this.adjacencyList[poly1.id].add(poly2.id);
+                        this.adjacencyList[poly2.id].add(poly1.id);
+                    }
                 }
             }
         }
@@ -57,6 +115,28 @@ class AdjacencyGraph {
 
         this.adjacencyList = result;
         return this.adjacencyList;
+    }
+
+    /**
+     * Compute the axis-aligned bounding box of a polygon's vertices.
+     * @param {Object} polygon - Polygon object with rings
+     * @returns {{minX:number,minY:number,maxX:number,maxY:number}|null} - Bounds, or null if the polygon has no vertices
+     */
+    getPolygonBounds(polygon) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let found = false;
+
+        polygon.rings.forEach(ring => {
+            ring.forEach(pt => {
+                found = true;
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+            });
+        });
+
+        return found ? { minX, minY, maxX, maxY } : null;
     }
 
     /**
