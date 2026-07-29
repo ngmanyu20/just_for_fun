@@ -1,0 +1,104 @@
+Region,Type,Key,Cluster_Name,Description,S,A1,A2,B1,B2,C1,C2,D1,D2,E1,E2,F1,F2,TECH,GAME,UNI
+Capital,Inner City,0,Westminster,"Westminster/Knightsbridge-style elite core dominated by Prestige zones with high-managerial and academic support, many S",45,18,6,7,0,7,6,2,1,2,2,2,2,0,0,0
+Capital,Inner City,1,Posh,"Rich People (Fewer S, More in A1, C1, C2)",6,45,6,10,0,10,8,5,2,2,2,2,2,0,0,0
+Capital,Inner City,2,Professional,"People With Professioncy, which has very high B1, some C1, C2,D2) few A1 and others",2,4,2,58,0,8,8,5,6,2,2,2,1,0,0,0
+Capital,Inner City,3,Middle_Class,"Middle Class, (High proportion of C1, C2, then B1, D1)",1,2,2,8,0,34,29,10,3,4,2,3,2,0,0,0
+Capital,Inner City,4,Average,Average people with D1 highest and other evenly dist,3,5,5,7,0,10,10,22,8,8,8,8,6,0,0,0
+Capital,Inner City,5,Creative_Rich,"artistic with most E1 with higher C, D",1,3,5,4,0,9,9,11,4,37,7,7,3,0,0,0
+Capital,Inner City,6,Creative_Poor,"artistic with most E2 with higher D2, E, F",0,0,7,0,0,2,2,7,12,42,14,10,4,0,0,0
+Capital,Inner City,7,Grassroot,"Stable skilled-trade and admin community (Bermondsey pre-gentrification style), highest is D2, E2",0,1,2,3,0,4,4,9,22,9,28,14,4,0,0,0
+Capital,Inner City,8,Deprived,"Recent-migrant and low-wage arrival zone (parts of Tower Hamlets style), mostly F1",0,0,1,2,0,4,2,12,6,10,8,10,45,0,0,0
+Capital,Inner City,9,Estate,"Flatted post-war social housing estate, high deprivation concentration (F2)",0,0,1,1,0,2,2,8,3,6,3,22,52,0,0,0
+Capital,Inner City,U,University,"Bloomsbury-style campus-anchored zone with academic staff and low-income residual population (with highest UNI, then some B1, A1 and few C and D1)",0,5,3,18,0,5,3,3,1,2,0,0,0,0,0,60
+Capital,Outer City,2,Professional,"People With Professioncy, which has very high B1, some C1, C2,D2) few A1 and others",0,3,3,55,0,8,8,7,8,3,2,2,1,0,0,0
+Capital,Outer City,3,Middle_Class,"Middle Class, (High proportion of C1, C2, then B1, D1)",0,2,2,8,0,34,26,13,3,3,2,5,2,0,0,0
+Capital,Outer City,4,Average,Average people with D1 highest and other evenly dist,0,4,4,6,0,9,9,27,7,7,7,10,10,0,0,0
+Capital,Outer City,5,Creative_Rich,"artistic with most E1 with higher C, D",0,1,4,3,0,8,9,12,4,38,8,9,4,0,0,0
+Capital,Outer City,6,Creative_Poor,"artistic with most E2 with higher D2, E, F",0,1,2,0,0,3,3,8,14,40,11,14,4,0,0,0
+Capital,Outer City,7,Grassroot,"Stable skilled-trade and admin community (Bermondsey pre-gentrification style), highest is D2, E2",0,1,7,0,0,3,2,7,29,4,26,17,4,0,0,0
+Capital,Outer City,8,Deprived,"Recent-migrant and low-wage arrival zone (parts of Tower Hamlets style), mostly F1",0,0,6,0,0,4,1,4,4,6,4,41,30,0,0,0
+Capital,Outer City,9,Estate,"Flatted post-war social housing estate, high deprivation concentration (F2)",0,0,0,0,0,3,0,7,4,5,3,24,54,0,0,0
+Capital,Outer City,U,University,"Bloomsbury-style campus-anchored zone with academic staff and low-income residual population (with highest UNI, then some B1, A1 and few C and D1)",0,4,2,19,0,4,2,4,1,2,0,2,0,0,0,60
+Capital,Rural,1,Prosperous,"Rural Prosperous (A1) tier - landowners, estate directors, affluent retirees. Rural has no S/A2/B1/C2/E1/E2/F2/UNI zone-types per Community_matrix, so only A1/C1/D1/D2/F1 are populated.",0,70,0,0,0,15,0,10,3,0,0,2,0,0,0,0
+Capital,Rural,2,New_Build_Family,"Rural New-Build Family (C1) tier - commuter-belt dual-income households, car-dependent per OAC rural pen portrait.",0,15,0,0,0,55,0,20,8,0,0,2,0,0,0,0
+Capital,Rural,3,Mixed_Estate,"Rural Mixed (D1) tier - estate workers and self-employed rural trades, OAC Rural & Outlying Areas.",0,5,0,0,0,20,0,50,20,0,0,5,0,0,0,0
+Capital,Rural,4,Agricultural,"Rural Agricultural (D2) tier - farm and land-management labour, owner-occupied but rural hidden poverty per IMD.",0,2,0,0,0,8,0,20,60,0,0,10,0,0,0,0
+Capital,Rural,5,Rural_Deprived,"Rural Deprived (F1) tier - post-industrial rural hardship (Welsh valleys / Durham pit village style), employment + health deprivation.",0,0,0,0,0,2,0,8,20,0,0,70,0,0,0,0
+Capital,Suburb,1,Affluent,"Suburb Prosperous (A1) tier - OAC Retired Professionals, high asset ownership. Suburb has no S/A2/D1/D2/E1/F2/TECH/GAME zone-types per Community_matrix.",0,66,0,18,0,8,5,0,0,0,2,1,0,0,0,0
+Capital,Suburb,2,Academic_Professional,"Suburb Academic (B1) tier - university-adjacent professional suburb, elevated civic/political engagement.",0,10,0,55,0,20,10,0,0,0,3,2,0,0,0,0
+Capital,Suburb,3,Middle_Class,"Suburb Professional/Middle Class (C1+C2) tier - established owner-occupier suburban belt, dual income new-build estates.",0,5,0,10,0,40,35,0,0,0,7,3,0,0,0,0
+Capital,Suburb,4,Grassroot,"Suburb Grassroots (E2) tier - suburban trade and self-employment zone, skilled trade NS-SEC L8-L11 elevated.",0,2,0,3,0,15,15,0,0,0,55,10,0,0,0,0
+Capital,Suburb,5,Deprived,"Suburb Deprived (F1) tier - pockets of suburban deprivation, smallest tier in the Region per Community_matrix.",0,0,0,1,0,8,6,0,0,0,25,60,0,0,0,0
+Capital,Town,1,Professional,"Town Professional (C1) tier - market-town professional base, teachers/nurses/council anchored, ASG AB above national average.",0,0,0,0,10,60,20,0,6,0,0,4,0,0,0,0
+Capital,Town,2,Middle_Class,Town Middle Class (C2) tier - coastal/market-town retirees and working-age service economy support.,0,0,0,0,15,20,55,0,7,0,0,3,0,0,0,0
+Capital,Town,3,Average,"Town Mixed New Town (B2) tier - planned mixed-income new town, balanced NS-SEC spread by design.",0,0,0,0,45,15,15,0,17,0,0,8,0,0,0,0
+Capital,Town,4,Working_Class,Town Working-Class (D2) tier - manufacturing/trade original base of the market town.,0,0,0,0,15,5,8,0,60,0,0,12,0,0,0,0
+Capital,Town,5,Deprived,"Town Deprived (F1) tier - coastal-town style deprivation, IMD 2025 coastal towns among most deprived LSOAs.",0,0,0,0,8,2,3,0,22,0,0,65,0,0,0,0
+Lowland,Inner City,1,Posh,"Birmingham-style affluent inner core - no Prestige(S) zone-type exists in Lowland per Community_matrix, so peak is A1 not S, and far less concentrated than Capital's Posh (A1=31 vs 41 in source Prosperous/A1 row).",0,34,6,9,0,12,12,9,4,4,4,4,2,0,0,0
+Lowland,Inner City,2,Professional,"Academic/professional inner zone - Lowland Academic/B1 source row peaks at only 28% (vs Capital's 50%), reflecting a much less specialised professional-elite cluster.",0,4,4,38,0,13,13,7,7,5,4,4,1,0,0,0
+Lowland,Inner City,3,Middle_Class,"Established C1/C2 inner belt, broader and flatter than Capital's equivalent.",0,2,2,8,0,31,29,11,3,5,2,5,2,0,0,0
+Lowland,Inner City,4,Average,"D1-anchored but flatter than Capital - Lowland Stable Family/D1 source row peaks at 46% vs Capital's 58%, so spread is wider across other codes.",0,4,5,6,0,11,11,20,9,9,9,9,7,0,0,0
+Lowland,Inner City,5,Creative_Rich,"Artistic E1-led zone with elevated C/D support, toned down from Capital's peak per general Lowland flattening.",0,2,5,4,0,9,9,12,5,34,8,9,3,0,0,0
+Lowland,Inner City,6,Creative_Poor,"E2-led creative-fringe poverty zone - Lowland Grassroots/E2 source row shows E1=46% (even higher than Capital's 41%), so E1 crossover is boosted here.",0,1,2,2,0,4,4,7,13,17,36,11,3,0,0,0
+Lowland,Inner City,7,Grassroot,"D2/E2 co-dominant working zone, F1 crossover boosted vs Capital reflecting Lowland's generally higher deprivation-adjacent baseline.",0,1,2,3,0,4,3,8,21,8,28,18,4,0,0,0
+Lowland,Inner City,8,Deprived,"F1-dominant deprived inner zone, F2 crossover raised - Lowland deprivation rows consistently carry more F2 (Locals) than Capital's.",0,0,1,2,0,3,2,8,5,8,6,47,18,0,0,0
+Lowland,Inner City,9,Estate,F2-dominant post-war estate zone with a heavier F1 tail than Capital - Lowland Social Estate/F2 source row hits F1=64% (vs Capital's 45-61%).,0,0,1,1,0,2,1,5,2,4,2,29,53,0,0,0
+Lowland,Inner City,U,University,"Campus-anchored UNI zone, same structure as Capital's tier.",0,5,3,15,0,6,3,4,2,3,0,2,0,0,0,57
+Lowland,Outer City,2,Professional,"Outer academic/professional zone, flattened to match Lowland Outer Academic/B1 source row (B1=28%, vs Capital's 46%).",0,3,3,35,0,14,15,8,9,5,4,3,1,0,0,0
+Lowland,Outer City,3,Middle_Class,"Outer C1/C2 middle-class belt, broader spread than Capital equivalent.",0,2,2,8,0,30,25,14,3,4,3,6,3,0,0,0
+Lowland,Outer City,4,Average,"D1-anchored but flatter - Lowland Outer Stable Family/D1 source row peaks at 44% vs Capital's varies, with wider secondary spread.",0,3,4,6,0,9,9,22,8,8,8,11,12,0,0,0
+Lowland,Outer City,5,Creative_Rich,Outer artistic E1-led zone with C/D support.,0,1,4,4,0,8,9,12,5,32,8,12,5,0,0,0
+Lowland,Outer City,6,Creative_Poor,"Outer E2-led creative-fringe poverty zone, E1 crossover boosted per Lowland Outer Grassroots/E2 source row (E1=44%).",0,1,2,2,0,3,3,8,13,16,34,13,5,0,0,0
+Lowland,Outer City,7,Grassroot,Outer D2/E2 co-dominant working zone.,0,1,1,2,0,4,3,8,22,7,26,19,7,0,0,0
+Lowland,Outer City,8,Deprived,"Outer F1-dominant zone, F2 crossover raised vs Capital.",0,0,1,1,0,3,1,6,4,5,4,53,22,0,0,0
+Lowland,Outer City,9,Estate,Outer F2-dominant estate zone with heavy F1 tail - Lowland Outer Social Estate/F2 source row hits F1=61%.,0,0,1,1,0,2,1,4,2,3,2,30,54,0,0,0
+Lowland,Outer City,U,University,Outer campus-anchored UNI zone.,0,3,3,18,0,4,2,4,1,2,0,3,0,0,0,60
+Lowland,Rural,1,Prosperous,"Rural top tier, sharply toned down from Capital - Lowland Rural Prosperous/A1 source row peaks at only 16% (vs Capital's 17-41 range across regions), so no landed-gentry-scale concentration exists here. Only A1/C1/D1/D2/F1 zone-types exist in Rural per Community_matrix.",0,49,0,0,0,20,0,15,8,0,0,8,0,0,0,0
+Lowland,Rural,2,New_Build_Family,"Rural commuter-belt tier, C1-dominant.",0,10,0,0,0,45,0,22,12,0,0,11,0,0,0,0
+Lowland,Rural,3,Mixed_Estate,"Rural estate-worker/mixed tier, D1-dominant.",0,3,0,0,0,15,0,45,25,0,0,12,0,0,0,0
+Lowland,Rural,4,Agricultural,"Rural farm-labour tier, D2-dominant, F1 raised vs Capital reflecting rural hidden poverty pattern in Lowland source rows.",0,1,0,0,0,6,0,18,55,0,0,20,0,0,0,0
+Lowland,Rural,5,Rural_Deprived,"Rural bottom tier - deliberately pushed harder than Capital's equivalent to reflect the East-UK-style rural deprivation pattern: Lowland Rural Deprived/F1 source row already hits F2=47% and F1=32%, well above Capital's F2=32%/F1=32%.",0,0,0,0,0,1,0,6,15,0,0,78,0,0,0,0
+Lowland,Suburb,1,Affluent,"Suburb top tier, toned down - Lowland Suburb Prosperous/A1 source row peaks at only 20% (vs Capital's 20-55 range), so far less concentrated than Capital's Affluent tier. Only A1/B1/C1/C2/E2/F1 zone-types exist in Suburb per Community_matrix (UNI dropped as off-axis specialty, matching Capital convention).",0,48,0,14,0,14,11,0,0,0,8,5,0,0,0,0
+Lowland,Suburb,2,Academic_Professional,"Suburb academic tier, flattened - Lowland Suburb Academic/B1 source row peaks at 28% (vs Capital's 55%).",0,7,0,50,0,19,12,0,0,0,8,4,0,0,0,0
+Lowland,Suburb,3,Middle_Class,Suburb C1/C2 middle-class tier.,0,4,0,8,0,38,33,0,0,0,11,6,0,0,0,0
+Lowland,Suburb,4,Grassroot,Suburb E2-dominant trade/self-employment tier.,0,2,0,3,0,13,13,0,0,0,52,17,0,0,0,0
+Lowland,Suburb,5,Deprived,"Suburb bottom tier, F1-dominant.",0,0,0,1,0,6,5,0,0,0,23,65,0,0,0,0
+Lowland,Town,1,Professional,"Town top tier, C1-dominant but flatter than Capital - Lowland Town Professional/C1 source row peaks at 20% (vs Capital's 18). Only B2/C1/C2/D2/F1 zone-types used (E1 Mixed Rural Town dropped as off-axis specialty, matching Capital convention).",0,0,0,0,12,48,22,0,8,0,0,10,0,0,0,0
+Lowland,Town,2,Middle_Class,Town C2-dominant middle tier.,0,0,0,0,16,22,44,0,9,0,0,9,0,0,0,0
+Lowland,Town,3,Average,"Town balanced/planned tier, B2-anchored, slightly flatter than Capital's Average.",0,0,0,0,38,16,16,0,19,0,0,11,0,0,0,0
+Lowland,Town,4,Working_Class,Town D2-dominant working tier.,0,0,0,0,13,6,8,0,58,0,0,15,0,0,0,0
+Lowland,Town,5,Deprived,"Town bottom tier, F1-dominant - kept strongly deprived per the East-UK coastal/market-town deprivation pattern (Lowland Town Deprived/F1 source row F1=46%, F2=25%).",0,0,0,0,6,2,3,0,19,0,0,70,0,0,0,0
+Highland,Inner City,0,Westminster,"Westminster/Knightsbridge-style elite core dominated by Prestige zones with high-managerial and academic support, many S",65,12,4,4,0,4,3,1,1,1,1,2,2,0,0,0
+Highland,Inner City,1,Posh,"Rich People (Fewer S, More in A1, C1, C2)",6,45,6,10,0,10,8,5,2,2,2,2,2,0,0,0
+Highland,Inner City,2,Professional,"People With Professioncy, which has very high B1, some C1, C2,D2) few A1 and others",3,5,3,45,0,10,10,6,8,3,3,3,1,0,0,0
+Highland,Inner City,3,Middle_Class,"Middle Class, (High proportion of C1, C2, then B1, D1)",1,2,2,8,0,34,29,10,3,4,2,3,2,0,0,0
+Highland,Inner City,4,Average,Average people with D1 highest and other evenly dist,3,5,5,7,0,10,10,22,8,8,8,8,6,0,0,0
+Highland,Inner City,5,Creative_Rich,"artistic with most E1 with higher C, D",1,3,5,4,0,9,9,11,4,37,7,7,3,0,0,0
+Highland,Inner City,6,Creative_Poor,"artistic with most E2 with higher D2, E, F",0,0,7,0,0,2,2,7,12,42,14,10,4,0,0,0
+Highland,Inner City,7,Grassroot,"Stable skilled-trade and admin community (Bermondsey pre-gentrification style), highest is D2, E2",0,1,2,3,0,4,4,9,22,9,28,14,4,0,0,0
+Highland,Inner City,8,Deprived,"Recent-migrant and low-wage arrival zone (parts of Tower Hamlets style), mostly F1",0,0,1,2,0,4,2,12,6,10,8,10,45,0,0,0
+Highland,Inner City,9,Estate,"Flatted post-war social housing estate, high deprivation concentration (F2)",0,0,1,1,0,2,2,8,3,6,3,22,52,0,0,0
+Highland,Outer City,2,Professional,"People With Professioncy, which has very high B1, some C1, C2,D2) few A1 and others",0,3,3,55,0,8,8,7,8,3,2,2,1,0,0,0
+Highland,Outer City,3,Middle_Class,"Middle Class, (High proportion of C1, C2, then B1, D1)",0,2,2,8,0,34,26,13,3,3,2,5,2,0,0,0
+Highland,Outer City,4,Average,Average people with D1 highest and other evenly dist,0,4,4,6,0,9,9,27,7,7,7,10,10,0,0,0
+Highland,Outer City,5,Creative_Rich,"artistic with most E1 with higher C, D",0,1,4,3,0,8,9,12,4,38,8,9,4,0,0,0
+Highland,Outer City,6,Creative_Poor,"artistic with most E2 with higher D2, E, F",0,1,2,0,0,3,3,8,14,40,11,14,4,0,0,0
+Highland,Outer City,7,Grassroot,"Stable skilled-trade and admin community (Bermondsey pre-gentrification style), highest is D2, E2",0,1,7,0,0,3,2,7,29,4,26,17,4,0,0,0
+Highland,Outer City,8,Deprived,"Recent-migrant and low-wage arrival zone (parts of Tower Hamlets style), mostly F1",0,0,6,0,0,4,1,4,4,6,4,41,30,0,0,0
+Highland,Outer City,9,Estate,"Flatted post-war social housing estate, high deprivation concentration (F2)",0,0,0,0,0,3,0,7,4,5,3,24,54,0,0,0
+Highland,Outer City,U,University,"Bloomsbury-style campus-anchored zone with academic staff and low-income residual population (with highest UNI, then some B1, A1 and few C and D1)",0,4,2,19,0,4,2,4,1,2,0,2,0,0,0,60
+Highland,Rural,1,Prosperous,"Rural Prosperous (A1) tier - landowners, estate directors, affluent retirees. Rural has no S/A2/B1/C2/E1/E2/F2/UNI zone-types per Community_matrix, so only A1/C1/D1/D2/F1 are populated.",0,70,0,0,0,15,0,10,3,0,0,2,0,0,0,0
+Highland,Rural,2,New_Build_Family,"Rural New-Build Family (C1) tier - commuter-belt dual-income households, car-dependent per OAC rural pen portrait.",0,15,0,0,0,55,0,20,8,0,0,2,0,0,0,0
+Highland,Rural,3,Mixed_Estate,"Rural Mixed (D1) tier - estate workers and self-employed rural trades, OAC Rural & Outlying Areas.",0,5,0,0,0,20,0,50,20,0,0,5,0,0,0,0
+Highland,Rural,4,Agricultural,"Rural Agricultural (D2) tier - farm and land-management labour, owner-occupied but rural hidden poverty per IMD.",0,2,0,0,0,8,0,20,60,0,0,10,0,0,0,0
+Highland,Rural,5,Rural_Deprived,"Rural Deprived (F1) tier - post-industrial rural hardship (Welsh valleys / Durham pit village style), employment + health deprivation.",0,0,0,0,0,2,0,8,20,0,0,70,0,0,0,0
+Highland,Suburb,1,Affluent,"Suburb Prosperous (A1) tier - OAC Retired Professionals, high asset ownership. Suburb has no S/A2/D1/D2/E1/F2/TECH/GAME zone-types per Community_matrix.",0,66,0,18,0,8,5,0,0,0,2,1,0,0,0,0
+Highland,Suburb,2,Academic_Professional,"Suburb Academic (B1) tier - university-adjacent professional suburb, elevated civic/political engagement.",0,10,0,55,0,20,10,0,0,0,3,2,0,0,0,0
+Highland,Suburb,3,Middle_Class,"Suburb Professional/Middle Class (C1+C2) tier - established owner-occupier suburban belt, dual income new-build estates.",0,5,0,10,0,40,35,0,0,0,7,3,0,0,0,0
+Highland,Suburb,4,Grassroot,"Suburb Grassroots (E2) tier - suburban trade and self-employment zone, skilled trade NS-SEC L8-L11 elevated.",0,2,0,3,0,15,15,0,0,0,55,10,0,0,0,0
+Highland,Suburb,5,Deprived,"Suburb Deprived (F1) tier - pockets of suburban deprivation, smallest tier in the Region per Community_matrix.",0,0,0,1,0,8,6,0,0,0,25,60,0,0,0,0
+Highland,Town,1,Professional,"Town Professional (C1) tier - market-town professional base, teachers/nurses/council anchored, ASG AB above national average.",0,0,0,0,10,60,20,0,6,0,0,4,0,0,0,0
+Highland,Town,2,Middle_Class,Town Middle Class (C2) tier - coastal/market-town retirees and working-age service economy support.,0,0,0,0,15,20,55,0,7,0,0,3,0,0,0,0
+Highland,Town,3,Average,"Town Mixed New Town (B2) tier - planned mixed-income new town, balanced NS-SEC spread by design.",0,0,0,0,45,15,15,0,17,0,0,8,0,0,0,0
+Highland,Town,4,Working_Class,Town Working-Class (D2) tier - manufacturing/trade original base of the market town.,0,0,0,0,15,5,8,0,60,0,0,12,0,0,0,0
+Highland,Town,5,Deprived,"Town Deprived (F1) tier - coastal-town style deprivation, IMD 2025 coastal towns among most deprived LSOAs.",0,0,0,0,8,2,3,0,22,0,0,65,0,0,0,0

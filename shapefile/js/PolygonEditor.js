@@ -75,6 +75,10 @@ class PolygonEditor {
 
         this._pendingDensityPolygonIndex = null;
 
+        // Region/Zone display filter: null = show all, Set<string> = show only polygons
+        // whose Zone value is in the set (Region checkboxes cascade to their Zone children)
+        this.zoneFilter = null;
+
         // Initialize the application
         this.initialize();
     }
@@ -362,17 +366,31 @@ class PolygonEditor {
             e.stopPropagation();
             e.stopImmediatePropagation();
 
-            // Redistricting mode: C manages ward create/confirm/edit
-            if (window.AppMode && window.AppMode.current === 'redistricting' && window.WardManager) {
-                if (!window.WardManager.isCreateMode()) {
-                    // C pressed outside create mode: open create panel (or edit selected ward)
-                    window.WardManager.activateCKey();
-                } else {
-                    // C pressed in create mode: confirm the current ward
-                    document.getElementById('wardConfirmBtn')?.click();
+            // Redistricting mode: C manages ward/constituency create/confirm/edit
+            if (window.AppMode && window.AppMode.current === 'redistricting') {
+                const subMode = window.RedistrictSubMode ? window.RedistrictSubMode.current : 'district';
+
+                if (subMode === 'constituency' && window.ConstituencyManager) {
+                    if (!window.ConstituencyManager.isCreateMode()) {
+                        window.ConstituencyManager.activateCKey();
+                    } else {
+                        document.getElementById('constituencyConfirmBtn')?.click();
+                    }
+                    this.keysPressed.clear();
+                    return false;
                 }
-                this.keysPressed.clear();
-                return false;
+
+                if (subMode === 'district' && window.WardManager) {
+                    if (!window.WardManager.isCreateMode()) {
+                        // C pressed outside create mode: open create panel (or edit selected ward)
+                        window.WardManager.activateCKey();
+                    } else {
+                        // C pressed in create mode: confirm the current ward
+                        document.getElementById('wardConfirmBtn')?.click();
+                    }
+                    this.keysPressed.clear();
+                    return false;
+                }
             }
 
             // Density input only in population mode
@@ -493,7 +511,7 @@ class PolygonEditor {
         if (inDistrictTypeMode && editTypeActive && !hasCtrlOrMeta && this.selectedPolygonIndex !== null) {
             // Valid codes per Location — must match exactly what the cluster allows
             const TYPE_CLUSTER = {
-                'Inner City': { S:1, A1:1, A2:1, B1:1, C1:1, C2:1, D1:1, D2:1, E1:1, E2:1, F1:1, F2:1, TECH:1, UNI:1 },
+                'Inner City': { S:1, A1:1, A2:1, B1:1, C1:1, C2:1, D1:1, D2:1, E1:1, E2:1, F1:1, F2:1, TECH:1, UNI:1, GAME:1 },
                 'Outer City': { A1:1, A2:1, B1:1, C1:1, C2:1, D1:1, D2:1, E1:1, E2:1, F1:1, F2:1, UNI:1 },
                 'Rural':      { A1:1, C1:1, D1:1, D2:1, F1:1 },
                 'Suburb':     { A1:1, B1:1, C1:1, C2:1, E2:1, F1:1, UNI:1 },
@@ -506,25 +524,73 @@ class PolygonEditor {
                 return !!(TYPE_CLUSTER[location] && TYPE_CLUSTER[location][code]);
             };
 
-            // Digit 1–6 map to letters A–F with per-polygon cycling:
-            //   not starting with letter → {Letter}1
-            //   {Letter}1               → {Letter}2
-            //   {Letter}2 (or other)    → {Letter}1
+            // Digit 1–6 map to letters A–F. Cycling is cluster-aware: it steps through
+            // only the {Letter}1/{Letter}2 variants that are actually valid for the
+            // polygon's location (e.g. Town only has B2, not B1 — cycling must land on
+            // B2 directly rather than trying the unreachable B1 first).
             const DIGIT_TO_LETTER = { '1':'A', '2':'B', '3':'C', '4':'D', '5':'E', '6':'F' };
 
-            const cycleLetterCode = (currentType, letter) => {
-                if (!currentType || !currentType.toUpperCase().startsWith(letter)) return letter + '1';
-                if (currentType.toUpperCase() === letter + '1') return letter + '2';
-                return letter + '1';
+            const cycleLetterCode = (currentType, letter, location) => {
+                const cluster  = TYPE_CLUSTER[location] || {};
+                const variants = [letter + '1', letter + '2'].filter(code => cluster[code]);
+                if (variants.length === 0) return null; // letter unavailable for this location
+
+                const upper = (currentType || '').toUpperCase();
+                const idx   = variants.indexOf(upper);
+                return idx === -1 ? variants[0] : variants[(idx + 1) % variants.length];
             };
 
             const k = e.key;
+
+            // Swap shortcut: with exactly two polygons selected, S swaps their
+            // County_Type values with each other instead of assigning the literal
+            // "S" code to both. Takes priority over the plain "S" assignment below.
+            if ((k === 's' || k === 'S') && this.selectedPolygonIndices.size === 2) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                const [idxA, idxB] = Array.from(this.selectedPolygonIndices);
+                const polyA = this.polygons[idxA];
+                const polyB = this.polygons[idxB];
+
+                if (polyA && polyB) {
+                    const typeA = polyA.polygonType || '';
+                    const typeB = polyB.polygonType || '';
+
+                    if (!isValidForLocation(typeB, polyA.location) || !isValidForLocation(typeA, polyB.location)) {
+                        this.uiController.showError('Swap rejected: resulting type is not valid for one polygon\'s Location');
+                    } else {
+                        polyA.polygonType = typeB;
+                        polyB.polygonType = typeA;
+
+                        if (this.dataManager.originalData) {
+                            if (this.dataManager.originalData[polyA.rowIndex] !== undefined) {
+                                this.dataManager.originalData[polyA.rowIndex].County_Type = typeB;
+                            }
+                            if (this.dataManager.originalData[polyB.rowIndex] !== undefined) {
+                                this.dataManager.originalData[polyB.rowIndex].County_Type = typeA;
+                            }
+                        }
+
+                        this.historyManager.saveToHistory(this.polygons, `Type swapped: ${polyA.id} ↔ ${polyB.id}`);
+                        this.updateUndoRedoButtons();
+                        this.draw();
+                        this.updatePolygonInfo();
+                    }
+                }
+
+                this.keysPressed.clear();
+                return false;
+            }
+
             let simpleCode  = null;   // same code for all selected polygons
             let cycleLetter = null;   // per-polygon cycle
 
             if      (k === 's' || k === 'S') simpleCode  = 'S';
             else if (k === 'u' || k === 'U') simpleCode  = 'UNI';
             else if (k === 't' || k === 'T') simpleCode  = 'TECH';
+            else if (k === 'g' || k === 'G') simpleCode  = 'GAME';
             else if (k === '0')              simpleCode  = '';
             else if (k in DIGIT_TO_LETTER)   cycleLetter = DIGIT_TO_LETTER[k];
 
@@ -542,8 +608,10 @@ class PolygonEditor {
                     const polygon = this.polygons[idx];
                     if (!polygon) return;
                     const code = cycleLetter !== null
-                        ? cycleLetterCode(polygon.polygonType || '', cycleLetter)
+                        ? cycleLetterCode(polygon.polygonType || '', cycleLetter, polygon.location)
                         : simpleCode;
+                    // null means the letter has no valid variant for this polygon's location at all
+                    if (code === null) return;
                     // Skip if this code is not valid for the polygon's location
                     if (!isValidForLocation(code, polygon.location)) return;
                     polygon.polygonType = code;
@@ -558,6 +626,51 @@ class PolygonEditor {
                     const label = changed > 1
                         ? `Type changed: ${changed} polygons`
                         : `Type changed: ${this.polygons[indices.find(i => this.polygons[i])]?.id}`;
+                    this.historyManager.saveToHistory(this.polygons, label);
+                    this.updateUndoRedoButtons();
+                    this.draw();
+                    this.updatePolygonInfo();
+                }
+
+                this.keysPressed.clear();
+                return false;
+            }
+        }
+
+        // Cluster shortcuts — only when Edit Clusters button is active AND in districtType mode.
+        // Key -> cluster row is resolved per-polygon via (polygon.region, polygon.location, key)
+        // against Population_Cluster_Proposed.csv (loaded by ClusterDefinitions.js), since the
+        // same Key digit means a different Cluster_Name depending on Region/Type.
+        const editClustersActive = document.getElementById('editClustersBtn')?.classList.contains('active');
+        if (inDistrictTypeMode && editClustersActive && !hasCtrlOrMeta && this.selectedPolygonIndex !== null) {
+            const k = e.key.toUpperCase();
+            if (/^[0-9U]$/.test(k) && window.ClusterDefs) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                const indices = this.selectedPolygonIndices.size > 0
+                    ? Array.from(this.selectedPolygonIndices)
+                    : [this.selectedPolygonIndex];
+
+                let changed = 0;
+                indices.forEach(idx => {
+                    const polygon = this.polygons[idx];
+                    if (!polygon) return;
+                    const match = window.ClusterDefs.find(polygon.region, polygon.location, k);
+                    if (!match) return; // no cluster defined for this polygon's Region/Type/Key combo
+                    polygon.clusters = match.Cluster_Name;
+                    if (this.dataManager.originalData &&
+                            this.dataManager.originalData[polygon.rowIndex] !== undefined) {
+                        this.dataManager.originalData[polygon.rowIndex].Clusters = match.Cluster_Name;
+                    }
+                    changed++;
+                });
+
+                if (changed > 0) {
+                    const label = changed > 1
+                        ? `Cluster assigned: ${changed} polygons`
+                        : `Cluster assigned: ${this.polygons[indices.find(i => this.polygons[i])]?.id}`;
                     this.historyManager.saveToHistory(this.polygons, label);
                     this.updateUndoRedoButtons();
                     this.draw();
@@ -892,8 +1005,17 @@ class PolygonEditor {
                 window.WardManager.loadFromPolygons(this.polygons);
             }
 
-            // Reset any active district filter from a previous load
+            // Reload constituency assignments from CSV data
+            if (window.ConstituencyManager && window.ConstituencyManager.loadFromPolygons) {
+                window.ConstituencyManager.loadFromPolygons(this.polygons);
+            }
+
+            // Reset any active district/zone/electoral-region filter from a previous load
             this.districtFilter = null;
+            this.zoneFilter = null;
+            this.electoralRegionFilter = null;
+            this._zoneBoundaryCache = null;
+            this._zoneBoundaryCachePromise = null;
 
         } catch (error) {
             console.error('Failed to load CSV:', error);
@@ -2497,7 +2619,7 @@ class PolygonEditor {
         // Allow polygon selection in both edit and view modes
         // (View mode needs selection to display polygon info and vertices)
 
-        // In redistricting mode with a district filter, only hit-test visible polygons
+        // In redistricting mode with a district/electoral-region filter, only hit-test visible polygons
         let candidatePolygons = this.polygons;
         let indexMap = null; // maps candidate index → this.polygons index
         if (this.districtFilter && window.AppMode && window.AppMode.current === 'redistricting') {
@@ -2505,6 +2627,16 @@ class PolygonEditor {
             const map = [];
             this.polygons.forEach((p, i) => {
                 if (p.district === this.districtFilter) { filtered.push(p); map.push(i); }
+            });
+            candidatePolygons = filtered;
+            indexMap = map;
+        } else if (this.electoralRegionFilter && window.AppMode && window.AppMode.current === 'redistricting' &&
+                   window.RedistrictSubMode && window.RedistrictSubMode.current === 'constituency') {
+            const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+            const filtered = [];
+            const map = [];
+            this.polygons.forEach((p, i) => {
+                if (regionMap[p.region] === this.electoralRegionFilter) { filtered.push(p); map.push(i); }
             });
             candidatePolygons = filtered;
             indexMap = map;
@@ -2559,7 +2691,7 @@ class PolygonEditor {
         if (idx === null || idx === undefined) return false;
 
         const num = parseFloat(rawValue);
-        if (!Number.isFinite(num) || num < 0 || num > 30000) {
+        if (!Number.isFinite(num) || num < 0 || num > 50000) {
             document.getElementById('densityInputError').style.display = 'block';
             return false;
         }
@@ -2613,7 +2745,7 @@ class PolygonEditor {
             const polygon = this.polygons[idx];
             if (!polygon) return;
             const step    = stepFor(polygon.populationDensity || 0);
-            const newVal  = Math.min(30000, Math.max(0, (polygon.populationDensity || 0) + direction * step));
+            const newVal  = Math.min(50000, Math.max(0, (polygon.populationDensity || 0) + direction * step));
             if (newVal === polygon.populationDensity) return;
 
             polygon.populationDensity = newVal;
@@ -2649,12 +2781,21 @@ class PolygonEditor {
      * @param {number|null} index - Index to select or null for none
      */
     selectPolygon(index) {
-        // In Redistricting mode, handle ward selection — then fall through so
-        // display.html still receives the polygon info via updatePolygonInfo()
-        if (window.AppMode && window.AppMode.current === 'redistricting' &&
-            index !== null && window.WardManager) {
+        // In Redistricting mode, handle ward/constituency selection — then fall through
+        // so display.html still receives the polygon info via updatePolygonInfo()
+        if (window.AppMode && window.AppMode.current === 'redistricting' && index !== null) {
             const polygon = this.polygons[index];
-            if (polygon) {
+            const subMode = window.RedistrictSubMode ? window.RedistrictSubMode.current : 'district';
+            if (polygon && subMode === 'constituency' && window.ConstituencyManager) {
+                // In Constituency sub-mode this.polygons holds the merged county units,
+                // so polygon.id is the county name.
+                if (window.ConstituencyManager.isCreateMode()) {
+                    window.ConstituencyManager.togglePolygon(polygon.id);
+                } else {
+                    window.ConstituencyManager.selectByCounty(polygon.id);
+                }
+                // fall through — do NOT return; normal selection updates display.html
+            } else if (polygon && subMode === 'district' && window.WardManager) {
                 if (window.WardManager.isCreateMode()) {
                     window.WardManager.togglePolygon(polygon.id);
                 } else {
@@ -2739,14 +2880,23 @@ class PolygonEditor {
         // Convert lasso to data coordinates
         const lassoData = screenPath.map(p => this.geometryOps.screenToData(p.x, p.y));
 
-        // In redistricting create mode, delegate toggling to WardManager
+        // In redistricting create mode, delegate toggling to WardManager / ConstituencyManager
+        const redistrictSubMode = window.RedistrictSubMode ? window.RedistrictSubMode.current : 'district';
         const isRedistrictingCreate = window.AppMode && window.AppMode.current === 'redistricting' &&
+            redistrictSubMode === 'district' &&
             window.WardManager && window.WardManager.isCreateMode();
+        const isConstituencyCreate = window.AppMode && window.AppMode.current === 'redistricting' &&
+            redistrictSubMode === 'constituency' &&
+            window.ConstituencyManager && window.ConstituencyManager.isCreateMode();
 
-        // In redistricting mode restrict candidates to the active district (mirrors handlePolygonSelection)
+        // In redistricting mode restrict candidates to the active district / electoral region
+        // (mirrors handlePolygonSelection)
         let candidates = this.polygons.map((polygon, index) => ({ polygon, index }));
         if (isRedistrictingCreate && this.districtFilter) {
             candidates = candidates.filter(({ polygon }) => polygon.district === this.districtFilter);
+        } else if (isConstituencyCreate && this.electoralRegionFilter) {
+            const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+            candidates = candidates.filter(({ polygon }) => regionMap[polygon.region] === this.electoralRegionFilter);
         }
 
         let found = 0;
@@ -2755,7 +2905,9 @@ class PolygonEditor {
             const ring = polygon.rings[0];
 
             const _toggle = () => {
-                if (isRedistrictingCreate) {
+                if (isConstituencyCreate) {
+                    window.ConstituencyManager.togglePolygon(polygon.id);
+                } else if (isRedistrictingCreate) {
                     window.WardManager.togglePolygon(polygon.id);
                 } else {
                     this.togglePolygonSelection(index);
@@ -2901,7 +3053,9 @@ class PolygonEditor {
      */
     async _autoSaveCsvAfterDelete(deletedId) {
         try {
-            const csvContent = this.dataManager.exportToCSV(this.polygons);
+            // Always export the full sub-county (smallest-polygon) dataset — this.polygons can
+            // currently be pointing at the merged County-level array (see exportCSV() for why).
+            const csvContent = this.dataManager.exportToCSV(this.layerManager.layers.subCounty.polygons);
             const filename = window._currentCsvFilename;
 
             if (filename) {
@@ -2965,6 +3119,10 @@ class PolygonEditor {
      * Undo last action
      */
     undo() {
+        if (window.AppMode && (window.AppMode.current === 'population' || window.AppMode.current === 'districtType')) {
+            this.uiController.showError('Undo is disabled in this mode');
+            return;
+        }
         const previousState = this.historyManager.undo();
         if (previousState) {
             // Diff BEFORE replacing this.polygons so the adjacency graph still reflects
@@ -3011,6 +3169,10 @@ class PolygonEditor {
      * Redo next action
      */
     redo() {
+        if (window.AppMode && (window.AppMode.current === 'population' || window.AppMode.current === 'districtType')) {
+            this.uiController.showError('Redo is disabled in this mode');
+            return;
+        }
         const nextState = this.historyManager.redo();
         if (nextState) {
             // Diff BEFORE replacing this.polygons — same reason as in undo().
@@ -3981,7 +4143,12 @@ class PolygonEditor {
      */
     exportCSV() {
         try {
-            const csvContent = this.dataManager.exportToCSV(this.polygons);
+            // Always export the full sub-county (smallest-polygon) dataset. this.polygons is
+            // swapped to the merged County-level array while viewing the County layer — either
+            // via the Edit Polygon mode's Layer buttons, or the Redistricting → Constituency
+            // sub-mode — and exporting that directly would collapse every polygon's detail down
+            // to one row per County.
+            const csvContent = this.dataManager.exportToCSV(this.layerManager.layers.subCounty.polygons);
             this.uiController.downloadCSV(csvContent);
             this.uiController.showSuccess('CSV exported successfully!');
         } catch (error) {
@@ -4363,12 +4530,42 @@ class PolygonEditor {
             visiblePolygons = visiblePolygons.filter(p => p.district === this.districtFilter);
         }
 
+        // Apply Electoral Region filter only while in Redistricting → Constituency sub-mode
+        if (this.electoralRegionFilter && window.AppMode && window.AppMode.current === 'redistricting' &&
+            window.RedistrictSubMode && window.RedistrictSubMode.current === 'constituency') {
+            const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+            visiblePolygons = visiblePolygons.filter(p => regionMap[p.region] === this.electoralRegionFilter);
+        }
+
+        // Apply Region/Zone display filter (all modes)
+        if (this.zoneFilter) {
+            visiblePolygons = visiblePolygons.filter(p => this.zoneFilter.has(p.zone));
+        }
+
+        // this.selectedPolygonIndex / selectedPolygonIndices are indices into the full
+        // this.polygons array. Once a filter above shortens visiblePolygons, those numbers
+        // no longer line up with positions in it — translate by object identity so the
+        // renderer highlights the right polygon instead of whatever sits at that slot.
+        const renderIndexOf = new Map();
+        visiblePolygons.forEach((p, i) => renderIndexOf.set(p, i));
+
+        const selectedPolygon = this.selectedPolygonIndex !== null ? this.polygons[this.selectedPolygonIndex] : null;
+        const renderSelectedIndex = selectedPolygon && renderIndexOf.has(selectedPolygon)
+            ? renderIndexOf.get(selectedPolygon)
+            : null;
+
+        const renderSelectedIndices = new Set();
+        this.selectedPolygonIndices.forEach(idx => {
+            const p = this.polygons[idx];
+            if (p && renderIndexOf.has(p)) renderSelectedIndices.add(renderIndexOf.get(p));
+        });
+
         this.renderer.draw(
             visiblePolygons,
-            this.selectedPolygonIndex,
+            renderSelectedIndex,
             this.isEditMode,
             this.sharedVertices,
-            this.selectedPolygonIndices,  // Pass multi-selection set
+            renderSelectedIndices,  // Pass multi-selection set (translated to render-space)
             this.vertexSelection,  // Pass vertex selection manager
             this.fixedCountyVertices  // Pass fixed county vertices for blue rendering
         );
@@ -4376,9 +4573,16 @@ class PolygonEditor {
         // Draw bold county boundaries in all modes
         this.renderCountyBoundaryOverlay();
 
-        // Draw ward selection highlights in Redistricting mode only
+        // Draw ward / constituency selection highlights in Redistricting mode only
         if (window.AppMode && window.AppMode.current === 'redistricting') {
-            this.renderWardSelectionOverlay();
+            const subMode = window.RedistrictSubMode ? window.RedistrictSubMode.current : 'district';
+            if (subMode === 'constituency') {
+                this.renderConstituencySelectionOverlay();
+                // Thick Zone boundary overlay — illustrates Zone groupings while redistricting
+                this.renderZoneBoundaryOverlay();
+            } else {
+                this.renderWardSelectionOverlay();
+            }
         }
 
         this.renderMeasureOverlay();
@@ -4482,6 +4686,78 @@ class PolygonEditor {
     }
 
     /**
+     * Highlight county units that are in the current constituency draft
+     * (Redistricting → Constituency sub-mode). this.polygons holds the merged
+     * county-level units while this sub-mode is active, so `id` here is a county name.
+     */
+    renderConstituencySelectionOverlay() {
+        if (!window.ConstituencyManager) return;
+
+        const ctx = this.renderer.ctx;
+        const geo = this.geometryOps;
+
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+
+        // Draw saved constituencies (each in their own colour); selected one gets a bolder ring
+        const selectedIds = window.ConstituencyManager.getSelectedCountyIds
+            ? window.ConstituencyManager.getSelectedCountyIds() : null;
+        window.ConstituencyManager.getSavedConstituencies().forEach(constituency => {
+            const hex = constituency.color.hex;
+            const isSelected = selectedIds && constituency.countyNames.some(id => selectedIds.has(id));
+            ctx.fillStyle   = hex + (isSelected ? '55' : '40');
+            ctx.strokeStyle = isSelected ? hex : hex + 'cc';
+            ctx.lineWidth   = isSelected ? 3.5 : 2;
+            if (isSelected) ctx.setLineDash([]);
+            this.polygons
+                .filter(p => constituency.countyNames.includes(p.id))
+                .forEach(p => {
+                    p.rings.forEach(ring => {
+                        if (ring.length < 2) return;
+                        ctx.beginPath();
+                        ring.forEach((pt, i) => {
+                            const s = geo.dataToScreen(pt.x, pt.y);
+                            if (i === 0) ctx.moveTo(s.x, s.y);
+                            else         ctx.lineTo(s.x, s.y);
+                        });
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                });
+        });
+
+        // Draw current draft constituency (in the selected creation colour)
+        const countyIds = window.ConstituencyManager.getCurrentCountyIds();
+        if (countyIds && countyIds.size > 0 && window.ConstituencyManager.isCreateMode()) {
+            const color = window.ConstituencyManager.getCurrentColor();
+            ctx.fillStyle   = color.hex + '40';
+            ctx.strokeStyle = color.hex + 'ee';
+            ctx.lineWidth   = 2.5;
+
+            this.polygons
+                .filter(p => countyIds.has(p.id))
+                .forEach(p => {
+                    p.rings.forEach(ring => {
+                        if (ring.length < 2) return;
+                        ctx.beginPath();
+                        ring.forEach((pt, i) => {
+                            const s = geo.dataToScreen(pt.x, pt.y);
+                            if (i === 0) ctx.moveTo(s.x, s.y);
+                            else         ctx.lineTo(s.x, s.y);
+                        });
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                });
+        }
+
+        ctx.restore();
+    }
+
+    /**
      * Draw bold county boundary outlines as a purely visual overlay.
      * No polygon data is modified — this is a rendering-only effect.
      * When a district filter is active, only draws boundaries for counties
@@ -4500,6 +4776,9 @@ class PolygonEditor {
                     .map(p => p.county)
             );
             visibleCounties = countyPolygons.filter(c => relevantCounties.has(c.county));
+        } else if (this.electoralRegionFilter) {
+            const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+            visibleCounties = countyPolygons.filter(c => regionMap[c.region] === this.electoralRegionFilter);
         }
 
         if (visibleCounties.length === 0) return;
@@ -4519,6 +4798,127 @@ class PolygonEditor {
 
             rings.forEach(ring => {
                 if (ring.length < 2) return;
+                ctx.beginPath();
+                ring.forEach((pt, i) => {
+                    const s = geo.dataToScreen(pt.x, pt.y);
+                    if (i === 0) ctx.moveTo(s.x, s.y);
+                    else         ctx.lineTo(s.x, s.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+            });
+        });
+
+        ctx.restore();
+    }
+
+    /**
+     * Compute the outer boundary of every Zone via the same robust backend merge used for
+     * Counties (/merge-county — genuinely just "unary_union these polygons under this label",
+     * nothing County-specific about it despite the name). Grouped from the RAW sub-county
+     * polygons, not the already county-merged shapes.
+     *
+     * Why not the JS edge-cancellation dissolve (LayerManager.extractOuterBoundary) here: it
+     * only works when every adjacent shape shares byte-identical edge coordinates. That holds
+     * within a single County's own sub-polygons, but breaks down at true T-junctions — a point
+     * where 3+ polygons meet along one border, e.g. one County has a single long edge there
+     * while two neighboring Counties each contribute a shorter edge covering half of it. Those
+     * edges are geometrically the same line but don't share endpoints, so the "shared edges
+     * cancel" trick misses them and leaves them all classified as outer boundary — producing
+     * the dense crosshatch of tiny spurious loops. A real geometric union (Shapely) handles
+     * T-junctions correctly, which is exactly why County boundaries already render cleanly.
+     *
+     * Why not the already county-merged shapes as input: each County is unioned independently,
+     * so two adjacent Counties' shared border can end up with slightly different vertices on
+     * each side even after a proper union — compounding the problem instead of avoiding it.
+     *
+     * Cached (as a promise) since firing ~dozens of merge requests on every draw() call would
+     * be far too slow; invalidated on new CSV load and on entering Constituency mode.
+     */
+    getZoneBoundaryCache() {
+        if (this._zoneBoundaryCache) return this._zoneBoundaryCache;
+
+        if (!this._zoneBoundaryCachePromise) {
+            this._zoneBoundaryCachePromise = this._computeZoneBoundaries().then(cache => {
+                this._zoneBoundaryCachePromise = null;
+                if (cache) {
+                    this._zoneBoundaryCache = cache;
+                    this.draw(); // redraw now that the boundaries are ready
+                }
+                return cache;
+            });
+        }
+        return null; // not ready yet — this frame skips the zone overlay
+    }
+
+    async _computeZoneBoundaries() {
+        const subCountyPolygons = this.layerManager.layers.subCounty.polygons;
+        if (!subCountyPolygons || subCountyPolygons.length === 0) return null;
+
+        const zoneGroups = {};
+        subCountyPolygons.forEach(p => {
+            const z = p.zone;
+            if (!z) return;
+            if (!zoneGroups[z]) zoneGroups[z] = [];
+            zoneGroups[z].push(p);
+        });
+        if (Object.keys(zoneGroups).length === 0) return null;
+
+        const cache = {};
+        await Promise.all(Object.entries(zoneGroups).map(async ([zoneName, polys]) => {
+            if (polys.length === 1) {
+                cache[zoneName] = { loops: polys[0].rings, polygons: polys };
+                return;
+            }
+            try {
+                const polygonWKTs = polys.map(p => ({ geometry: this.dataManager.ringsToWKT(p.rings) }));
+                const response = await fetch(`${this.layerManager.serviceUrl}/merge-county`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ county: zoneName, polygons: polygonWKTs })
+                });
+                if (!response.ok) throw new Error(`merge-county returned ${response.status}`);
+                const merged = await response.json();
+                const parts = merged.parts || [{ exterior: merged.exterior, holes: merged.holes || [] }];
+                cache[zoneName] = {
+                    loops: parts.map(p => p.exterior.map(([x, y]) => ({ x, y }))),
+                    polygons: polys
+                };
+            } catch (err) {
+                console.warn(`Zone boundary merge failed for "${zoneName}", falling back to edge-cancellation:`, err);
+                cache[zoneName] = { loops: this.layerManager.extractOuterBoundary(polys), polygons: polys };
+            }
+        }));
+
+        return cache;
+    }
+
+    /**
+     * Draw extra-thick Zone boundary outlines — Redistricting → Constituency sub-mode only.
+     */
+    renderZoneBoundaryOverlay() {
+        const cache = this.getZoneBoundaryCache();
+        if (!cache) return;
+
+        const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+        const ctx = this.renderer.ctx;
+        const geo = this.geometryOps;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(20, 20, 20, 0.95)';
+        ctx.lineWidth   = 6;
+        ctx.lineJoin    = 'round';
+        ctx.setLineDash([]);
+
+        Object.values(cache).forEach(({ loops, polygons }) => {
+            // Visibility gate: only draw a Zone if at least one of its polygons is in the
+            // currently filtered view — but draw its full (precomputed) outline, not a
+            // re-clipped one, since the geometry itself doesn't change with the filter.
+            if (this.districtFilter && !polygons.some(p => p.district === this.districtFilter)) return;
+            if (this.electoralRegionFilter && !polygons.some(p => regionMap[p.region] === this.electoralRegionFilter)) return;
+
+            loops.forEach(ring => {
+                if (!ring || ring.length < 2) return;
                 ctx.beginPath();
                 ring.forEach((pt, i) => {
                     const s = geo.dataToScreen(pt.x, pt.y);

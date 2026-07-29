@@ -1,0 +1,31 @@
+Region,Type,Key,Cluster_Name,Description,S,A1,A2,B1,B2,C1,C2,D1,D2,E1,E2,F1,F2,TECH,GAME,UNI
+Capital,Rural,0,Prosperous,"Rural Prosperous (A1) tier - landowners, estate directors, affluent retirees. Rural has no S/A2/B1/C2/E1/E2/F2/UNI zone-types per Community_matrix, so only A1/C1/D1/D2/F1 are populated.",0,70,0,0,0,15,0,10,3,0,0,2,0,0,0,0
+Capital,Rural,0,New_Build_Family,"Rural New-Build Family (C1) tier - commuter-belt dual-income households, car-dependent per OAC rural pen portrait.",0,15,0,0,0,55,0,20,8,0,0,2,0,0,0,0
+Capital,Rural,0,Mixed_Estate,"Rural Mixed (D1) tier - estate workers and self-employed rural trades, OAC Rural & Outlying Areas.",0,5,0,0,0,20,0,50,20,0,0,5,0,0,0,0
+Capital,Rural,0,Agricultural,"Rural Agricultural (D2) tier - farm and land-management labour, owner-occupied but rural hidden poverty per IMD.",0,2,0,0,0,8,0,20,60,0,0,10,0,0,0,0
+Capital,Rural,0,Rural_Deprived,"Rural Deprived (F1) tier - post-industrial rural hardship (Welsh valleys / Durham pit village style), employment + health deprivation.",0,0,0,0,0,2,0,8,20,0,0,70,0,0,0,0
+Capital,Suburb,0,Affluent,"Suburb Prosperous (A1) tier - OAC Retired Professionals, high asset ownership. Suburb has no S/A2/D1/D2/E1/F2/TECH/GAME zone-types per Community_matrix.",0,55,0,15,0,15,10,0,0,0,3,2,0,0,0,0
+Capital,Suburb,0,Academic_Professional,"Suburb Academic (B1) tier - university-adjacent professional suburb, elevated civic/political engagement.",0,10,0,55,0,20,10,0,0,0,3,2,0,0,0,0
+Capital,Suburb,0,Middle_Class,"Suburb Professional/Middle Class (C1+C2) tier - established owner-occupier suburban belt, dual income new-build estates.",0,5,0,10,0,40,35,0,0,0,7,3,0,0,0,0
+Capital,Suburb,0,Grassroot,"Suburb Grassroots (E2) tier - suburban trade and self-employment zone, skilled trade NS-SEC L8-L11 elevated.",0,2,0,3,0,15,15,0,0,0,55,10,0,0,0,0
+Capital,Suburb,0,Deprived,"Suburb Deprived (F1) tier - pockets of suburban deprivation, smallest tier in the Region per Community_matrix.",0,0,0,1,0,8,6,0,0,0,25,60,0,0,0,0
+Capital,Town,0,Professional,"Town Professional (C1) tier - market-town professional base, teachers/nurses/council anchored, ASG AB above national average.",0,0,0,0,10,60,20,0,6,0,0,4,0,0,0,0
+Capital,Town,0,Middle_Class,Town Middle Class (C2) tier - coastal/market-town retirees and working-age service economy support.,0,0,0,0,15,20,55,0,7,0,0,3,0,0,0,0
+Capital,Town,0,Average,"Town Mixed New Town (B2) tier - planned mixed-income new town, balanced NS-SEC spread by design.",0,0,0,0,45,15,15,0,17,0,0,8,0,0,0,0
+Capital,Town,0,Working_Class,Town Working-Class (D2) tier - manufacturing/trade original base of the market town.,0,0,0,0,15,5,8,0,60,0,0,12,0,0,0,0
+Capital,Town,0,Deprived,"Town Deprived (F1) tier - coastal-town style deprivation, IMD 2025 coastal towns among most deprived LSOAs.",0,0,0,0,8,2,3,0,22,0,0,65,0,0,0,0
+Capital,Rural,0,Prosperous,"Rural Prosperous (A1) tier - landowners, estate directors, affluent retirees. Rural has no S/A2/B1/C2/E1/E2/F2/UNI zone-types per Community_matrix, so only A1/C1/D1/D2/F1 are populated.",0,70,0,0,0,15,0,10,3,0,0,2,0,0,0,0
+Capital,Rural,0,New_Build_Family,"Rural New-Build Family (C1) tier - commuter-belt dual-income households, car-dependent per OAC rural pen portrait.",0,15,0,0,0,55,0,20,8,0,0,2,0,0,0,0
+Capital,Rural,0,Mixed_Estate,"Rural Mixed (D1) tier - estate workers and self-employed rural trades, OAC Rural & Outlying Areas.",0,5,0,0,0,20,0,50,20,0,0,5,0,0,0,0
+Capital,Rural,0,Agricultural,"Rural Agricultural (D2) tier - farm and land-management labour, owner-occupied but rural hidden poverty per IMD.",0,2,0,0,0,8,0,20,60,0,0,10,0,0,0,0
+Capital,Rural,0,Rural_Deprived,"Rural Deprived (F1) tier - post-industrial rural hardship (Welsh valleys / Durham pit village style), employment + health deprivation.",0,0,0,0,0,2,0,8,20,0,0,70,0,0,0,0
+Capital,Suburb,0,Affluent,"Suburb Prosperous (A1) tier - OAC Retired Professionals, high asset ownership. Suburb has no S/A2/D1/D2/E1/F2/TECH/GAME zone-types per Community_matrix.",0,55,0,15,0,15,10,0,0,0,3,2,0,0,0,0
+Capital,Suburb,0,Academic_Professional,"Suburb Academic (B1) tier - university-adjacent professional suburb, elevated civic/political engagement.",0,10,0,55,0,20,10,0,0,0,3,2,0,0,0,0
+Capital,Suburb,0,Middle_Class,"Suburb Professional/Middle Class (C1+C2) tier - established owner-occupier suburban belt, dual income new-build estates.",0,5,0,10,0,40,35,0,0,0,7,3,0,0,0,0
+Capital,Suburb,0,Grassroot,"Suburb Grassroots (E2) tier - suburban trade and self-employment zone, skilled trade NS-SEC L8-L11 elevated.",0,2,0,3,0,15,15,0,0,0,55,10,0,0,0,0
+Capital,Suburb,0,Deprived,"Suburb Deprived (F1) tier - pockets of suburban deprivation, smallest tier in the Region per Community_matrix.",0,0,0,1,0,8,6,0,0,0,25,60,0,0,0,0
+Capital,Town,0,Professional,"Town Professional (C1) tier - market-town professional base, teachers/nurses/council anchored, ASG AB above national average.",0,0,0,0,10,60,20,0,6,0,0,4,0,0,0,0
+Capital,Town,0,Middle_Class,Town Middle Class (C2) tier - coastal/market-town retirees and working-age service economy support.,0,0,0,0,15,20,55,0,7,0,0,3,0,0,0,0
+Capital,Town,0,Average,"Town Mixed New Town (B2) tier - planned mixed-income new town, balanced NS-SEC spread by design.",0,0,0,0,45,15,15,0,17,0,0,8,0,0,0,0
+Capital,Town,0,Working_Class,Town Working-Class (D2) tier - manufacturing/trade original base of the market town.,0,0,0,0,15,5,8,0,60,0,0,12,0,0,0,0
+Capital,Town,0,Deprived,"Town Deprived (F1) tier - coastal-town style deprivation, IMD 2025 coastal towns among most deprived LSOAs.",0,0,0,0,8,2,3,0,22,0,0,65,0,0,0,0

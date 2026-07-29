@@ -17,8 +17,10 @@ class Renderer {
             showDensityColorMap: false,
             showLocationColorMap: false,      // colour polygons by Location field
             showTypeColorMap: false,          // colour polygons by Type/Code field
+            showClusterColorMap: false,       // colour polygons by assigned Cluster (via Key -> Type/Code)
             showDensityLabel: false,
             showLocationTypeLabel: false,     // prepend "{Location}: {Type}" line above the value
+            showClusterLabel: false,          // prepend "{Key} - {Cluster_Name}" line above the value
             densityDisplayMode: 'density',   // 'density' | 'estPopulation'
             densityMin: 50,
             densityMax: 15000,
@@ -315,43 +317,50 @@ class Renderer {
 
         const valueLine = Math.round(this._densityValue(polygon)).toLocaleString();
 
-        this.ctx.save();
-        this.ctx.textAlign    = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.lineJoin     = 'round';
+        // Build the stack of lines to render. "value" is always present; the
+        // Location-Type line (if on) goes above it, and the Cluster line (if on)
+        // is always appended as the last line — independent, additive overlays.
+        const lines = [];
 
         if (this.options.showLocationTypeLabel) {
             const loc  = polygon.location    || '';
             const type = polygon.polygonType || '';
             const topLine = (loc && type) ? `${loc}: ${type}` : (loc || type || '—');
-
-            const LINE_H = 14;
-            const yTop   = screen.y - LINE_H / 2;
-            const yBot   = screen.y + LINE_H / 2;
-
-            // Top line: location & type (smaller)
-            this.ctx.font        = 'bold 10px Arial';
-            this.ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-            this.ctx.lineWidth   = 2.5;
-            this.ctx.strokeText(topLine, screen.x, yTop);
-            this.ctx.fillStyle   = 'rgba(0,0,0,0.82)';
-            this.ctx.fillText(topLine, screen.x, yTop);
-
-            // Bottom line: density / est-pop value
-            this.ctx.font        = 'bold 11px Arial';
-            this.ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-            this.ctx.lineWidth   = 2.5;
-            this.ctx.strokeText(valueLine, screen.x, yBot);
-            this.ctx.fillStyle   = 'rgba(0,0,0,0.82)';
-            this.ctx.fillText(valueLine, screen.x, yBot);
-        } else {
-            this.ctx.font        = 'bold 12px Arial';
-            this.ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-            this.ctx.lineWidth   = 2.5;
-            this.ctx.strokeText(valueLine, screen.x, screen.y);
-            this.ctx.fillStyle   = 'rgba(0,0,0,0.82)';
-            this.ctx.fillText(valueLine, screen.x, screen.y);
+            lines.push({ text: topLine, role: 'secondary' });
         }
+
+        lines.push({ text: valueLine, role: 'value' });
+
+        if (this.options.showClusterLabel) {
+            const loc         = polygon.location || '';
+            const clusterName = polygon.clusters || '';
+            const clusterDef  = (clusterName && window.ClusterDefs)
+                ? window.ClusterDefs.findByName(polygon.region, loc, clusterName)
+                : null;
+            const clusterLine = clusterDef ? `${clusterDef.Key} - ${clusterName}` : clusterName;
+            if (clusterLine) lines.push({ text: clusterLine, role: 'secondary' });
+        }
+
+        this.ctx.save();
+        this.ctx.textAlign    = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.lineJoin     = 'round';
+
+        const LINE_H  = 14;
+        const totalH  = LINE_H * (lines.length - 1);
+        const yStart  = screen.y - totalH / 2;
+
+        lines.forEach((line, i) => {
+            const y = yStart + i * LINE_H;
+            this.ctx.font = line.role === 'value'
+                ? (lines.length > 1 ? 'bold 11px Arial' : 'bold 12px Arial')
+                : 'bold 10px Arial';
+            this.ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            this.ctx.lineWidth   = 2.5;
+            this.ctx.strokeText(line.text, screen.x, y);
+            this.ctx.fillStyle   = 'rgba(0,0,0,0.82)';
+            this.ctx.fillText(line.text, screen.x, y);
+        });
 
         this.ctx.restore();
     }
@@ -425,14 +434,16 @@ class Renderer {
         return LOCATION_COLORS[polygon.location] || null; // null = no override (NA / empty)
     }
 
-    _typeToColor(polygon) {
-        const code = (polygon.polygonType || '').trim();
+    /** Resolve a fill colour for a raw Type/Code value (A1, F2, UNI, …). Shared by Type Map and Cluster Map. */
+    _codeToColor(code) {
+        code = (code || '').trim();
         if (!code) return null;  // NA — no colour override
 
         // Special single codes
         if (code === 'S')    return 'rgba(192, 192, 192, 0.78)'; // Silver
         if (code === 'UNI')  return 'rgba(150, 100, 220, 0.75)'; // Purple
         if (code === 'TECH') return 'rgba(255, 105, 180, 0.75)'; // Pink
+        if (code === 'GAME') return 'rgba( 75,   0, 110, 0.85)'; // Dark purple, distinct from UNI's lighter purple
 
         // Letter-group codes (A1/A2, B1/B2, …, F1/F2)
         // _1 = lighter shade, _2 = darker shade, smooth progression across groups
@@ -445,6 +456,28 @@ class Renderer {
             F1: 'rgba(195, 145,  95, 0.75)', F2: 'rgba(130,  70,  20, 0.80)', // Brown
         };
         return TYPE_COLORS[code] || null;
+    }
+
+    _typeToColor(polygon) {
+        return this._codeToColor(polygon.polygonType);
+    }
+
+    // Cluster Key -> Type/Code, so Cluster Map reuses the exact same palette as Type Map.
+    static CLUSTER_KEY_TO_CODE = {
+        '1': 'A1', '2': 'B1', '3': 'C2', '4': 'D1', '5': 'A2',
+        '6': 'E1', '7': 'D2', '8': 'F1', '9': 'F2', '0': 'S', 'U': 'UNI',
+    };
+
+    /** Return a fill colour for a polygon's assigned Cluster, via Key -> Type/Code -> colour. */
+    _clusterToColor(polygon) {
+        const clusterName = (polygon.clusters || '').trim();
+        if (!clusterName || !window.ClusterDefs) return null;
+
+        const match = window.ClusterDefs.findByName(polygon.region, polygon.location, clusterName);
+        if (!match) return null;
+
+        const code = Renderer.CLUSTER_KEY_TO_CODE[String(match.Key).toUpperCase()];
+        return code ? this._codeToColor(code) : null;
     }
 
     drawPolygonFill(polygon, isSelected, isMultiSelected = false) {
@@ -461,6 +494,9 @@ class Renderer {
         } else if (this.options.showLocationColorMap && !isMultiSelected
                 && polygon.layerType !== 'county') {
             fillColor = this._locationToColor(polygon) || fillColor;
+        } else if (this.options.showClusterColorMap && !isMultiSelected
+                && polygon.layerType !== 'county') {
+            fillColor = this._clusterToColor(polygon) || fillColor;
         } else if (polygon.layerType === 'county') {
             fillColor = 'rgba(100, 150, 250, 0.15)';
         } else if (polygon.layerType === 'subCounty') {

@@ -86,6 +86,11 @@ class DataManager {
             headers.forEach((header, index) => {
                 row[header] = values[index] || '';
             });
+            // Ensure every row carries a Clusters column, even if the source CSV
+            // predates the Edit Clusters feature — export will then include it.
+            if (!('Clusters' in row)) row.Clusters = '';
+            // Same for Constituency — written by the Redistricting → Constituency sub-mode.
+            if (!('Constituency' in row)) row.Constituency = '';
 
             this.originalData.push(row);
 
@@ -112,15 +117,18 @@ class DataManager {
                             county: row.County || '',
                             district: row.District || '',
                             districtWard: row.District_Ward || '',
+                            constituency: row.Constituency || '',
                             parent: row.Parent || '',
                             shape: row.Shape || '',
                             populationDensity: parseFloat(row.Population_Density) || 0,
                             // actualPopulation: number if CSV has real data, NaN otherwise
                             actualPopulation: (isNaN(actualPop) || actualPop === 0) ? NaN : actualPop,
                             countyType: row.County_Type || '',  // legacy density classification (kept for reference)
+                            zone: row.Zone || '',
                             region: row.Region || '',
                             location: row.Location || '',
                             polygonType: row.County_Type || '',
+                            clusters: row.Clusters || '',
                             rings: rings,
                             rowIndex: i - 1  // Store original row index for export
                         });
@@ -288,7 +296,9 @@ class DataManager {
                     ...originalRow,
                     geometry:      this.ringsToWKT(polygon.rings),
                     Area:          areaKm2,
-                    District_Ward: polygon.districtWard || originalRow.District_Ward || ''
+                    District_Ward: polygon.districtWard || originalRow.District_Ward || '',
+                    Constituency:  polygon.constituency || originalRow.Constituency || '',
+                    Clusters:      polygon.clusters || originalRow.Clusters || ''
                 };
             }
 
@@ -313,6 +323,10 @@ class DataManager {
                     newRow[header] = areaKm2;
                 } else if (header === 'District_Ward') {
                     newRow[header] = polygon.districtWard || '';
+                } else if (header === 'Constituency') {
+                    newRow[header] = polygon.constituency || '';
+                } else if (header === 'Clusters') {
+                    newRow[header] = polygon.clusters || '';
                 } else if (polygon[header] !== undefined) {
                     // Copy any other properties from polygon
                     newRow[header] = polygon[header];
@@ -330,7 +344,9 @@ class DataManager {
             headers.join(','),
             ...exportData.map(row =>
                 headers.map(header => {
-                    const value = row[header] || '';
+                    // Coerce to string — some fields (e.g. Electoral_Region_Seats) can carry a
+                    // number rather than a string, which .includes() would otherwise throw on.
+                    const value = String(row[header] ?? '');
                     return value.includes(',') ? `"${value}"` : value;
                 }).join(',')
             )

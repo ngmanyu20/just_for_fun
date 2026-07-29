@@ -57,7 +57,9 @@ class LayerManager {
             if (!countyGroups[countyName]) {
                 countyGroups[countyName] = {
                     subPolygons: [],
-                    shape: polygon.shape
+                    shape: polygon.shape,
+                    region: polygon.region,
+                    zone: polygon.zone
                 };
             }
             countyGroups[countyName].subPolygons.push(polygon);
@@ -129,6 +131,8 @@ class LayerManager {
                     id: countyName,
                     county: countyName,
                     shape: data.shape,
+                    region: data.region,
+                    zone: data.zone,
                     layerType: 'county',
                     isCountyView: true,
                     subPolygons: data.subPolygons,
@@ -152,6 +156,8 @@ class LayerManager {
                     id: countyName,
                     county: countyName,
                     shape: data.shape,
+                    region: data.region,
+                    zone: data.zone,
                     layerType: 'county',
                     isCountyView: true,
                     subPolygons: data.subPolygons,

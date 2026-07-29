@@ -64,6 +64,180 @@ function setupLayerButtons() {
 }
 
 /**
+ * Wire up the "Display Region" button + modal: lets the user pick which
+ * Region/Zone column values are shown on the canvas. Each Region row has a
+ * "+" expand toggle revealing its Zone checkboxes (multi-select); checking a
+ * Region checkbox cascades to all its Zones, and the filter that's actually
+ * applied always operates at Zone granularity.
+ */
+function setupDisplayRegionModal() {
+    const openBtn    = document.getElementById('displayRegionBtn');
+    const backdrop   = document.getElementById('regionModalBackdrop');
+    const list       = document.getElementById('regionModalList');
+    const closeBtn   = document.getElementById('regionModalClose');
+    const cancelBtn  = document.getElementById('regionModalCancel');
+    const applyBtn   = document.getElementById('regionModalApply');
+    const selectAllBtn = document.getElementById('regionSelectAllBtn');
+    const clearAllBtn  = document.getElementById('regionClearAllBtn');
+
+    if (!openBtn || !backdrop || !list) return;
+
+    const closeModal = () => backdrop.classList.remove('open');
+
+    const populateList = () => {
+        const editor = window.polygonEditor;
+        const polygons = editor?.polygons || [];
+
+        // Region -> Set of Zone values found under it
+        const regionZones = new Map();
+        polygons.forEach(p => {
+            const region = p.region || '';
+            const zone   = p.zone || '';
+            if (!regionZones.has(region)) regionZones.set(region, new Set());
+            regionZones.get(region).add(zone);
+        });
+
+        const regions = Array.from(regionZones.keys()).sort();
+
+        // Currently active filter is a Set of Zone values (null = nothing filtered yet = all checked)
+        const activeFilter = editor?.zoneFilter || null;
+
+        list.innerHTML = '';
+        if (regions.length === 0) {
+            list.innerHTML = '<li style="font-size:12px;color:#888;">No Region data loaded</li>';
+            return;
+        }
+
+        regions.forEach(region => {
+            const zones = Array.from(regionZones.get(region)).sort();
+
+            const li = document.createElement('li');
+            li.style.marginBottom = '4px';
+
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; gap:6px;';
+
+            const expandBtn = document.createElement('button');
+            expandBtn.type = 'button';
+            expandBtn.textContent = '+';
+            expandBtn.title = 'Show zones';
+            expandBtn.style.cssText = 'width:20px; height:20px; min-width:20px; padding:0; ' +
+                'font-size:13px; line-height:1; border:1px solid #ccc; border-radius:4px; ' +
+                'background:#fff; cursor:pointer; flex-shrink:0;';
+
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; flex:1;';
+
+            const regionCheckbox = document.createElement('input');
+            regionCheckbox.type = 'checkbox';
+
+            label.appendChild(regionCheckbox);
+            label.appendChild(document.createTextNode(region || '(blank)'));
+
+            row.appendChild(expandBtn);
+            row.appendChild(label);
+            li.appendChild(row);
+
+            const zoneList = document.createElement('ul');
+            zoneList.style.cssText = 'list-style:none; margin:4px 0 0 26px; padding:0; display:none;';
+
+            zones.forEach(zone => {
+                const zli = document.createElement('li');
+                zli.style.marginBottom = '3px';
+
+                const zlabel = document.createElement('label');
+                zlabel.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; color:#555;';
+
+                const zoneCheckbox = document.createElement('input');
+                zoneCheckbox.type = 'checkbox';
+                zoneCheckbox.className = 'zone-checkbox';
+                zoneCheckbox.value = zone;
+                zoneCheckbox.checked = activeFilter ? activeFilter.has(zone) : true;
+
+                zlabel.appendChild(zoneCheckbox);
+                zlabel.appendChild(document.createTextNode(zone || '(blank)'));
+                zli.appendChild(zlabel);
+                zoneList.appendChild(zli);
+            });
+
+            li.appendChild(zoneList);
+            list.appendChild(li);
+
+            // Reflect the Zone checkboxes' state on the Region checkbox (checked/indeterminate)
+            const syncRegionCheckbox = () => {
+                const zoneCbs = Array.from(zoneList.querySelectorAll('.zone-checkbox'));
+                const checkedCount = zoneCbs.filter(cb => cb.checked).length;
+                regionCheckbox.checked = zoneCbs.length > 0 && checkedCount === zoneCbs.length;
+                regionCheckbox.indeterminate = checkedCount > 0 && checkedCount < zoneCbs.length;
+            };
+            syncRegionCheckbox();
+
+            expandBtn.addEventListener('click', () => {
+                const isOpen = zoneList.style.display !== 'none';
+                zoneList.style.display = isOpen ? 'none' : 'block';
+                expandBtn.textContent = isOpen ? '+' : '−';
+            });
+
+            // Region checkbox cascades to all its Zone children
+            regionCheckbox.addEventListener('change', () => {
+                zoneList.querySelectorAll('.zone-checkbox').forEach(cb => { cb.checked = regionCheckbox.checked; });
+                regionCheckbox.indeterminate = false;
+            });
+
+            zoneList.addEventListener('change', (e) => {
+                if (e.target.classList.contains('zone-checkbox')) syncRegionCheckbox();
+            });
+        });
+    };
+
+    openBtn.addEventListener('click', () => {
+        populateList();
+        backdrop.classList.add('open');
+    });
+
+    if (closeBtn)  closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => {
+            list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = true;
+                cb.indeterminate = false;
+            });
+        });
+    }
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', () => {
+            list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+                cb.indeterminate = false;
+            });
+        });
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', () => {
+            const editor = window.polygonEditor;
+            if (!editor) { closeModal(); return; }
+
+            const zoneCheckboxes = Array.from(list.querySelectorAll('.zone-checkbox'));
+            const checkedZones   = zoneCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+
+            // Every zone checked → equivalent to no filter at all
+            editor.zoneFilter = (checkedZones.length === zoneCheckboxes.length) ? null : new Set(checkedZones);
+
+            openBtn.classList.toggle('active', editor.zoneFilter !== null);
+            openBtn.textContent = editor.zoneFilter
+                ? `🗺️ Display Region (${checkedZones.length}/${zoneCheckboxes.length})`
+                : '🗺️ Display Region';
+
+            editor.draw();
+            closeModal();
+        });
+    }
+}
+
+/**
  * Get list of CSV files in csv_input directory
  * @returns {Promise<Array<{name:string,url:string}>>}
  */
@@ -228,7 +402,12 @@ async function onSaveCsvClick() {
     }
 
     try {
-        const csvContent = window.polygonEditor.dataManager.exportToCSV(window.polygonEditor.polygons);
+        // Always export the full sub-county (smallest-polygon) dataset — window.polygonEditor.polygons
+        // can currently be pointing at the merged County-level array (e.g. while the Redistricting →
+        // Constituency sub-mode or the Edit Polygon "County" Layer view is active), which would
+        // silently drop every polygon's detail down to one row per County.
+        const exportPolygons = window.polygonEditor.layerManager.layers.subCounty.polygons;
+        const csvContent = window.polygonEditor.dataManager.exportToCSV(exportPolygons);
 
         // try backend write endpoint first
         const response = await fetch('/save_csv', {
@@ -246,7 +425,8 @@ async function onSaveCsvClick() {
         throw new Error(`server returned ${response.status}`);
     } catch (err) {
         console.warn('Failed to save via server, falling back to download', err);
-        window.polygonEditor.uiController.downloadCSV(window.polygonEditor.dataManager.exportToCSV(window.polygonEditor.polygons), filename);
+        const exportPolygons = window.polygonEditor.layerManager.layers.subCounty.polygons;
+        window.polygonEditor.uiController.downloadCSV(window.polygonEditor.dataManager.exportToCSV(exportPolygons), filename);
         document.getElementById('csvStatus').textContent = `Download started: ${filename}. Place file into ./csv_input if you want re-use.`;
     }
 }
@@ -336,6 +516,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        // Display Region — multi-select which Region values are visible on canvas
+        setupDisplayRegionModal();
+
         // Change Density — opens input modal for the currently selected polygon
         const changeDensityBtn = document.getElementById('changeDensityBtn');
         if (changeDensityBtn) {
@@ -392,10 +575,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // ── Density layer controls ────────────────────────────────────────────
         const densityColorMapBtn = document.getElementById('densityColorMapBtn');
         const locationMapBtn     = document.getElementById('locationMapBtn');
+        const clusterMapBtn      = document.getElementById('clusterMapBtn');
         const displayDataBtn     = document.getElementById('displayDataBtn');
         const densityModeBtn     = document.getElementById('densityModeBtn');
         const estPopModeBtn      = document.getElementById('estPopModeBtn');
         const typeLabelBtn       = document.getElementById('typeLabelBtn');
+        const clusterLabelBtn    = document.getElementById('clusterLabelBtn');
 
         // Density Color Map — mutually exclusive with Location Map
         if (densityColorMapBtn) {
@@ -414,6 +599,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         renderer.options.showTypeColorMap = false;
                         const typeMapBtn = document.getElementById('typeMapBtn');
                         if (typeMapBtn) typeMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showClusterColorMap) {
+                        renderer.options.showClusterColorMap = false;
+                        if (clusterMapBtn) clusterMapBtn.classList.remove('active');
                     }
                 }
                 window.polygonEditor.draw();
@@ -437,6 +626,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (renderer.options.showTypeColorMap) {
                         renderer.options.showTypeColorMap = false;
                         if (typeMapBtn) typeMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showClusterColorMap) {
+                        renderer.options.showClusterColorMap = false;
+                        if (clusterMapBtn) clusterMapBtn.classList.remove('active');
                     }
                 }
                 // Ensure Display Data is on when Location Map is activated
@@ -466,6 +659,39 @@ document.addEventListener('DOMContentLoaded', function() {
                         renderer.options.showLocationColorMap = false;
                         if (locationMapBtn) locationMapBtn.classList.remove('active');
                     }
+                    if (renderer.options.showClusterColorMap) {
+                        renderer.options.showClusterColorMap = false;
+                        if (clusterMapBtn) clusterMapBtn.classList.remove('active');
+                    }
+                    // Ensure Display Data is on
+                    if (!renderer.options.showDensityLabel) setLabelMode('density');
+                }
+                window.polygonEditor.draw();
+            });
+        }
+
+        // Cluster Map — colour polygons by assigned Cluster, via Key -> Type/Code palette
+        // (mutually exclusive with Density, Location & Type maps)
+        if (clusterMapBtn) {
+            clusterMapBtn.addEventListener('click', () => {
+                if (!window.polygonEditor) return;
+                const renderer = window.polygonEditor.renderer;
+                const next = !renderer.options.showClusterColorMap;
+                renderer.options.showClusterColorMap = next;
+                clusterMapBtn.classList.toggle('active', next);
+                if (next) {
+                    if (renderer.options.showDensityColorMap) {
+                        renderer.options.showDensityColorMap = false;
+                        if (densityColorMapBtn) densityColorMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showLocationColorMap) {
+                        renderer.options.showLocationColorMap = false;
+                        if (locationMapBtn) locationMapBtn.classList.remove('active');
+                    }
+                    if (renderer.options.showTypeColorMap) {
+                        renderer.options.showTypeColorMap = false;
+                        if (typeMapBtn) typeMapBtn.classList.remove('active');
+                    }
                     // Ensure Display Data is on
                     if (!renderer.options.showDensityLabel) setLabelMode('density');
                 }
@@ -479,6 +705,9 @@ document.addEventListener('DOMContentLoaded', function() {
         //   'estPopulation' → est-population numbers, Location-Type overlay off
         //   'locationType'  → density numbers + Location-Type overlay
         //   null            → all labels off
+        // clusterLabelBtn is a separate, independent ON/OFF toggle (see below): whenever
+        // it's on, a "{Key} - {Cluster_Name}" line is appended as the last line, stacking
+        // on top of whatever the current sub-mode is already showing.
 
         function setLabelMode(mode) {
             // mode: null | 'density' | 'estPopulation' | 'locationType'
@@ -486,13 +715,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const renderer = window.polygonEditor.renderer;
 
             if (mode === null) {
-                // Master OFF — clear everything
+                // Master OFF — clear everything, including the independent Cluster Label toggle
                 renderer.options.showDensityLabel      = false;
                 renderer.options.showLocationTypeLabel = false;
+                renderer.options.showClusterLabel      = false;
                 displayDataBtn.classList.remove('active');
                 densityModeBtn.classList.remove('active');
                 estPopModeBtn.classList.remove('active');
-                if (typeLabelBtn) typeLabelBtn.classList.remove('active');
+                if (typeLabelBtn)    typeLabelBtn.classList.remove('active');
+                if (clusterLabelBtn) clusterLabelBtn.classList.remove('active');
             } else {
                 // displayDataBtn always lit; exactly one sub-mode lit
                 renderer.options.showDensityLabel = true;
@@ -519,9 +750,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Mutually exclusive sub-modes
-        if (densityModeBtn) densityModeBtn.addEventListener('click', () => setLabelMode('density'));
-        if (estPopModeBtn)  estPopModeBtn.addEventListener('click',  () => setLabelMode('estPopulation'));
-        if (typeLabelBtn)   typeLabelBtn.addEventListener('click',   () => setLabelMode('locationType'));
+        if (densityModeBtn)   densityModeBtn.addEventListener('click',   () => setLabelMode('density'));
+        if (estPopModeBtn)    estPopModeBtn.addEventListener('click',    () => setLabelMode('estPopulation'));
+        if (typeLabelBtn)     typeLabelBtn.addEventListener('click',     () => setLabelMode('locationType'));
+
+        // Cluster Label — independent ON/OFF toggle, additive on top of whichever
+        // sub-mode above is active (appends its line rather than replacing one).
+        if (clusterLabelBtn) {
+            clusterLabelBtn.addEventListener('click', () => {
+                if (!window.polygonEditor) return;
+                const renderer = window.polygonEditor.renderer;
+                const next = !renderer.options.showClusterLabel;
+                renderer.options.showClusterLabel = next;
+                clusterLabelBtn.classList.toggle('active', next);
+                // Ensure Display Data is on so the cluster line actually renders (also draws)
+                if (next && !renderer.options.showDensityLabel) {
+                    setLabelMode('density');
+                } else {
+                    window.polygonEditor.draw();
+                }
+            });
+        }
 
         // Expose for AppMode.set() initialisation in index.html
         window._setLabelMode = setLabelMode;
@@ -543,6 +792,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const editLocationBtn  = document.getElementById('editLocationBtn');
         const editTypeBtn      = document.getElementById('editTypeBtn');
         const disableChangeBtn = document.getElementById('disableChangeBtn');
+        const editClustersBtn  = document.getElementById('editClustersBtn');
 
         const editModeBtns = [editLocationBtn, editTypeBtn, disableChangeBtn].filter(Boolean);
         const changeLocationRow = document.getElementById('changeLocationRow');
@@ -553,6 +803,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (activeBtn) activeBtn.classList.add('active');
             if (changeLocationRow) changeLocationRow.style.display = (activeBtn === editLocationBtn) ? 'block' : 'none';
             if (changeTypeRow)     changeTypeRow.style.display     = (activeBtn === editTypeBtn)     ? 'block' : 'none';
+            // Edit Clusters can only stay active while Disable Change is active —
+            // switching to Edit Location / Edit Type turns it back off.
+            if (activeBtn !== disableChangeBtn && editClustersBtn) {
+                editClustersBtn.classList.remove('active');
+            }
         }
 
         // Default: Disable Change is active
@@ -561,6 +816,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (editLocationBtn)  editLocationBtn.addEventListener('click',  () => setEditDistrictMode(editLocationBtn));
         if (editTypeBtn)      editTypeBtn.addEventListener('click',      () => setEditDistrictMode(editTypeBtn));
         if (disableChangeBtn) disableChangeBtn.addEventListener('click', () => setEditDistrictMode(disableChangeBtn));
+
+        // ── Edit Clusters (Label section) — forces Disable Change on while active ──
+        if (editClustersBtn) {
+            editClustersBtn.addEventListener('click', () => {
+                const turningOn = !editClustersBtn.classList.contains('active');
+                if (turningOn) {
+                    editClustersBtn.classList.add('active');
+                    setEditDistrictMode(disableChangeBtn);
+                } else {
+                    editClustersBtn.classList.remove('active');
+                }
+            });
+        }
 
         // ── Change Location modal ─────────────────────────────────────────────
         const changeLocationBtn    = document.getElementById('changeLocationBtn');

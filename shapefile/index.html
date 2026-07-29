@@ -556,12 +556,6 @@
 
             <div id="csvStatus" style="font-size:11px; color:#666; margin-bottom: 10px;">Click 'Load CSV' to browse available files</div>
 
-            <!-- Mode Buttons (Same Line) -->
-            <div class="button-row">
-                <button id="editMode" class="btn-secondary">✏️ Edit</button>
-                <button id="viewMode" class="btn-primary active">👁️ View</button>
-            </div>
-
             <!-- Layer Panel -->
             <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
                 Layer
@@ -574,8 +568,29 @@
                 </div>
             </div>
 
+            <!-- Display Region Button -->
+            <button id="displayRegionBtn" class="btn-secondary" style="width: 100%; margin-bottom: 4px; margin-top: 8px;">🗺️ Display Region</button>
+
             <!-- Display Button -->
-            <button id="displayBtn" class="btn-secondary" style="width: 100%; margin-bottom: 4px; margin-top: 8px;">🖥️ Display</button>
+            <button id="displayBtn" class="btn-secondary" style="width: 100%; margin-bottom: 4px;">🖥️ Display</button>
+
+            <div id="regionModalBackdrop" class="csv-modal-backdrop">
+                <div class="csv-modal">
+                    <div class="csv-modal-header">
+                        <strong>Display Regions</strong>
+                        <button id="regionModalClose" class="btn-secondary small" style="font-size: 11px;">✕</button>
+                    </div>
+                    <div class="button-row" style="margin-bottom: 8px;">
+                        <button id="regionSelectAllBtn" class="btn-secondary small" style="font-size: 11px;">Select All</button>
+                        <button id="regionClearAllBtn" class="btn-secondary small" style="font-size: 11px;">Clear All</button>
+                    </div>
+                    <ul id="regionModalList" class="csv-modal-list"></ul>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;">
+                        <button id="regionModalApply" class="btn-primary small" style="font-size: 11px;">Apply</button>
+                        <button id="regionModalCancel" class="btn-secondary small" style="font-size: 11px;">Cancel</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Change Density Button -->
             <button id="changeDensityBtn" class="btn-secondary" style="width: 100%; margin-bottom: 8px; font-size: 11px;">✏️ Change Density</button>
@@ -688,6 +703,10 @@
                 <button id="locationMapBtn"     class="btn-secondary" style="font-size: 10px; padding: 5px;">Location Map</button>
                 <button id="typeMapBtn"         class="btn-secondary" style="font-size: 10px; padding: 5px;">Type Map</button>
             </div>
+            <!-- Line 1b: cluster colour map toggle -->
+            <div class="button-row" style="margin-top: 4px;">
+                <button id="clusterMapBtn" class="btn-secondary" style="font-size: 10px; padding: 5px; width:100%;">Cluster Map</button>
+            </div>
             <!-- Line 2: label display modes -->
             <div class="button-row" style="margin-top: 4px;">
                 <button id="displayDataBtn"  class="btn-secondary" style="font-size: 10px; padding: 5px;">Display Data</button>
@@ -698,11 +717,40 @@
             <div class="button-row" style="margin-top: 4px;">
                 <button id="typeLabelBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Location - Type</button>
             </div>
+            <!-- Line 4: clustering label mode (label only for now, wired up later) -->
+            <div class="button-row" style="margin-top: 4px;">
+                <button id="clusterLabelBtn" class="btn-secondary" style="font-size: 10px; padding: 5px;">Cluster Label</button>
+            </div>
             </div><!-- /#toolbarLayerSection -->
+
+            <!-- Label section (hidden in Edit Polygon mode) -->
+            <div id="toolbarLabelSection" style="display:none;">
+            <div class="section-title">Label</div>
+            <div class="button-row">
+                <button id="editClustersBtn" class="btn-secondary" style="font-size: 10px; padding: 5px; width:100%;">Edit Clusters</button>
+            </div>
+            </div><!-- /#toolbarLabelSection -->
 
             <!-- Redistricting controls (visible only in Redistricting mode) -->
             <div id="toolbarRedistrictingSection" style="display:none;">
                 <div class="section-title">Redistricting</div>
+
+                <!-- District / Constituency sub-mode switch -->
+                <div id="redistrictSubModeToggle" style="display:flex; background:#f0f1f3; border-radius:6px; padding:2px; margin-bottom:8px;">
+                    <button id="subModeDistrictBtn" type="button"
+                            style="flex:1; font-size:10px; font-weight:700; padding:5px 0; border:none; border-radius:5px;
+                                   cursor:pointer; background:#fff; color:#333; box-shadow:0 1px 2px rgba(0,0,0,0.15);">
+                        District
+                    </button>
+                    <button id="subModeConstituencyBtn" type="button"
+                            style="flex:1; font-size:10px; font-weight:700; padding:5px 0; border:none; border-radius:5px;
+                                   cursor:pointer; background:transparent; color:#666;">
+                        Constituency
+                    </button>
+                </div>
+
+                <!-- ═══ District sub-panel (existing ward workflow) ═══ -->
+                <div id="districtSubPanel">
                 <button id="redistrictingRuleBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%; margin-bottom:6px;">Redistricting Rule</button>
                 <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
                     <label style="font-size:10px; font-weight:600; color:#495057; white-space:nowrap;">Select Council:</label>
@@ -808,6 +856,111 @@
                     </div>
                     <div id="wardsList" style="font-size:10px; color:#999; font-style:italic; max-height:100px; overflow-y:auto;">No wards saved yet.</div>
                 </div>
+                </div>
+                <!-- ═══ End District sub-panel ═══ -->
+
+                <!-- ═══ Constituency sub-panel (county-grouped redistricting) ═══ -->
+                <div id="constituencySubPanel" style="display:none;">
+                    <div style="font-size:9px; color:#888; margin-bottom:8px; line-height:1.4;">
+                        Map shows one merged unit per County. Group counties into a constituency the same way you group polygons into a ward.
+                    </div>
+
+                    <button id="electoralRegionRuleBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%; margin-bottom:6px;">Redistricting Rule</button>
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                        <label style="font-size:10px; font-weight:600; color:#495057; white-space:nowrap;">Select Electoral Region:</label>
+                        <select id="electoralRegionSelect" style="flex:1; padding:4px 5px; border:2px solid #ddd; border-radius:4px; font-size:10px;">
+                            <option value="">— All —</option>
+                        </select>
+                    </div>
+
+                    <!-- Electoral region stats (shown when an electoral region is selected) -->
+                    <div id="electoralRegionStats" style="display:none; background:#f8f9ff; border:1px solid #dee2e6; border-radius:6px; font-size:10px; color:#333; margin-bottom:8px;">
+                        <div id="ersHeader" onclick="(function(btn){
+                                    var body = document.getElementById('ersBody');
+                                    var open = body.style.display !== 'none';
+                                    body.style.display = open ? 'none' : '';
+                                    btn.querySelector('#ersToggleBtn').textContent = open ? '+' : '−';
+                                })(this)"
+                             style="display:flex; align-items:center; gap:5px; padding:7px 10px;
+                                    cursor:pointer; user-select:none; border-radius:6px;">
+                            <span id="ersToggleBtn"
+                                  style="font-size:10px; width:16px; height:16px; border:1px solid #adb5bd;
+                                         border-radius:3px; background:#fff; display:flex; align-items:center;
+                                         justify-content:center; flex-shrink:0; font-weight:700; color:#555;">+</span>
+                            <span id="ersRegionName" style="font-weight:700; color:#333; flex:1; overflow:hidden;
+                                                             text-overflow:ellipsis; white-space:nowrap;"></span>
+                            <span style="color:#555; white-space:nowrap;">
+                                Created: <span id="ersCreated" style="font-weight:700; color:#333;">0</span>
+                            </span>
+                            <span style="color:#555; white-space:nowrap; margin-left:6px;">
+                                Rem: <span id="ersRemaining" style="font-weight:700; color:#333;">0</span>
+                            </span>
+                        </div>
+                        <div id="ersBody" style="display:none; padding:0 10px 8px 10px; line-height:1.8;">
+                            <table style="width:100%; border-collapse:collapse;">
+                                <tr>
+                                    <td style="color:#555;">Total Population</td>
+                                    <td id="ersTotalPop" style="text-align:right; font-weight:600;"></td>
+                                </tr>
+                                <tr>
+                                    <td style="color:#555;">Allocated Seats</td>
+                                    <td id="ersAllocSeat" style="text-align:right; font-weight:600;"></td>
+                                </tr>
+                                <tr>
+                                    <td style="color:#555;">Quota</td>
+                                    <td id="ersQuota" style="text-align:right; font-weight:600;"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Current Constituency -->
+                    <div style="background:white; border:1px solid #dee2e6; border-radius:8px; padding:10px;">
+                        <div style="display:flex; align-items:center; gap:5px; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:700; color:#333; flex:1;">Current constituency</span>
+                            <button id="createConstituencyBtn" class="btn-primary" style="font-size:9px; padding:3px 8px; width:auto;">Create new constituency</button>
+                            <button id="constituencyCancelBtn"  class="btn-secondary" style="display:none; font-size:9px; padding:3px 7px; width:auto;">Cancel</button>
+                            <button id="constituencyConfirmBtn" class="btn-primary"   style="display:none; font-size:9px; padding:3px 7px; width:auto;">Create</button>
+                        </div>
+
+                        <!-- Constituency creation panel — colour picker only, shown when create mode is active -->
+                        <div id="constituencyCreatePanel" style="display:none; margin-bottom:8px; padding:6px 8px; background:#f8f9ff; border-radius:6px; border:1px solid #dee2e6;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span style="font-size:10px; color:#555; white-space:nowrap;">Constituency colour</span>
+                                <div id="constituencyColorPicker" style="position:relative; flex:1;">
+                                    <div id="constituencyColorSelected" style="display:flex; align-items:center; gap:5px; padding:4px 6px; border:1.5px solid #ddd; border-radius:5px; cursor:pointer; background:white; font-size:10px; user-select:none;">
+                                        <span id="constituencyColorSwatch" style="display:inline-block; width:12px; height:12px; border-radius:2px; background:#dc3545;"></span>
+                                        <span id="constituencyColorLabel" style="flex:1;">Red</span>
+                                        <span style="color:#888;">▾</span>
+                                    </div>
+                                    <div id="constituencyColorDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:white; border:1.5px solid #ddd; border-radius:5px; box-shadow:0 4px 12px rgba(0,0,0,0.12); z-index:100; margin-top:2px; max-height:180px; overflow-y:auto;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stats — always shown -->
+                        <table style="width:100%; border-collapse:collapse; font-size:10px;">
+                            <tr style="border-bottom:1px solid #f0f0f0;">
+                                <td id="constituencyDraftPopLabel" style="padding:4px 0; color:#555;">Draft population</td>
+                                <td id="constituencyDraftPop" style="text-align:right; font-weight:600; padding:4px 0;">0</td>
+                            </tr>
+                            <tr>
+                                <td id="constituencyVarianceLabel" style="padding:4px 0; color:#555;">Variance</td>
+                                <td id="constituencyVariance" style="text-align:right; font-weight:600; padding:4px 0; color:#dc3545;">−100.00%</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Constituencies list -->
+                    <div style="margin-top:8px; background:white; border:1px solid #dee2e6; border-radius:8px; padding:10px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-size:11px; font-weight:700; color:#333;">Constituencies</span>
+                            <button id="clearConstituenciesBtn" style="font-size:9px; padding:3px 8px; border:1px solid #dc3545; border-radius:4px; background:#fff; color:#dc3545; cursor:pointer; width:auto;">Clear</button>
+                        </div>
+                        <div id="constituenciesList" style="font-size:10px; color:#999; font-style:italic; max-height:100px; overflow-y:auto;">No constituencies saved yet.</div>
+                    </div>
+                </div>
+                <!-- ═══ End Constituency sub-panel ═══ -->
             </div>
 
             <!-- Measure Distance (visible in all modes) -->
@@ -924,11 +1077,11 @@
         <div style="background:white; border-radius:12px; padding:20px; width:320px; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
             <div style="font-weight:700; font-size:13px; color:#333; margin-bottom:4px;">Change Population Density</div>
             <div id="densityInputLabel" style="font-size:11px; color:#667eea; margin-bottom:12px;"></div>
-            <input type="number" id="densityInputValue" min="501" max="29999" step="1"
+            <input type="number" id="densityInputValue" min="501" max="49999" step="1"
                    style="width:100%; padding:8px 10px; border:2px solid #ddd; border-radius:6px; font-size:14px; margin-bottom:6px; outline:none;"
-                   placeholder="Enter value (50 – 30,000)" />
+                   placeholder="Enter value (50 – 50,000)" />
             <div id="densityInputError" style="color:#dc3545; font-size:11px; margin-bottom:8px; display:none;">
-                Value must be a number between 50 and 30,000.
+                Value must be a number between 50 and 50,000.
             </div>
             <div style="display:flex; gap:8px; margin-top:4px;">
                 <button id="densityInputConfirm" class="btn-primary" style="flex:1; padding:8px;">Confirm</button>
@@ -980,6 +1133,7 @@
 
     <!-- Module Scripts -->
     <script src="js/DataManager.js"></script>
+    <script src="js/ClusterDefinitions.js"></script>
     <script src="js/GeometryOps.js"></script>
     <script src="js/SharedVertices.js"></script>
     <script src="js/VertexSync.js"></script>
@@ -1108,6 +1262,12 @@
                     layerSection.style.display = (mode === 'polygon') ? 'none' : '';
                 }
 
+                // Hide Label section in Edit Polygon mode (same rule as Layer section)
+                const labelSection = document.getElementById('toolbarLabelSection');
+                if (labelSection) {
+                    labelSection.style.display = (mode === 'polygon') ? 'none' : '';
+                }
+
                 // Show Redistricting section only in redistricting mode
                 const redistrictingSection = document.getElementById('toolbarRedistrictingSection');
                 if (redistrictingSection) {
@@ -1125,8 +1285,8 @@
                     layerTitleEl.style.display = (mode === 'redistricting') ? 'none' : '';
                 }
 
-                // Hide Edit / View / County / Sub-County buttons in Redistricting mode
-                ['editMode', 'viewMode', 'layerCounty', 'layerSubCounty'].forEach(id => {
+                // Hide County / Sub-County buttons in Redistricting mode
+                ['layerCounty', 'layerSubCounty'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.style.display = (mode === 'redistricting') ? 'none' : '';
                 });
@@ -1182,6 +1342,9 @@
                 // Apply default layer state when entering redistricting mode — no colour maps
                 if (mode === 'redistricting' && window.polygonEditor) {
                     const renderer = window.polygonEditor.renderer;
+
+                    // Always land on the District sub-panel first
+                    if (window.RedistrictSubMode) window.RedistrictSubMode.set('district');
 
                     // All colour maps OFF
                     renderer.options.showDensityColorMap  = false;
@@ -1545,7 +1708,131 @@
         </div>
     </div>
 
+    <!-- Electoral Region Rule Modal (Constituency sub-mode) -->
+    <div id="electoralRegionRuleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:22px 24px; width:520px; max-height:86vh; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="font-weight:700; font-size:13px; color:#333; margin-bottom:14px;">Redistricting Rule — Electoral Regions</div>
+
+            <!-- Total seats -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                <label style="font-size:11px; font-weight:600; color:#495057; white-space:nowrap;">Total seats to allocate:</label>
+                <input type="number" id="errTotalSeats" min="1" step="1" value="1"
+                       style="width:90px; padding:5px 7px; border:1.5px solid #ddd; border-radius:5px; font-size:12px;">
+            </div>
+
+            <!-- Electoral Region name list -->
+            <div style="font-size:11px; font-weight:700; color:#333; margin-bottom:6px;">Electoral Regions</div>
+            <div id="errRegionRows" style="margin-bottom:6px;"></div>
+            <button id="errAddRegionBtn" class="btn-secondary" style="font-size:10px; padding:5px; width:100%; margin-bottom:16px;">+ Add Electoral Region</button>
+
+            <!-- Map raw Region -> Electoral Region -->
+            <div style="font-size:11px; font-weight:700; color:#333; margin-bottom:6px;">Map Regions to Electoral Regions</div>
+            <div id="errMapRows" style="max-height:160px; overflow-y:auto; border:1px solid #eee; border-radius:6px; padding:6px 8px; margin-bottom:16px;">
+                <span style="color:#999; font-style:italic; font-size:10px;">Load a CSV first.</span>
+            </div>
+
+            <!-- Live seat allocation table -->
+            <div style="font-size:11px; font-weight:700; color:#333; margin-bottom:6px;">Seat Allocation</div>
+            <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:16px;">
+                <thead>
+                    <tr style="background:#f0f4ff;">
+                        <th style="text-align:left;  padding:6px 8px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Electoral Region</th>
+                        <th style="text-align:right; padding:6px 8px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Population</th>
+                        <th style="text-align:right; padding:6px 8px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Share</th>
+                        <th style="text-align:right; padding:6px 8px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Proportional</th>
+                        <th style="text-align:right; padding:6px 8px; font-weight:600; color:#555; border-bottom:2px solid #dee2e6;">Allocated</th>
+                    </tr>
+                </thead>
+                <tbody id="errAllocationRows"></tbody>
+            </table>
+
+            <div style="display:flex; gap:8px;">
+                <button id="electoralRegionRuleConfirm" class="btn-primary"   style="flex:1; padding:8px; font-size:12px;">Confirm</button>
+                <button id="electoralRegionRuleCancel"  class="btn-secondary" style="flex:1; padding:8px; font-size:12px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // ── Redistricting sub-mode switch (District ↔ Constituency) ────────────────
+        window.RedistrictSubMode = (function () {
+            let current = 'district'; // 'district' | 'constituency'
+            let savedDistrictFilter = null; // preserved across the Constituency tab (which needs it cleared)
+
+            const districtBtn      = document.getElementById('subModeDistrictBtn');
+            const constituencyBtn  = document.getElementById('subModeConstituencyBtn');
+            const districtPanel    = document.getElementById('districtSubPanel');
+            const constituencyPanel = document.getElementById('constituencySubPanel');
+
+            const ACTIVE_STYLE   = { background: '#fff', color: '#333', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' };
+            const INACTIVE_STYLE = { background: 'transparent', color: '#666', boxShadow: 'none' };
+
+            function applyBtnStyle(btn, active) {
+                if (!btn) return;
+                const s = active ? ACTIVE_STYLE : INACTIVE_STYLE;
+                btn.style.background = s.background;
+                btn.style.color      = s.color;
+                btn.style.boxShadow  = s.boxShadow;
+            }
+
+            function set(mode) {
+                if (mode === current) return;
+
+                // Cancel any in-progress draft before switching — the two sub-modes
+                // operate on different polygon sets (sub-county vs. merged county units).
+                if (current === 'district' && window.WardManager && window.WardManager.isCreateMode()) {
+                    document.getElementById('wardCancelBtn')?.click();
+                }
+                if (current === 'constituency' && window.ConstituencyManager && window.ConstituencyManager.isCreateMode()) {
+                    document.getElementById('constituencyCancelBtn')?.click();
+                }
+
+                current = mode;
+                applyBtnStyle(districtBtn, mode === 'district');
+                applyBtnStyle(constituencyBtn, mode === 'constituency');
+                if (districtPanel)     districtPanel.style.display     = (mode === 'district')     ? '' : 'none';
+                if (constituencyPanel) constituencyPanel.style.display = (mode === 'constituency') ? '' : 'none';
+
+                const editor = window.polygonEditor;
+                if (!editor || !editor.layerManager) return;
+
+                // Only switch layers once real data (and its auto-merged county layer) exists.
+                const hasCountyLayer = editor.layerManager.layers.county.polygons.length > 0;
+                if (!hasCountyLayer) return;
+
+                if (mode === 'constituency') {
+                    // Present one merged unit per County — reuses the same merge machinery
+                    // as the County/Sub-County Layer buttons in Edit Polygon mode.
+                    savedDistrictFilter = editor.districtFilter;
+                    editor.districtFilter = null; // county units carry no `district` field
+                    editor.layerManager.layers.county.visible    = true;
+                    editor.layerManager.layers.subCounty.visible = false;
+                    editor.switchToCountyLayer();
+                    // Refresh in case polygons were edited since the cache was last built
+                    editor._zoneBoundaryCache = null;
+                    editor._zoneBoundaryCachePromise = null;
+                } else {
+                    editor.layerManager.layers.county.visible    = false;
+                    editor.layerManager.layers.subCounty.visible = true;
+                    editor.switchToSubCountyLayer();
+                    editor.districtFilter = savedDistrictFilter; // restore the previously selected council
+
+                    // Electoral Region filter only means something in Constituency sub-mode
+                    editor.electoralRegionFilter = null;
+                    const electoralRegionSelect = document.getElementById('electoralRegionSelect');
+                    const electoralRegionStats  = document.getElementById('electoralRegionStats');
+                    if (electoralRegionSelect) electoralRegionSelect.value = '';
+                    if (electoralRegionStats)  electoralRegionStats.style.display = 'none';
+                }
+                editor.draw();
+            }
+
+            districtBtn?.addEventListener('click', () => set('district'));
+            constituencyBtn?.addEventListener('click', () => set('constituency'));
+
+            return { set, get current() { return current; } };
+        })();
+
         // ── Redistricting Rule ───────────────────────────────────────────────────
         window.redistrictingRules = { t1: 20000, t2: 23000, t3: 24000, t4: 25000 };
 
@@ -2044,6 +2331,484 @@
                      openCreateMode, renderWardsList, getSelectedWardIds };
         })();
 
+        // ── Constituency manager (county-grouped redistricting) ────────────────────
+        // Mirrors WardManager, but the selectable unit is a whole County (one merged
+        // shape from LayerManager's county layer) instead of a single polygon, and the
+        // saved result is written to each underlying sub-county polygon's `constituency`
+        // field (→ Constituency CSV column) instead of `districtWard`.
+        window.ConstituencyManager = (function () {
+            const CONSTITUENCY_COLORS = [
+                { name: 'Red',    hex: '#dc3545' },
+                { name: 'Orange', hex: '#fd7e14' },
+                { name: 'Yellow', hex: '#ffc107' },
+                { name: 'Green',  hex: '#28a745' },
+                { name: 'Cyan',   hex: '#17a2b8' },
+                { name: 'Blue',   hex: '#007bff' },
+                { name: 'Violet', hex: '#6f42c1' },
+                { name: 'Pink',   hex: '#e83e8c' },
+                { name: 'Teal',   hex: '#20c997' },
+                { name: 'Purple', hex: '#6610f2' },
+            ];
+
+            // State
+            let createMode          = false;
+            let colorIndex          = 0;
+            let currentColor        = CONSTITUENCY_COLORS[0];
+            let currentCountyNames  = new Set();  // county names selected in current draft
+            let savedConstituencies = [];         // [{ name, color, countyNames, population }]
+            let selectedIdx         = null;
+
+            // ── Colour picker ────────────────────────────────────────────────────
+            const colorSelected  = document.getElementById('constituencyColorSelected');
+            const colorSwatch    = document.getElementById('constituencyColorSwatch');
+            const colorLabel     = document.getElementById('constituencyColorLabel');
+            const colorDropdown  = document.getElementById('constituencyColorDropdown');
+
+            if (colorDropdown) {
+                colorDropdown.innerHTML = CONSTITUENCY_COLORS.map(c => `
+                    <div data-color="${c.hex}" data-name="${c.name}"
+                         style="display:flex; align-items:center; gap:7px; padding:6px 8px; cursor:pointer;
+                                font-size:10px; color:${c.hex}; font-weight:600;">
+                        <span style="display:inline-block; width:12px; height:12px; border-radius:2px;
+                                     background:${c.hex}; flex-shrink:0;"></span>
+                        ${c.name}
+                    </div>`).join('');
+            }
+
+            colorSelected?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                colorDropdown.style.display = colorDropdown.style.display === 'none' ? '' : 'none';
+            });
+
+            colorDropdown?.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-color]');
+                if (!item) return;
+                currentColor = { name: item.dataset.name, hex: item.dataset.color };
+                colorIndex = CONSTITUENCY_COLORS.findIndex(c => c.hex === currentColor.hex);
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                colorDropdown.style.display   = 'none';
+            });
+
+            document.addEventListener('click', () => {
+                if (colorDropdown) colorDropdown.style.display = 'none';
+            });
+
+            // ── Helpers ──────────────────────────────────────────────────────────
+            const METERS_PER_UNIT = 1000 / 8.01;
+
+            function calcAreaKm2(polygon) {
+                let areaUnits = 0;
+                polygon.rings.forEach((ring, ri) => {
+                    let a = 0;
+                    for (let i = 0; i < ring.length - 1; i++)
+                        a += ring[i].x * ring[i+1].y - ring[i+1].x * ring[i].y;
+                    areaUnits += ri === 0 ? Math.abs(a)/2 : -Math.abs(a)/2;
+                });
+                return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+            }
+
+            function polygonPop(p) {
+                if (!isNaN(p.actualPopulation) && p.actualPopulation > 0) return p.actualPopulation;
+                return calcAreaKm2(p) * (p.populationDensity || 0);
+            }
+
+            // Always read from layerManager.layers.subCounty.polygons — that array holds
+            // the live, mutable sub-county polygon objects regardless of whether the canvas
+            // is currently showing the merged county view or the sub-county view.
+            function subPolygonsForCounty(countyName) {
+                const editor = window.polygonEditor;
+                if (!editor) return [];
+                return (editor.layerManager.layers.subCounty.polygons || [])
+                    .filter(p => p.county === countyName);
+            }
+
+            function countyPopulation(countyName) {
+                return subPolygonsForCounty(countyName).reduce((sum, p) => sum + polygonPop(p), 0);
+            }
+
+            // Verification rule: quota = Electoral Region total population / allocated seats.
+            function getQuota() {
+                if (window._currentElectoralRegionQuota > 0) return window._currentElectoralRegionQuota;
+                // Fallback: compute directly from the currently selected Electoral Region
+                const editor = window.polygonEditor;
+                const region = editor?.electoralRegionFilter;
+                const rules  = window.electoralRegionRules;
+                if (!region || !editor || !rules) return 0;
+                const regionMap = rules.regionMap || {};
+                const polys = (editor.layerManager.layers.subCounty.polygons || [])
+                    .filter(p => regionMap[p.region] === region);
+                if (polys.length === 0) return 0;
+                let totalPop = 0;
+                polys.forEach(p => { totalPop += polygonPop(p); });
+                const seats = rules.allocatedSeats[region] || 0;
+                const computed = seats > 0 ? Math.round(totalPop / seats) : 0;
+                window._currentElectoralRegionQuota = computed;
+                return computed;
+            }
+
+            function constituencyVarianceText(entry) {
+                const quota = getQuota();
+                if (!quota) return '';
+                const v      = (entry.population - quota) / quota * 100;
+                const sign   = v >= 0 ? '+' : '';
+                const col    = v < 0 ? '#dc3545' : '#28a745';
+                const within = Math.abs(v) <= 25;
+                return `<span style="color:${col}; font-size:9px; font-weight:600;">(${sign}${v.toFixed(1)}%)${within ? ' ✅' : ''}</span>`;
+            }
+
+            function updateUI() {
+                let draftPop = 0;
+                currentCountyNames.forEach(name => { draftPop += countyPopulation(name); });
+                draftPop = Math.round(draftPop);
+
+                const quota      = getQuota();
+                const variance   = quota > 0 ? (draftPop - quota) / quota * 100 : -100;
+                const withinBound = createMode && quota > 0 && Math.abs(variance) <= 25;
+                const tick = ' ✅';
+
+                const draftPopEl   = document.getElementById('constituencyDraftPop');
+                const draftLabelEl = document.getElementById('constituencyDraftPopLabel');
+                if (draftPopEl)   draftPopEl.textContent   = createMode ? draftPop.toLocaleString() : '0';
+                if (draftLabelEl) draftLabelEl.textContent = 'Draft population' + (withinBound ? tick : '');
+
+                const varEl      = document.getElementById('constituencyVariance');
+                const varLabelEl = document.getElementById('constituencyVarianceLabel');
+                if (varLabelEl) varLabelEl.textContent = 'Variance' + (withinBound ? tick : '');
+                if (varEl) {
+                    if (createMode) {
+                        const sign = variance >= 0 ? '+' : '';
+                        varEl.textContent = sign + variance.toFixed(2) + '%';
+                        varEl.style.color = variance < 0 ? '#dc3545' : '#28a745';
+                    } else {
+                        varEl.textContent = '—';
+                        varEl.style.color = '#999';
+                    }
+                }
+            }
+
+            function renderConstituenciesList() {
+                const el = document.getElementById('constituenciesList');
+                if (!el) return;
+                // Only show constituencies for the currently selected Electoral Region
+                const currentRegion = window.polygonEditor?.electoralRegionFilter || null;
+                const visible = currentRegion
+                    ? savedConstituencies.filter(c => c.electoralRegion === currentRegion)
+                    : savedConstituencies;
+                const visibleIndices = currentRegion
+                    ? savedConstituencies.map((c, i) => c.electoralRegion === currentRegion ? i : -1).filter(i => i >= 0)
+                    : savedConstituencies.map((_, i) => i);
+
+                if (visible.length === 0) {
+                    el.innerHTML = '<span style="color:#999; font-style:italic;">No constituencies saved yet.</span>';
+                    return;
+                }
+                el.innerHTML = visible.map((c, vi) => {
+                    const idx = visibleIndices[vi];
+                    const isSelected = idx === selectedIdx;
+                    const bg = isSelected ? '#e8f4fd' : 'transparent';
+                    const border = isSelected ? '1px solid #007bff' : '1px solid transparent';
+                    return `
+                    <div onclick="window.ConstituencyManager.clickRow(${idx})"
+                         style="padding:5px 0 5px 4px; border-bottom:1px solid #f0f0f0; font-size:10px;
+                                background:${bg}; border-left:${border}; cursor:pointer; border-radius:3px;">
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <span style="display:inline-block; width:9px; height:9px; border-radius:2px;
+                                         background:${c.color.hex}; flex-shrink:0;"></span>
+                            <span style="font-weight:700; color:#333; flex:1;">${c.name}</span>
+                            <span style="color:#555;">${Math.round(c.population).toLocaleString()} ${constituencyVarianceText(c)}</span>
+                            <button onclick="event.stopPropagation();(function(btn){
+                                        var row = document.getElementById('constituency-actions-${idx}');
+                                        var open = row.style.display !== 'none';
+                                        row.style.display = open ? 'none' : 'flex';
+                                        btn.textContent = open ? '+' : '−';
+                                    })(this)"
+                                    style="font-size:10px; width:18px; height:18px; border:1px solid #ccc;
+                                           border-radius:4px; background:#f8f8f8; cursor:pointer;
+                                           display:flex; align-items:center; justify-content:center;
+                                           flex-shrink:0; padding:0; line-height:1;">+</button>
+                        </div>
+                        <div id="constituency-actions-${idx}" style="display:none; gap:6px; margin-top:5px; padding-left:14px;">
+                            <button onclick="event.stopPropagation();window.ConstituencyManager.renameConstituency(${idx})"
+                                    style="flex:1; font-size:9px; padding:3px 0; border:1px solid #667eea;
+                                           border-radius:4px; background:#fff; cursor:pointer; color:#667eea;">Rename</button>
+                            <button onclick="event.stopPropagation();window.ConstituencyManager.editConstituency(${idx})"
+                                    style="flex:1; font-size:9px; padding:3px 0; border:1px solid #888;
+                                           border-radius:4px; background:#fff; cursor:pointer; color:#333;">Edit</button>
+                            <button onclick="event.stopPropagation();window.ConstituencyManager.deleteConstituency(${idx})"
+                                    style="flex:1; font-size:9px; padding:3px 0; border:1px solid #dc3545;
+                                           border-radius:4px; background:#fff; cursor:pointer; color:#dc3545;">Delete</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            function openCreateMode() {
+                if (!window.polygonEditor || !window.polygonEditor.electoralRegionFilter) {
+                    alert('Select an Electoral Region first.');
+                    return;
+                }
+                createMode = true;
+                selectedIdx = null;
+                currentCountyNames = new Set();
+                colorIndex   = (colorIndex + 1) % CONSTITUENCY_COLORS.length;
+                currentColor = CONSTITUENCY_COLORS[colorIndex];
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                document.getElementById('constituencyCreatePanel').style.display = '';
+                document.getElementById('createConstituencyBtn').style.display   = 'none';
+                document.getElementById('constituencyCancelBtn').style.display   = '';
+                document.getElementById('constituencyConfirmBtn').style.display  = '';
+                updateUI();
+            }
+
+            // null = new constituency, or { _name, _entry, _spliceIdx } when editing
+            let editingIndex = null;
+
+            function closeCreateMode() {
+                // If cancelling an edit, restore the original entry and its polygon assignments
+                if (editingIndex && editingIndex._entry) {
+                    const restored = editingIndex._entry;
+                    const insertAt = Math.min(editingIndex._spliceIdx, savedConstituencies.length);
+                    savedConstituencies.splice(insertAt, 0, restored);
+                    restored.countyNames.forEach(name => {
+                        subPolygonsForCounty(name).forEach(p => { p.constituency = restored.name; });
+                    });
+                }
+                createMode = false;
+                editingIndex = null;
+                currentCountyNames = new Set();
+                document.getElementById('constituencyCreatePanel').style.display = 'none';
+                document.getElementById('createConstituencyBtn').style.display   = '';
+                document.getElementById('constituencyCancelBtn').style.display   = 'none';
+                document.getElementById('constituencyConfirmBtn').style.display  = 'none';
+                renderConstituenciesList();
+                updateUI();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            document.getElementById('createConstituencyBtn')?.addEventListener('click', openCreateMode);
+            document.getElementById('constituencyCancelBtn')?.addEventListener('click', closeCreateMode);
+
+            document.getElementById('constituencyConfirmBtn')?.addEventListener('click', () => {
+                if (currentCountyNames.size === 0) {
+                    alert('Select at least one county first.');
+                    return;
+                }
+                const electoralRegion = window.polygonEditor?.electoralRegionFilter || '';
+                let name;
+                if (editingIndex !== null && editingIndex._name) {
+                    name = editingIndex._name;
+                } else {
+                    // Number sequentially within the active Electoral Region (mirrors ward numbering per council)
+                    const regionConstituencies = savedConstituencies.filter(c => c.electoralRegion === electoralRegion);
+                    const usedNums = regionConstituencies.map(c => {
+                        const m = c.name.match(/^Constituency (\d+)$/i);
+                        return m ? parseInt(m[1], 10) : 0;
+                    });
+                    const nextNo = usedNums.length > 0 ? Math.max(...usedNums) + 1 : 1;
+                    name = `Constituency ${nextNo}`;
+                }
+
+                let totalPop = 0;
+                currentCountyNames.forEach(countyName => {
+                    subPolygonsForCounty(countyName).forEach(p => {
+                        totalPop += polygonPop(p);
+                        // Write back to polygon data — updates the Constituency CSV column
+                        p.constituency = name;
+                    });
+                });
+
+                savedConstituencies.push({
+                    name,
+                    color:          currentColor,
+                    countyNames:    [...currentCountyNames],
+                    population:     Math.round(totalPop),
+                    electoralRegion
+                });
+
+                editingIndex = null;
+                renderConstituenciesList();
+                closeCreateMode();
+                if (window._refreshElectoralRegionHeader) window._refreshElectoralRegionHeader();
+            });
+
+            document.getElementById('clearConstituenciesBtn')?.addEventListener('click', () => {
+                if (savedConstituencies.length === 0 && !createMode) return;
+                if (!confirm('Clear all constituencies? This will remove every saved constituency and reset all Constituency assignments.')) return;
+                savedConstituencies.forEach(c => {
+                    c.countyNames.forEach(name => {
+                        subPolygonsForCounty(name).forEach(p => { p.constituency = ''; });
+                    });
+                });
+                savedConstituencies = [];
+                closeCreateMode();
+                renderConstituenciesList();
+                if (window.polygonEditor) window.polygonEditor.draw();
+                if (window._refreshElectoralRegionHeader) window._refreshElectoralRegionHeader();
+            });
+
+            // ── Row click (select constituency) ─────────────────────────────────────
+            function clickRow(idx) {
+                if (createMode) return;
+                selectedIdx = (selectedIdx === idx) ? null : idx;
+                renderConstituenciesList();
+                if (window.polygonEditor) window.polygonEditor.draw();
+            }
+
+            // ── Select constituency by county name ──────────────────────────────────
+            function selectByCounty(countyName) {
+                const idx = savedConstituencies.findIndex(c => c.countyNames.includes(countyName));
+                selectedIdx = (idx >= 0) ? idx : null;
+                renderConstituenciesList();
+            }
+
+            // ── C key action from Constituency sub-mode ─────────────────────────────
+            function activateCKey() {
+                if (selectedIdx !== null) {
+                    editConstituency(selectedIdx);
+                } else {
+                    openCreateMode();
+                }
+            }
+
+            // ── Auto-assign every saved constituency to its Electoral Region ───────────
+            // Derived on the fly from each constituency's counties' (already-existing) Region
+            // value + the current Region → Electoral Region mapping — no CSV persistence
+            // needed. Re-run any time the mapping changes (Redistricting Rule modal confirm)
+            // so previously-created constituencies (including ones just reloaded from a saved
+            // CSV, which only ever stores the raw Region) get classified immediately, showing
+            // up-to-date Created/Remaining counts per Electoral Region.
+            function reclassifyElectoralRegions() {
+                const regionMap = (window.electoralRegionRules && window.electoralRegionRules.regionMap) || {};
+                savedConstituencies.forEach(c => {
+                    let electoralRegion = '';
+                    for (const countyName of c.countyNames) {
+                        const polys = subPolygonsForCounty(countyName);
+                        const region = polys.length > 0 ? polys[0].region : null;
+                        if (region && regionMap[region]) { electoralRegion = regionMap[region]; break; }
+                    }
+                    c.electoralRegion = electoralRegion;
+                });
+                renderConstituenciesList();
+            }
+
+            // ── Load constituencies from polygon data (called after CSV load) ──────
+            function loadFromPolygons(polygons) {
+                const groups = {}; // constituency name -> { countyNames: Set, pop }
+                polygons.forEach(p => {
+                    if (!p.constituency) return;
+                    if (!groups[p.constituency]) groups[p.constituency] = { countyNames: new Set(), pop: 0 };
+                    groups[p.constituency].countyNames.add(p.county);
+                    groups[p.constituency].pop += polygonPop(p);
+                });
+
+                savedConstituencies = [];
+                let ci = 0;
+                Object.entries(groups).forEach(([name, g]) => {
+                    const color = CONSTITUENCY_COLORS[ci % CONSTITUENCY_COLORS.length];
+                    ci++;
+                    savedConstituencies.push({
+                        name,
+                        color,
+                        countyNames:     [...g.countyNames],
+                        population:      Math.round(g.pop),
+                        electoralRegion: '' // resolved by reclassifyElectoralRegions() below
+                    });
+                });
+
+                selectedIdx = null;
+                colorIndex = savedConstituencies.length % CONSTITUENCY_COLORS.length;
+                reclassifyElectoralRegions(); // apply current-session rule mapping, if any, immediately
+            }
+
+            // ── Public API ────────────────────────────────────────────────────────
+            function isCreateMode()          { return createMode; }
+            function getCurrentColor()       { return currentColor; }
+            function getCurrentCountyIds()   { return currentCountyNames; }
+            function getSavedConstituencies() { return savedConstituencies; }
+
+            function togglePolygon(countyName) {
+                if (!createMode) return;
+                if (currentCountyNames.has(countyName)) currentCountyNames.delete(countyName);
+                else currentCountyNames.add(countyName);
+                updateUI();
+            }
+
+            function editConstituency(idx) {
+                const entry = savedConstituencies[idx];
+                editingIndex = { _name: entry.name, _entry: { ...entry, countyNames: [...entry.countyNames] }, _spliceIdx: idx };
+                selectedIdx = null;
+                currentCountyNames = new Set(entry.countyNames);
+                currentColor = entry.color;
+                colorIndex   = CONSTITUENCY_COLORS.findIndex(c => c.hex === currentColor.hex);
+                colorSwatch.style.background = currentColor.hex;
+                colorLabel.textContent        = currentColor.name;
+                entry.countyNames.forEach(name => {
+                    subPolygonsForCounty(name).forEach(p => { p.constituency = ''; });
+                });
+                savedConstituencies.splice(idx, 1);
+                renderConstituenciesList();
+                createMode = true;
+                document.getElementById('constituencyCreatePanel').style.display = '';
+                document.getElementById('createConstituencyBtn').style.display   = 'none';
+                document.getElementById('constituencyCancelBtn').style.display   = '';
+                document.getElementById('constituencyConfirmBtn').style.display  = '';
+                updateUI();
+                if (window.polygonEditor) window.polygonEditor.draw();
+                if (window._refreshElectoralRegionHeader) window._refreshElectoralRegionHeader();
+            }
+
+            function deleteConstituency(idx) {
+                const entry = savedConstituencies[idx];
+                entry.countyNames.forEach(name => {
+                    subPolygonsForCounty(name).forEach(p => { p.constituency = ''; });
+                });
+                savedConstituencies.splice(idx, 1);
+                renderConstituenciesList();
+                if (window.polygonEditor) window.polygonEditor.draw();
+                if (window._refreshElectoralRegionHeader) window._refreshElectoralRegionHeader();
+            }
+
+            // ── Rename a saved constituency — persists straight through to the
+            //    Constituency CSV column since export reads polygon.constituency directly.
+            function renameConstituency(idx) {
+                const entry = savedConstituencies[idx];
+                if (!entry) return;
+                const input = prompt('Rename constituency', entry.name);
+                if (input === null) return; // cancelled
+                const newName = input.trim();
+                if (!newName) { alert('Name cannot be empty.'); return; }
+                if (newName === entry.name) return;
+                if (savedConstituencies.some((c, i) => i !== idx && c.name === newName)) {
+                    alert('A constituency with that name already exists.');
+                    return;
+                }
+                entry.name = newName;
+                entry.countyNames.forEach(name => {
+                    subPolygonsForCounty(name).forEach(p => { p.constituency = newName; });
+                });
+                renderConstituenciesList();
+            }
+
+            function reset() {
+                savedConstituencies = [];
+                closeCreateMode();
+                renderConstituenciesList();
+            }
+
+            function getSelectedCountyIds() {
+                if (selectedIdx === null) return null;
+                const c = savedConstituencies[selectedIdx];
+                return c ? new Set(c.countyNames) : null;
+            }
+
+            return { togglePolygon, getCurrentCountyIds, getCurrentColor,
+                     isCreateMode, updateUI, reset, getSavedConstituencies, editConstituency, deleteConstituency,
+                     renameConstituency, selectByCounty, activateCKey, loadFromPolygons, clickRow,
+                     openCreateMode, renderConstituenciesList, getSelectedCountyIds, reclassifyElectoralRegions };
+        })();
+
         // ── Council select + stats ───────────────────────────────────────────────
         (function () {
             const councilSelect = document.getElementById('councilSelect');
@@ -2172,6 +2937,346 @@
 
             // Expose so Redistricting Rule confirm can trigger a recalc
             window._refreshCouncilStats = () => renderStats(councilSelect.value);
+        })();
+
+        // ── Electoral Region rule state + modal (Constituency sub-mode) ────────────
+        window.electoralRegionRules = {
+            totalSeats:     1,
+            regions:        [],  // [{ name }]
+            regionMap:      {},  // { rawRegionValue: electoralRegionName }
+            allocatedSeats: {}   // { electoralRegionName: number }
+        };
+
+        (function () {
+            const modal            = document.getElementById('electoralRegionRuleModal');
+            const openBtn          = document.getElementById('electoralRegionRuleBtn');
+            const confirmBtn       = document.getElementById('electoralRegionRuleConfirm');
+            const cancelBtn        = document.getElementById('electoralRegionRuleCancel');
+            const totalSeatsInput  = document.getElementById('errTotalSeats');
+            const regionRowsEl     = document.getElementById('errRegionRows');
+            const addRegionBtn     = document.getElementById('errAddRegionBtn');
+            const mapRowsEl        = document.getElementById('errMapRows');
+            const allocRowsEl      = document.getElementById('errAllocationRows');
+            if (!modal) return;
+
+            const METERS_PER_UNIT = 1000 / 8.01;
+            function calcAreaKm2(polygon) {
+                let areaUnits = 0;
+                polygon.rings.forEach((ring, ri) => {
+                    let a = 0;
+                    for (let i = 0; i < ring.length - 1; i++)
+                        a += ring[i].x * ring[i+1].y - ring[i+1].x * ring[i].y;
+                    areaUnits += ri === 0 ? Math.abs(a)/2 : -Math.abs(a)/2;
+                });
+                return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+            }
+            function polygonPop(p) {
+                if (!isNaN(p.actualPopulation) && p.actualPopulation > 0) return p.actualPopulation;
+                return calcAreaKm2(p) * (p.populationDensity || 0);
+            }
+
+            // Draft copies — only committed to window.electoralRegionRules on Confirm.
+            let draftRegions   = []; // [{ name }]
+            let draftRegionMap = {}; // { rawRegion: electoralRegionName }
+            let draftAllocated = {}; // { electoralRegionName: number }
+
+            function getRawRegions() {
+                const editor = window.polygonEditor;
+                if (!editor || !editor.layerManager) return [];
+                const polys = editor.layerManager.layers.subCounty.polygons || [];
+                return [...new Set(polys.map(p => p.region).filter(Boolean))].sort();
+            }
+
+            function renderRegionRows() {
+                regionRowsEl.innerHTML = draftRegions.map((r, idx) => `
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+                        <input type="text" data-idx="${idx}" class="err-region-name"
+                               value="${r.name.replace(/"/g,'&quot;')}" placeholder="e.g. A"
+                               style="flex:1; padding:5px 7px; border:1.5px solid #ddd; border-radius:5px; font-size:11px;">
+                        <button data-idx="${idx}" class="err-region-remove"
+                                style="font-size:9px; padding:5px 8px; border:1px solid #dc3545; border-radius:4px;
+                                       background:#fff; color:#dc3545; cursor:pointer; width:auto;">Remove</button>
+                    </div>`).join('') || '<span style="color:#999; font-style:italic; font-size:10px;">No Electoral Regions yet.</span>';
+            }
+
+            function renderMapRows() {
+                const rawRegions = getRawRegions();
+                if (rawRegions.length === 0) {
+                    mapRowsEl.innerHTML = '<span style="color:#999; font-style:italic; font-size:10px;">Load a CSV first.</span>';
+                    return;
+                }
+                mapRowsEl.innerHTML = rawRegions.map(raw => {
+                    const current = draftRegionMap[raw] || '';
+                    const options = ['<option value="">— unassigned —</option>']
+                        .concat(draftRegions.map(r => `<option value="${r.name.replace(/"/g,'&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}</option>`))
+                        .join('');
+                    return `
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                        <span style="flex:1; font-size:10px; color:#333; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${raw}</span>
+                        <select data-raw="${raw.replace(/"/g,'&quot;')}" class="err-map-select"
+                                style="width:140px; padding:3px 5px; border:1.5px solid #ddd; border-radius:5px; font-size:10px;">
+                            ${options}
+                        </select>
+                    </div>`;
+                }).join('');
+            }
+
+            function renderAllocationRows() {
+                const editor = window.polygonEditor;
+                const polys = (editor && editor.layerManager) ? (editor.layerManager.layers.subCounty.polygons || []) : [];
+                const popByRegion = {};
+                draftRegions.forEach(r => { popByRegion[r.name] = 0; });
+                polys.forEach(p => {
+                    const er = draftRegionMap[p.region];
+                    if (er && popByRegion.hasOwnProperty(er)) popByRegion[er] += polygonPop(p);
+                });
+                const totalMappedPop = Object.values(popByRegion).reduce((a, b) => a + b, 0);
+                const totalSeats = parseInt(totalSeatsInput.value, 10) || 0;
+
+                allocRowsEl.innerHTML = draftRegions.map(r => {
+                    const pop = Math.round(popByRegion[r.name] || 0);
+                    const share = totalMappedPop > 0 ? (popByRegion[r.name] / totalMappedPop * 100) : 0;
+                    const proportional = totalMappedPop > 0 ? (popByRegion[r.name] / totalMappedPop * totalSeats) : 0;
+                    const allocated = draftAllocated[r.name] != null ? draftAllocated[r.name] : Math.round(proportional);
+                    draftAllocated[r.name] = allocated;
+                    return `
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:5px 8px; color:#333;">${r.name}</td>
+                        <td style="padding:5px 8px; text-align:right;">${pop.toLocaleString()}</td>
+                        <td style="padding:5px 8px; text-align:right;">${share.toFixed(1)}%</td>
+                        <td style="padding:5px 8px; text-align:right; color:#667eea;">${proportional.toFixed(1)}</td>
+                        <td style="padding:5px 8px; text-align:right;">
+                            <input type="number" min="0" step="1" data-region="${r.name.replace(/"/g,'&quot;')}"
+                                   class="err-allocated-input" value="${allocated}"
+                                   style="width:56px; padding:3px 5px; border:1.5px solid #ddd; border-radius:4px; font-size:10px; text-align:right;">
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+
+            function renderAll() {
+                renderRegionRows();
+                renderMapRows();
+                renderAllocationRows();
+            }
+
+            // ── Row-level event delegation ──────────────────────────────────────────
+            regionRowsEl.addEventListener('input', (e) => {
+                if (!e.target.classList.contains('err-region-name')) return;
+                const idx = parseInt(e.target.dataset.idx, 10);
+                const oldName = draftRegions[idx].name;
+                const newName = e.target.value;
+                draftRegions[idx].name = newName;
+                if (oldName !== newName) {
+                    Object.keys(draftRegionMap).forEach(raw => {
+                        if (draftRegionMap[raw] === oldName) draftRegionMap[raw] = newName;
+                    });
+                    if (draftAllocated.hasOwnProperty(oldName)) {
+                        draftAllocated[newName] = draftAllocated[oldName];
+                        delete draftAllocated[oldName];
+                    }
+                }
+                renderMapRows();
+                renderAllocationRows();
+            });
+
+            regionRowsEl.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('err-region-remove')) return;
+                const idx = parseInt(e.target.dataset.idx, 10);
+                const removed = draftRegions[idx];
+                draftRegions.splice(idx, 1);
+                Object.keys(draftRegionMap).forEach(raw => {
+                    if (draftRegionMap[raw] === removed.name) delete draftRegionMap[raw];
+                });
+                delete draftAllocated[removed.name];
+                renderAll();
+            });
+
+            addRegionBtn?.addEventListener('click', () => {
+                const used = new Set(draftRegions.map(r => r.name));
+                let letterCode = 65; // 'A'
+                while (used.has(String.fromCharCode(letterCode)) && letterCode < 91) letterCode++;
+                const name = letterCode <= 90 ? String.fromCharCode(letterCode) : `Region ${draftRegions.length + 1}`;
+                draftRegions.push({ name });
+                renderAll();
+            });
+
+            mapRowsEl.addEventListener('change', (e) => {
+                if (!e.target.classList.contains('err-map-select')) return;
+                const raw = e.target.dataset.raw;
+                const val = e.target.value;
+                if (val) draftRegionMap[raw] = val;
+                else delete draftRegionMap[raw];
+                renderAllocationRows();
+            });
+
+            allocRowsEl.addEventListener('input', (e) => {
+                if (!e.target.classList.contains('err-allocated-input')) return;
+                const region = e.target.dataset.region;
+                const val = parseInt(e.target.value, 10);
+                draftAllocated[region] = isNaN(val) ? 0 : val;
+            });
+
+            totalSeatsInput?.addEventListener('input', renderAllocationRows);
+
+            function openModal() {
+                const rules = window.electoralRegionRules;
+                totalSeatsInput.value = rules.totalSeats || 1;
+                draftRegions   = rules.regions.map(r => ({ ...r }));
+                draftRegionMap = { ...rules.regionMap };
+                draftAllocated = { ...rules.allocatedSeats };
+                renderAll();
+                modal.style.display = 'flex';
+            }
+
+            function closeModal() { modal.style.display = 'none'; }
+
+            openBtn?.addEventListener('click', openModal);
+            cancelBtn?.addEventListener('click', closeModal);
+
+            confirmBtn?.addEventListener('click', () => {
+                const names = draftRegions.map(r => r.name.trim()).filter(Boolean);
+                if (names.length === 0) {
+                    alert('Add at least one Electoral Region.');
+                    return;
+                }
+                if (new Set(names).size !== names.length) {
+                    alert('Electoral Region names must be unique.');
+                    return;
+                }
+                const totalSeats = parseInt(totalSeatsInput.value, 10);
+                if (isNaN(totalSeats) || totalSeats < 1) {
+                    alert('Total seats must be a positive integer.');
+                    return;
+                }
+
+                window.electoralRegionRules = {
+                    totalSeats,
+                    regions:        draftRegions.map(r => ({ name: r.name.trim() })),
+                    regionMap:      { ...draftRegionMap },
+                    allocatedSeats: { ...draftAllocated }
+                };
+
+                closeModal();
+                if (window._updateElectoralRegionSelect) window._updateElectoralRegionSelect();
+                if (window._refreshElectoralRegionStats) window._refreshElectoralRegionStats();
+
+                // Auto-assign every already-created constituency into its Electoral Region —
+                // derived on the fly from each constituency's counties' (already-existing) Region
+                // value + the mapping just defined above. No CSV persistence needed for this.
+                if (window.ConstituencyManager && window.ConstituencyManager.reclassifyElectoralRegions) {
+                    window.ConstituencyManager.reclassifyElectoralRegions();
+                }
+                if (window._refreshElectoralRegionHeader) window._refreshElectoralRegionHeader();
+            });
+
+            modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+        })();
+
+        // ── Electoral Region select + stats ─────────────────────────────────────────
+        (function () {
+            const regionSelect = document.getElementById('electoralRegionSelect');
+            const regionStats  = document.getElementById('electoralRegionStats');
+            if (!regionSelect) return;
+
+            const METERS_PER_UNIT = 1000 / 8.01;
+            function calcAreaKm2(polygon) {
+                let areaUnits = 0;
+                polygon.rings.forEach((ring, ri) => {
+                    let a = 0;
+                    for (let i = 0; i < ring.length - 1; i++)
+                        a += ring[i].x * ring[i+1].y - ring[i+1].x * ring[i].y;
+                    areaUnits += ri === 0 ? Math.abs(a)/2 : -Math.abs(a)/2;
+                });
+                return areaUnits * METERS_PER_UNIT * METERS_PER_UNIT / 1_000_000;
+            }
+
+            function renderStats(regionName) {
+                const rules = window.electoralRegionRules;
+                if (!regionName || !window.polygonEditor || !rules) {
+                    regionStats.style.display = 'none';
+                    window._currentElectoralRegionQuota = 0;
+                    return;
+                }
+
+                const polys = (window.polygonEditor.layerManager.layers.subCounty.polygons || [])
+                    .filter(p => rules.regionMap[p.region] === regionName);
+                if (polys.length === 0) { regionStats.style.display = 'none'; window._currentElectoralRegionQuota = 0; return; }
+
+                let totalPop = 0;
+                polys.forEach(p => {
+                    totalPop += (!isNaN(p.actualPopulation) && p.actualPopulation > 0)
+                        ? p.actualPopulation
+                        : calcAreaKm2(p) * (p.populationDensity || 0);
+                });
+                totalPop = Math.round(totalPop);
+
+                const seats = rules.allocatedSeats[regionName] || 0;
+                const quota = seats > 0 ? Math.round(totalPop / seats) : 0;
+
+                document.getElementById('ersTotalPop').textContent   = totalPop.toLocaleString();
+                document.getElementById('ersAllocSeat').textContent  = seats;
+                document.getElementById('ersQuota').textContent      = quota.toLocaleString();
+                document.getElementById('ersRegionName').textContent = regionName;
+
+                window._currentElectoralRegionSeats = seats;
+                // Verification rule: quota = Electoral Region total population / allocated seats.
+                // Cached so ConstituencyManager's ±25% variance check stays in sync.
+                window._currentElectoralRegionQuota = quota;
+                refreshElectoralRegionHeader(regionName, seats);
+
+                regionStats.style.display = '';
+            }
+
+            function refreshElectoralRegionHeader(regionName, seats) {
+                const r = regionName || regionSelect.value || '';
+                const s = seats != null ? seats : (window._currentElectoralRegionSeats || 0);
+                const created = window.ConstituencyManager
+                    ? window.ConstituencyManager.getSavedConstituencies().filter(c => c.electoralRegion === r).length
+                    : 0;
+                const remaining = Math.max(0, s - created);
+                document.getElementById('ersCreated').textContent   = created;
+                document.getElementById('ersRemaining').textContent = remaining;
+                const remEl = document.getElementById('ersRemaining');
+                if (remEl) remEl.style.color = remaining === 0 ? '#28a745' : (remaining < 0 ? '#dc3545' : '#333');
+            }
+
+            // Expose so ConstituencyManager can call it after saving / deleting a constituency
+            window._refreshElectoralRegionHeader = () => refreshElectoralRegionHeader(regionSelect.value, window._currentElectoralRegionSeats);
+
+            /** Repopulate the dropdown from window.electoralRegionRules. Called after Rule confirm. */
+            window._updateElectoralRegionSelect = function () {
+                const rules = window.electoralRegionRules;
+                const names = (rules && rules.regions) ? rules.regions.map(r => r.name) : [];
+                const prevValue = regionSelect.value;
+
+                regionSelect.innerHTML = '<option value="">— All —</option>';
+                names.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.textContent = name;
+                    regionSelect.appendChild(opt);
+                });
+
+                if (names.includes(prevValue)) {
+                    regionSelect.value = prevValue;
+                } else {
+                    regionSelect.value = '';
+                    if (window.polygonEditor) window.polygonEditor.electoralRegionFilter = null;
+                    regionStats.style.display = 'none';
+                }
+            };
+
+            regionSelect.addEventListener('change', () => {
+                if (!window.polygonEditor) return;
+                const region = regionSelect.value || null;
+                window.polygonEditor.electoralRegionFilter = region;
+                window.polygonEditor.draw();
+                renderStats(region);
+                if (window.ConstituencyManager) window.ConstituencyManager.renderConstituenciesList();
+            });
+
+            // Expose so Redistricting Rule confirm can trigger a recalc
+            window._refreshElectoralRegionStats = () => renderStats(regionSelect.value);
         })();
     </script>
 
