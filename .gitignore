@@ -46,3 +46,9 @@ Thumbs.db
 
 # Large geodata files
 *.gpkg
+
+# Local scratch / working files
+randomno.csv
+shapefile/area_analysis.csv
+shapefile/area_analysis2.csv
+shapefile/analysis/~$*.xlsx
