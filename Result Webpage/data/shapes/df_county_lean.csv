@@ -1,0 +1,660 @@
+Zone,County,District,Area,Region,Population,Constituency
+Alington,A01,Alington City,37.718146999999995,Capital,540658,The City of Alington
+Alington,A02,Alington City,7.54363,Capital,64742,The City of Alington
+Alington,A03,Alington City,26.059807999999997,Capital,341794,Upper Alington
+Alington,A04,Alington City,22.630883000000004,Capital,336535,Upper Alington
+Alington,A05,Alington City,26.745596,Capital,251610,Upper Alington
+Alington,A06,Alington Pass,30.174519,Capital,252552,Alington Pass
+Alington,A07,Alington Pass,15.087252,Capital,198509,Alington Pass
+Alington,A08,Alington Pass,15.087261999999999,Capital,150267,Alington Pass
+Alington,A09,Alington Pass,30.174523999999998,Capital,99633,Alington Pass
+Alington,A10,Alington Pass,61.72065899999999,Capital,279664,Alington Pass
+Alington,A11,Alington Pass,46.288492000000005,Capital,234747,Alington Pass
+Alington,A12,Alington City,45.261796,Capital,639437,The City of Alington
+Alma Bridge,AB01,White Bridge and Red Market,17.092692,Lowland,258391,Red Market
+Alma Bridge,AB02,White Bridge and Red Market,20.315839,Lowland,329529,Red Market
+Alma Bridge,AB03,White Bridge and Red Market,13.616703,Lowland,166659,White Bridge
+Alma Bridge,AB04,White Bridge and Red Market,13.303215,Lowland,74157,White Bridge
+Alma Bridge,AB05,White Bridge and Red Market,8.153532,Lowland,75251,White Bridge
+Alma Bridge,AB06,White Bridge and Red Market,12.174630999999998,Lowland,190917,White Bridge
+Alma Bridge,AB07,White Bridge and Red Market,9.122300000000001,Lowland,144905,White Bridge
+Alma Bridge,AB08,White Bridge and Red Market,7.934212000000001,Lowland,80651,Red Market
+Alma Bridge,AB09,White Bridge and Red Market,10.804052,Lowland,66071,Red Market
+Alma Bridge,AB10,White Bridge and Red Market,6.932187,Lowland,56760,Red Market
+Alma Bridge,AB11,Weston Cross,20.536565,Lowland,220649,Red Market
+Alma Bridge,AB12,Weston Cross,12.40981,Lowland,172539,West Cross
+Alma Bridge,AB13,Weston Cross,25.716065,Lowland,247886,West Cross
+Alma Bridge,AB14,Weston Cross,13.252388,Lowland,160019,West Cross
+Alma Bridge,AB15,Weston Cross,15.480822,Lowland,133405,West Cross
+Alma Bridge,AB16,Weston Cross,11.853515,Lowland,119915,West Cross
+Alma Bridge,AB17,Weston Cross,29.837110000000003,Lowland,297860,West Cross
+Alma Bridge,AB18,Alma Causeway,27.556276,Lowland,138319,Bayes Causeway
+Alma Bridge,AB19,Alma Causeway,14.972872999999998,Lowland,97961,Bayes Causeway
+Alma Bridge,AB20,Alma Causeway,39.154504,Lowland,367858,Bayes Causeway
+Alma Bridge,AB21,Alma Causeway,14.863323,Lowland,59997,Bayes Causeway
+Alma Bridge,AB22,Southwest Almouth and Jackenville,50.301277,Lowland,175100,Southwest Almouth and Jackenville
+Alma Bridge,AB23,Southwest Almouth and Jackenville,55.069962999999994,Lowland,27696,Southwest Almouth and Jackenville
+Alma Bridge,AB24,Southwest Almouth and Jackenville,50.446863,Lowland,125241,Southwest Almouth and Jackenville
+Alma Bridge,AB25,Southwest Almouth and Jackenville,33.925952,Lowland,172165,Southwest Almouth and Jackenville
+Alma Bridge,AB26,Southwest Almouth and Jackenville,95.5827,Lowland,240933,Southwest Almouth and Jackenville
+Alma Bridge,AB27,Southwest Almouth and Jackenville,91.15909099999999,Lowland,46319,Southwest Almouth and Jackenville
+Alma Bridge,AB28,Southwest Almouth and Jackenville,37.69946999999999,Lowland,207139,Southwest Almouth and Jackenville
+Alma Bridge,AB29,Southwest Almouth and Jackenville,54.495591000000005,Lowland,192720,Southwest Almouth and Jackenville
+Alma Bridge,AB30,East Almouth,72.088987,Lowland,216822,East Almouth
+Alma Bridge,AB31,East Almouth,120.13851199999998,Lowland,69452,East Almouth
+Alma Bridge,AB32,East Almouth,48.99047000000001,Lowland,37248,East Almouth
+Alma Bridge,AB33,East Almouth,65.895666,Lowland,233543,East Almouth
+Alma Bridge,AB34,East Almouth,38.818426,Lowland,542903,East Almouth
+Alma Bridge,AB35,White Bridge and Red Market,29.974573,Lowland,254904,White Bridge
+Alma Forest,AF01,Greater Almouth,91.209334,Lowland,32031,Greater Almouth
+Alma Forest,AF02,Greater Almouth,96.00982599999999,Lowland,33522,Greater Almouth
+Alma Forest,AF03,Greater Almouth,79.208104,Lowland,9712,Greater Almouth
+Alma Forest,AF04,Greater Almouth,79.20810399999998,Lowland,23689,Greater Almouth
+Alma Forest,AF05,Greater Almouth,129.613264,Lowland,10296,Greater Almouth
+Alma Forest,AF06,Greater Almouth,187.22095900000002,Lowland,5969,Greater Almouth
+Alma Forest,AF07,Greater Almouth,362.09415699999994,Lowland,10862,Greater Almouth
+Alma Forest,AF08,Greater Almouth,400.498131,Lowland,8299,Greater Almouth
+Alma Forest,AF09,Greater Almouth,1108.570593,Lowland,11316,Greater Almouth
+Alma Forest,AF10,Greater Almouth,485.504227,Lowland,97617,Greater Almouth
+Alma Forest,AF11,Greater Almouth,1107.354884,Lowland,17370,Greater Almouth
+Alma Forest,AF12,Greater Almouth,694.325601,Lowland,10683,Greater Almouth
+Alma Forest,AF13,Greater Almouth,671.88277,Lowland,6765,Greater Almouth
+Alma Heath,AH01,Greater Almouth,458.85215400000004,Lowland,33037,Greater Almouth
+Alma Heath,AH02,Greater Almouth,536.158767,Lowland,11494,Greater Almouth
+Alma Heath,AH03,Greater Almouth,536.1606119999999,Lowland,31661,Greater Almouth
+Alma Heath,AH04,Greater Almouth,554.864499,Lowland,8463,Greater Almouth
+Oakfield Bush,AK01,Dressingham and Oakfield Bush,15.087258999999998,Lowland,44612,Upper Eastland and Readington
+Oakfield Bush,AK02,Dressingham and Oakfield Bush,15.087257,Lowland,60110,Upper Eastland and Readington
+Oakfield Bush,AK03,Dressingham and Oakfield Bush,22.630887,Lowland,725,Upper Eastland and Readington
+Oakfield Bush,AK04,Dressingham and Oakfield Bush,22.630887,Lowland,1124,Upper Eastland and Readington
+Oakfield Bush,AK05,Dressingham and Oakfield Bush,22.630887,Lowland,1088,Upper Eastland and Readington
+Oakfield Bush,AK06,Dressingham and Oakfield Bush,22.630887,Lowland,1017,Upper Eastland and Readington
+Oakfield Bush,AK07,Dressingham and Oakfield Bush,447.334091,Lowland,4581,Upper Eastland and Readington
+Oakfield Bush,AK08,Dressingham and Oakfield Bush,430.797334,Lowland,4212,Upper Eastland and Readington
+Oakfield Bush,AK09,Dressingham and Oakfield Bush,333.322423,Lowland,6466,Upper Eastland and Readington
+Oakfield Bush,AK10,Dressingham and Oakfield Bush,383.945786,Lowland,5695,Upper Eastland and Readington
+Oakfield Bush,AK11,Dressingham and Oakfield Bush,563.278424,Lowland,2862,Upper Eastland and Readington
+Oakfield Bush,AK12,Dressingham and Oakfield Bush,495.88451399999997,Lowland,7739,Upper Eastland and Readington
+Oakfield Bush,AK13,Dressingham and Oakfield Bush,406.732533,Lowland,8193,Upper Eastland and Readington
+Oakfield Bush,AK14,Dressingham and Oakfield Bush,30.174517,Lowland,75650,Upper Eastland and Readington
+Oakfield Bush,AK15,Dressingham and Oakfield Bush,342.206449,Lowland,4997,Upper Eastland and Readington
+Oakfield Bush,AK16,Dressingham and Oakfield Bush,250.685395,Lowland,3980,Upper Eastland and Readington
+Oakfield Bush,AK17,Dressingham and Oakfield Bush,620.697287,Lowland,6192,Upper Eastland and Readington
+Oakfield Bush,AK18,Dressingham and Oakfield Bush,1821.381201,Lowland,8973,Upper Eastland and Readington
+Alma Junction,AN01,Greater Almouth,23.098466000000002,Lowland,117359,Greater Almouth
+Alma Junction,AN02,Greater Almouth,22.506202,Lowland,102873,Greater Almouth
+Alma Junction,AN03,Greater Almouth,23.690739,Lowland,60962,Greater Almouth
+Alma Junction,AN04,Greater Almouth,24.314179,Lowland,153388,Greater Almouth
+Alma Junction,AN05,Greater Almouth,71.69569500000001,Lowland,108352,Greater Almouth
+Alma Junction,AN06,Greater Almouth,72.31909199999998,Lowland,25372,Greater Almouth
+Alma Junction,AN07,Greater Almouth,68.703136,Lowland,34516,Greater Almouth
+Alma Junction,AN08,Greater Almouth,68.113606,Lowland,119547,Greater Almouth
+Aqua Bay,AQ01,Aqua Corner,13.528657,Lowland,12510,Upper Eastland and Readington
+Aqua Bay,AQ02,Aqua Corner,13.045491,Lowland,16583,Upper Eastland and Readington
+Aqua Bay,AQ03,Aqua Corner,13.528656999999999,Lowland,26393,Upper Eastland and Readington
+Aqua Bay,AQ04,Aqua Corner,13.045491,Lowland,11968,Upper Eastland and Readington
+Aqua Bay,AQ05,Aqua Corner,25.716918,Lowland,12886,Upper Eastland and Readington
+Aqua Bay,AQ06,Aqua Corner,25.716918,Lowland,9422,Upper Eastland and Readington
+Aqua Bay,AQ07,Aqua Corner,77.961226,Lowland,11879,Upper Eastland and Readington
+Aqua Bay,AQ08,Aqua Corner,288.263266,Lowland,4383,Upper Eastland and Readington
+Aqua Bay,AQ09,Aqua Corner,332.449607,Lowland,4458,Upper Eastland and Readington
+Aqua Bay,AQ10,Aqua Corner,97.926905,Lowland,4607,Upper Eastland and Readington
+Aqua Bay,AQ11,Aqua Corner,378.30365,Lowland,1871,Upper Eastland and Readington
+Aqua Bay,AQ12,Aqua Corner,269.201575,Lowland,5888,Upper Eastland and Readington
+Aqua Bay,AQ13,Aqua Corner,238.871199,Lowland,2880,Upper Eastland and Readington
+Aqua Bay,AQ14,Aqua Corner,229.800141,Lowland,2091,Upper Eastland and Readington
+Aqua Bay,AQ15,Aqua Corner,2363.1665169999997,Lowland,18787,Upper Eastland and Readington
+Aqua Bay,AQ16,Aqua Corner,846.195689,Lowland,2040,Upper Eastland and Readington
+Aqua Bay,AQ17,Aqua Corner,122.412527,Lowland,3322,Upper Eastland and Readington
+Aqua Bay,AQ18,Aqua Corner,182.247222,Lowland,3136,Upper Eastland and Readington
+Aqua Bay,AQ19,Aqua Corner,244.341888,Lowland,3987,Upper Eastland and Readington
+Aqua Bay,AQ20,Aqua Corner,144.949899,Lowland,2618,Upper Eastland and Readington
+Aqua Bay,AQ21,Aqua Corner,87.125799,Lowland,3304,Upper Eastland and Readington
+Aqua Bay,AQ22,Aqua Corner,13.965066,Lowland,1035,Upper Eastland and Readington
+Aqua Bay,AQ23,Aqua Corner,14.401474,Lowland,37091,Upper Eastland and Readington
+Aqua Bay,AQ24,Aqua Corner,14.401474,Lowland,743,Upper Eastland and Readington
+Aqua Bay,AQ25,Aqua Corner,14.915813,Lowland,6366,Upper Eastland and Readington
+Bayes Valley,B01,Bayes Valley,14.401475,Lowland,36626,Bayes Causeway
+Bayes Valley,B02,Bayes Valley,22.630887,Lowland,34822,Bayes Causeway
+Bayes Valley,B03,Bayes Valley,286.096811,Lowland,28057,Bayes Causeway
+Bayes Valley,B04,Bayes Valley,137.842678,Lowland,7107,Bayes Causeway
+Bayes Valley,B05,Bayes Valley,144.529077,Lowland,10672,Bayes Causeway
+Bayes Valley,B06,Bayes Valley,37.71814500000001,Lowland,132367,Bayes Causeway
+Bayes Valley,B07,Bayes Valley,117.066523,Lowland,26840,Bayes Causeway
+Bayes Valley,B08,Bayes Valley,121.726744,Lowland,10387,Bayes Causeway
+Bayes Valley,B09,Bayes Valley,266.25581999999997,Lowland,6652,Bayes Causeway
+Bayes Valley,B10,Bayes Valley,169.903103,Lowland,7217,Bayes Causeway
+Bayes Valley,B11,Bayes Valley,309.055005,Lowland,9205,Bayes Causeway
+Bayes Valley,B12,Bayes Valley,248.30073599999997,Lowland,12735,Bayes Causeway
+Bayes Valley,B13,Bayes Valley,45.262542,Lowland,50050,Bayes Causeway
+Bayes Valley,B14,Bayes Valley,45.261774,Lowland,63086,Bayes Causeway
+Central,C01,Central,7.54363,Capital,97799,The Central
+Central,C02,Central,7.543628,Capital,106764,The Central
+Central,C03,Central,30.174557999999998,Capital,189400,The Central
+Central,C04,Central,15.087257000000001,Capital,144739,The Central
+Central,C05,Central,22.630893999999998,Capital,97325,The Central
+Central,C06,Central,22.630888000000002,Capital,96079,The Central
+Central,C07,Central,15.087255,Capital,45764,The Central
+Central,C08,Central,15.087254999999999,Capital,48537,The Central
+Central,C09,Central,7.543629999999999,Capital,58307,The Central
+Central,C10,Central,15.087271000000001,Capital,68496,The Central
+Central,C11,Central,7.543625,Capital,36192,The Central
+Central,C12,Central,7.543628999999999,Capital,40493,The Central
+Central,C13,Central,7.543628,Capital,37622,The Central
+Central,C14,Central,7.543629999999999,Capital,86344,Outer Central
+Central,C15,Central,7.543764,Capital,83451,Outer Central
+Central,C16,Central,7.54363,Capital,73010,Outer Central
+Central,C17,Central,7.543631,Capital,75269,Outer Central
+Central,C18,Central,7.543640000000001,Capital,48916,Outer Central
+Central,C19,Central,22.630931999999998,Capital,73794,Outer Central
+Central,C20,Central,22.630885000000003,Capital,81954,Outer Central
+Central,C21,Central,15.087257999999999,Capital,100017,Outer Central
+Central,C22,Central,7.543634,Capital,34617,Outer Central
+Central,C23,Central,15.087257,Capital,54448,Outer Central
+Central,C24,Central,30.174522000000003,Capital,53233,Outer Central
+Central,C25,Central,30.174536,Capital,64392,Outer Central
+Central,C26,Central,30.174571999999998,Capital,98043,Outer Central
+Central,C27,Central,30.174516999999998,Capital,151177,Outer Central
+Cotham Heights,CH01,Cotham Heights,77.49364700000001,Capital,179188,Cotham Town
+Cotham Heights,CH02,Cotham Heights,24.688244,Capital,212613,Cotham Town
+Cotham Heights,CH03,Cotham Heights,24.688243,Capital,180564,Cotham Town
+Cotham Heights,CH04,Cotham Heights,30.174519999999998,Capital,228959,Cotham Town
+Cotham Heights,CH05,Cotham Heights,15.08726,Capital,139433,Cotham Town
+Cotham Heights,CH06,Cotham Heights,15.087259,Capital,110894,Cotham Town
+Cotham Heights,CH07,Cotham Heights,7.543630000000001,Capital,53814,Upper Weslington and Lower Cotham
+Cotham Heights,CH08,Cotham Heights,173.50346900000002,Capital,119014,Upper Weslington and Lower Cotham
+Cotham Heights,CH09,Cotham Heights,122.06963699999999,Capital,39140,Upper Weslington and Lower Cotham
+Cotham Heights,CH10,Cotham Heights,174.017808,Capital,108268,Upper Weslington and Lower Cotham
+Cotham Heights,CH11,Cotham Heights,5.657721999999999,Capital,46522,Upper Weslington and Lower Cotham
+Clifton Wick,CW01,West Valley,357.698943,Capital,266055,West Valley
+Clifton Wick,CW02,West Valley,842.5485570000001,Capital,263637,West Valley
+Denton Town,D01,Denton Town,7.543945000000001,Capital,48808,Gorton and Upper Denton
+Denton Town,D02,Denton Town,7.543629999999999,Capital,65767,Gorton and Upper Denton
+Denton Town,D03,Denton Town,7.543629999999999,Capital,59114,Gorton and Upper Denton
+Denton Town,D04,Denton Town,18.85907,Capital,56167,Gorton and Upper Denton
+Denton Town,D05,Denton Town,15.087256,Capital,62285,Gorton and Upper Denton
+Denton Town,D06,Denton Town,15.08726,Capital,64110,Gorton and Upper Denton
+Denton Town,D07,Denton Town,18.858887999999997,Capital,110579,Gorton and Upper Denton
+Denton Town,D08,Denton Town,45.261775,Capital,148103,Gorton and Upper Denton
+Denton Town,D09,Denton Town,18.516314,Capital,56224,Gorton and Upper Denton
+Denton Town,D10,Denton Town,37.032363,Capital,15539,Gorton and Upper Denton
+Denton Town,D11,Denton Town,91.318438,Capital,46260,Gorton and Upper Denton
+Durdham Mews,DR01,Durdham Mews,15.087259999999999,Capital,132611,Durdham Mews
+Durdham Mews,DR02,Durdham Mews,45.261772000000015,Capital,142045,Durdham Mews
+Durdham Mews,DR03,Durdham Mews,120.698066,Capital,90674,Durdham Mews
+Durdham Mews,DR04,Durdham Mews,90.523552,Capital,68548,Durdham Mews
+Durdham Mews,DR05,Durdham Mews,259.803349,Capital,78045,Durdham Mews
+Durdham Mews,DR06,Durdham Mews,141.27159899999998,Capital,53112,Durdham Mews
+Durdham Mews,DR07,Durdham Mews,104.036839,Capital,70300,Durdham Mews
+Durdham Mews,DR08,Durdham Mews,67.892665,Capital,159556,Durdham Mews
+Durdham Mews,DR09,Durdham Mews,22.630887,Capital,148273,Durdham Mews
+Durdham Mews,DR10,Durdham Mews,114.18311600000001,Capital,45884,Durdham Mews
+Dressingham,DS01,Dressingham and Oakfield Bush,1768.9498630000003,Lowland,51875,Upper Eastland and Readington
+Dressingham,DS02,Dressingham and Oakfield Bush,16.458825,Lowland,20669,Upper Eastland and Readington
+Dressingham,DS03,Dressingham and Oakfield Bush,41.147068,Lowland,25298,Upper Eastland and Readington
+Dressingham,DS04,Dressingham and Oakfield Bush,26.059811,Lowland,38602,Upper Eastland and Readington
+Dressingham,DS05,Dressingham and Oakfield Bush,15.087259,Lowland,21622,Upper Eastland and Readington
+Dressingham,DS06,Dressingham and Oakfield Bush,41.147069,Lowland,16672,Upper Eastland and Readington
+Dressingham,DS07,Dressingham and Oakfield Bush,32.917654999999996,Lowland,21333,Upper Eastland and Readington
+Dressingham,DS08,Dressingham and Oakfield Bush,316.83242200000007,Lowland,21140,Upper Eastland and Readington
+Dressingham,DS09,Dressingham and Oakfield Bush,113.154437,Lowland,4611,Upper Eastland and Readington
+Dressingham,DS10,Dressingham and Oakfield Bush,113.154437,Lowland,8013,Upper Eastland and Readington
+Dressingham,DS11,Dressingham and Oakfield Bush,329.51943700000004,Lowland,7772,Upper Eastland and Readington
+Dressingham,DS12,Dressingham and Oakfield Bush,13.029904,Lowland,16769,Upper Eastland and Readington
+Dressingham,DS13,Dressingham and Oakfield Bush,285.878607,Lowland,4342,Upper Eastland and Readington
+Dressingham,DS14,Dressingham and Oakfield Bush,275.685356,Lowland,3000,Upper Eastland and Readington
+Dressingham,DS15,Dressingham and Oakfield Bush,275.685356,Lowland,4340,Upper Eastland and Readington
+Dressingham,DS16,Dressingham and Oakfield Bush,440.413902,Lowland,7002,Upper Eastland and Readington
+Dressingham,DS17,Dressingham and Oakfield Bush,436.15892099999996,Lowland,6619,Upper Eastland and Readington
+Dressingham,DS18,Dressingham and Oakfield Bush,78.179429,Lowland,6283,Upper Eastland and Readington
+Dressingham,DS19,Dressingham and Oakfield Bush,70.822832,Lowland,4882,Upper Eastland and Readington
+Dressingham,DS20,Dressingham and Oakfield Bush,15.087257000000001,Lowland,11085,Upper Eastland and Readington
+Dressingham,DS21,Dressingham and Oakfield Bush,15.430152,Lowland,26492,Upper Eastland and Readington
+Dressingham,DS22,Dressingham and Oakfield Bush,15.430151,Lowland,25539,Upper Eastland and Readington
+Dressingham,DS23,Dressingham and Oakfield Bush,849.188203,Lowland,10392,Upper Eastland and Readington
+Eton Gate,E01,East Forest,7.543629,Lowland,15806,East Forest
+Eton Gate,E02,East Forest,7.543628,Lowland,11562,East Forest
+Eton Gate,E03,East Forest,7.54363,Lowland,60548,East Forest
+Eton Gate,E04,East Forest,7.543631,Lowland,59567,East Forest
+Eton Gate,E05,East Forest,7.54363,Lowland,44979,East Forest
+Eton Gate,E06,East Forest,7.543629,Lowland,42144,East Forest
+Eton Gate,E07,East Forest,7.543628999999999,Lowland,5231,East Forest
+Eton Gate,E08,East Forest,22.630887,Lowland,4529,East Forest
+Eton Gate,E09,East Forest,15.087258,Lowland,6422,East Forest
+Eton Gate,E10,East Forest,30.174517,Lowland,2231,East Forest
+Eton Gate,E11,East Forest,37.718146,Lowland,1917,East Forest
+Eton Gate,E12,East Forest,15.087258,Lowland,5943,East Forest
+Eton Gate,E13,East Forest,7.543628,Lowland,39162,East Forest
+Eton Gate,E14,East Forest,587.701703,Lowland,23805,East Forest
+Eton Gate,E15,East Forest,590.663044,Lowland,11760,East Forest
+Eton Gate,E16,East Forest,639.229054,Lowland,1936,East Forest
+Eton Gate,E17,East Forest,721.897254,Lowland,2266,East Forest
+Eton Gate,E18,East Forest,47.319128,Lowland,4877,East Forest
+Eton Gate,E19,East Forest,286.065639,Lowland,4325,East Forest
+Eton Gate,E20,East Forest,73.378938,Lowland,18677,East Forest
+Eton Gate,E21,East Forest,7.200737,Lowland,28133,East Forest
+Eton Gate,E22,East Forest,322.39663,Lowland,3755,East Forest
+Eton Gate,E23,East Forest,104.067793,Lowland,2954,East Forest
+Eton Gate,E24,East Forest,384.912119,Lowland,49618,East Forest
+Eton Gate,E25,East Forest,298.690307,Lowland,23527,East Forest
+Eton Gate,E26,East Forest,78.834042,Lowland,15789,East Forest
+Eton Gate,E27,East Forest,18.001842,Lowland,5742,East Forest
+Eton Gate,E28,East Forest,14.557333,Lowland,52806,East Forest
+Eton Gate,E29,East Forest,6.686398000000001,Lowland,36484,East Forest
+Eton Gate,E30,East Forest,14.759951,Lowland,60652,East Forest
+Eton Gate,E31,East Forest,6.686399,Lowland,1205,East Forest
+Eton Gate,E32,East Forest,11.315443,Lowland,11797,East Forest
+Eton Gate,E33,East Forest,11.315443,Lowland,9437,East Forest
+Grillbys Crest,GC01,East Highland,30.174516999999998,Highland,52513,East Highland
+Grillbys Crest,GC02,East Highland,458.104025,Highland,9295,East Highland
+Grillbys Crest,GC03,East Highland,699.687189,Highland,6161,East Highland
+Grillbys Crest,GC04,East Highland,771.055531,Highland,11645,East Highland
+Grillbys Crest,GC05,East Highland,377.18145799999996,Highland,10299,East Highland
+Grillbys Crest,GC06,East Highland,698.128588,Highland,13418,East Highland
+Grillbys Crest,GC07,East Highland,325.622935,Highland,14964,East Highland
+Grillbys Crest,GC08,East Highland,15.087256999999997,Highland,31653,East Highland
+Grillbys Crest,GC09,East Highland,327.61794299999997,Highland,9956,East Highland
+Grillbys Crest,GC10,East Highland,7.543629000000001,Highland,19114,East Highland
+Grillbys Crest,GC11,East Highland,327.992008,Highland,9232,East Highland
+Grillbys Crest,GC12,East Highland,312.031932,Highland,7870,East Highland
+Goldcrest Villas,GD01,Goldcrest Villas,16.365309,Highland,126449,East Highland
+Goldcrest Villas,GD02,Goldcrest Villas,21.960689000000002,Highland,23612,East Highland
+Goldcrest Villas,GD03,Goldcrest Villas,23.347842,Highland,22244,East Highland
+Goldcrest Villas,GD04,Goldcrest Villas,9.600983,Highland,20775,East Highland
+Goldcrest Villas,GD05,Goldcrest Villas,17.144613,Highland,38060,East Highland
+Goldcrest Villas,GD06,Goldcrest Villas,11.315444999999999,Highland,37726,East Highland
+Goldcrest Villas,GD07,Goldcrest Villas,9.60098,Highland,32004,East Highland
+Goldcrest Villas,GD08,Goldcrest Villas,18.001844000000002,Highland,36807,East Highland
+Goldcrest Villas,GD09,Goldcrest Villas,20.573536,Highland,30257,East Highland
+Goldcrest Villas,GD10,Goldcrest Villas,10.286763,Highland,53578,East Highland
+Goldcrest Villas,GD11,Goldcrest Villas,24.002454999999998,Highland,49071,Goldcrest Cradle
+Goldcrest Villas,GD12,Goldcrest Villas,14.401470999999999,Highland,47095,Goldcrest Cradle
+Goldcrest Villas,GD13,Goldcrest Villas,19.201965000000005,Highland,47356,Goldcrest Cradle
+Goldcrest Villas,GD14,Goldcrest Villas,22.630891000000002,Highland,60047,Goldcrest Cradle
+Goldcrest Villas,GD15,Goldcrest Villas,7.543628,Highland,29424,Goldcrest Cradle
+Goldcrest Villas,GD16,Goldcrest Villas,7.543628,Highland,33418,Goldcrest Cradle
+Goldcrest Villas,GD17,Goldcrest Villas,7.543626,Highland,58544,Goldcrest Cradle
+Goldcrest Villas,GD18,Goldcrest Villas,7.543623999999999,Highland,67300,Goldcrest Cradle
+Goldcrest Villas,GD19,Goldcrest Villas,7.543624999999999,Highland,64692,Goldcrest Cradle
+Goldcrest Villas,GD20,Goldcrest Villas,7.5436250000000005,Highland,76174,Goldcrest Cradle
+Goldcrest Villas,GD21,Goldcrest Villas,7.543626999999999,Highland,44943,Goldcrest Cradle
+Goldcrest Villas,GD22,Goldcrest Villas,7.543627999999999,Highland,27867,Goldcrest Cradle
+Goldcrest Villas,GD23,Goldcrest Villas,18.859075,Highland,29195,Goldcrest Cradle
+Goldcrest Villas,GD24,Goldcrest Villas,26.402703,Highland,32100,Goldcrest Cradle
+Goldcrest Villas,GD25,Goldcrest Villas,15.087259,Highland,23168,Goldcrest Cradle
+Goldcrest Villas,GD26,Goldcrest Villas,22.630889,Highland,85163,Goldcrest Cradle
+Goldcrest Villas,GD27,Goldcrest Villas,15.087254,Highland,183255,Goldcrest Cradle
+Goldcrest Villas,GD28,Goldcrest Villas,22.630891000000002,Highland,53132,Goldcrest Cradle
+Goldcrest Villas,GD29,Goldcrest Villas,22.630886999999998,Highland,62352,Goldcrest Cradle
+Goldcrest Villas,GD30,Goldcrest Villas,60.34903600000001,Highland,46755,Goldcrest Cradle
+Goldcrest Villas,GD31,Goldcrest Villas,60.349033000000006,Highland,31900,Goldcrest Cradle
+Goldcrest Villas,GD32,Goldcrest Villas,60.34903200000001,Highland,18207,Goldcrest Cradle
+Goldcrest Villas,GD33,Goldcrest Villas,52.805403,Highland,26387,Goldcrest Cradle
+Goldcrest Villas,GD34,East Highland,158.416212,Highland,7641,East Highland
+Goldcrest Villas,GD35,East Highland,263.730885,Highland,19682,East Highland
+Goldcrest Villas,GD36,East Highland,151.729814,Highland,10941,East Highland
+Goldcrest Villas,GD37,East Highland,36.003685999999995,Highland,17818,East Highland
+Goldcrest Villas,GD38,East Highland,72.007369,Highland,33516,East Highland
+Gorton Quarters,GR01,Gorton Quarters,11.315447,Capital,100457,Gorton Central
+Gorton Quarters,GR02,Gorton Quarters,11.315447000000002,Capital,114856,Gorton Central
+Gorton Quarters,GR03,Gorton Quarters,7.543629999999999,Capital,79216,Gorton Central
+Gorton Quarters,GR04,Gorton Quarters,7.543628000000001,Capital,86123,Gorton Central
+Gorton Quarters,GR05,Gorton Quarters,7.543628,Capital,85935,Gorton Central
+Gorton Quarters,GR06,Gorton Quarters,7.543627999999999,Capital,102414,Gorton Central
+Gorton Quarters,GR07,Gorton Quarters,30.174743999999997,Capital,186107,Gorton Central
+Gorton Quarters,GR08,Gorton Quarters,45.26179,Capital,137291,Gorton and Upper Denton
+Gorton Quarters,GR09,Gorton Quarters,28.117166000000005,Capital,98084,Gorton and Upper Denton
+Gorton Quarters,GR10,Gorton Quarters,48.69070099999999,Capital,395021,Gorton Central
+Gorton Quarters,GR11,Gorton Quarters,15.087254999999999,Capital,173486,Gorton Central
+Hopewell Harbor,H01,Westbury Wharf,808.836021,Highland,8805,Greater Lancer and Westbury Wharf
+Hopewell Harbor,H02,Westbury Wharf,186.782751,Highland,15683,Greater Lancer and Westbury Wharf
+Hopewell Harbor,H03,Westbury Wharf,385.239425,Highland,25318,Greater Lancer and Westbury Wharf
+Leighton,L01,Techno Garden West and Leighton,62.655795999999995,Capital,53288,Techno Garden West and Leighton
+Leighton,L02,Techno Garden West and Leighton,189.837608,Capital,6120,Techno Garden West and Leighton
+Leighton,L03,Techno Garden West and Leighton,334.787509,Capital,3425,Techno Garden West and Leighton
+Leighton,L04,Techno Garden West and Leighton,364.712648,Capital,15845,Techno Garden West and Leighton
+Leighton,L05,Techno Garden West and Leighton,271.196586,Capital,30604,Techno Garden West and Leighton
+Lancer Gate,LA01,Lancer Gate,5.486280000000001,Highland,88051,Little Lancer
+Lancer Gate,LA02,Lancer Gate,5.143388000000002,Highland,48873,Little Lancer
+Lancer Gate,LA03,Lancer Gate,7.200739,Highland,76832,Little Lancer
+Lancer Gate,LA04,Lancer Gate,4.114707000000001,Highland,36689,Little Lancer
+Lancer Gate,LA05,Lancer Gate,4.800490999999999,Highland,37303,Little Lancer
+Lancer Gate,LA06,Lancer Gate,4.800489000000001,Highland,32044,Little Lancer
+Lancer Gate,LA07,Lancer Gate,4.80049,Highland,20635,Little Lancer
+Lancer Gate,LA08,Lancer Gate,4.800492,Highland,40058,Little Lancer
+Lancer Gate,LA09,Lancer Gate,4.114707000000001,Highland,34584,Little Lancer
+Lancer Gate,LA10,Lancer Gate,31.546084,Highland,25721,Little Lancer
+Lancer Gate,LA11,Lancer Gate,20.573534999999996,Highland,19608,Little Lancer
+Lancer Gate,LA12,Lancer Gate,6.857850000000001,Highland,75557,Little Lancer
+Lancer Gate,LA13,Lancer Gate,154.98728999999997,Highland,45999,Little Lancer
+Lancer Gate,LA14,Lancer Gate,149.501014,Highland,22619,Little Lancer
+Lancer Gate,LA15,Lancer Gate,137.156892,Highland,14375,Little Lancer
+Lancer Gate,LA16,Lancer Gate,167.331412,Highland,83234,Little Lancer
+Lancer Gate,LA17,Lancer Gate,27.431382,Highland,80978,Greater Lancer and Westbury Wharf
+Lancer Gate,LA18,Lancer Gate,109.554069,Highland,73626,Little Lancer
+Lancer Gate,LA19,Lancer Gate,108.276018,Highland,74129,Little Lancer
+Lancer Gate,LA20,Lancer Gate,5.657723000000001,Highland,28985,Little Lancer
+Lancer Gate,LA21,Lancer Gate,5.6577210000000004,Highland,35443,Little Lancer
+Lancer Gate,LA22,Lancer Gate,7.543628,Highland,70797,Little Lancer
+Lancer Gate,LA23,Lancer Gate,3.771813,Highland,36875,Little Lancer
+Lancer Gate,LA24,Lancer Gate,3.771813,Highland,57763,Little Lancer
+Lancer Gate,LA25,Lancer Gate,7.543627,Highland,61646,Little Lancer
+Lancer Gate,LA26,Lancer Gate,11.315444000000001,Highland,114002,Greater Lancer and Westbury Wharf
+Lancer Gate,LA27,Lancer Gate,11.315439999999999,Highland,119568,Greater Lancer and Westbury Wharf
+Lancer Gate,LA28,Lancer Gate,7.543627999999999,Highland,57240,Greater Lancer and Westbury Wharf
+Lancer Gate,LA29,Lancer Gate,6.1720630000000005,Highland,41196,Greater Lancer and Westbury Wharf
+Lancer Gate,LA30,Lancer Gate,9.258092,Highland,88721,Greater Lancer and Westbury Wharf
+Lancer Gate,LA31,Lancer Gate,15.430150000000001,Highland,124909,Greater Lancer and Westbury Wharf
+Lancer Gate,LA32,Lancer Gate,7.543626999999999,Highland,64994,Greater Lancer and Westbury Wharf
+Lancer Gate,LA33,Lancer Gate,14.744367,Highland,39558,Greater Lancer and Westbury Wharf
+Lancer Gate,LA34,Lancer Gate,12.063572,Highland,45629,Greater Lancer and Westbury Wharf
+Meadow Hill,M01,Westbury Wharf,15.08726,Highland,31294,Greater Lancer and Westbury Wharf
+Meadow Hill,M02,Westbury Wharf,11.315442999999998,Highland,17753,Greater Lancer and Westbury Wharf
+Meadow Hill,M03,Westbury Wharf,18.859073000000002,Highland,15648,Greater Lancer and Westbury Wharf
+Meadow Hill,M04,Westbury Wharf,50.74805,Highland,64317,Greater Lancer and Westbury Wharf
+Meadow Hill,M05,Westbury Wharf,39.276745000000005,Highland,21033,Greater Lancer and Westbury Wharf
+Meadow Hill,M06,Westbury Wharf,109.725514,Highland,7403,Greater Lancer and Westbury Wharf
+Meadow Hill,M07,Westbury Wharf,45.261774,Highland,50395,Greater Lancer and Westbury Wharf
+Meadow Hill,M08,Westbury Wharf,57.356519000000006,Highland,9022,Greater Lancer and Westbury Wharf
+Meadow Hill,M09,Westbury Wharf,41.380858,Highland,1630,Greater Lancer and Westbury Wharf
+Meadow Hill,M10,Westbury Wharf,15.087257999999999,Highland,15514,Greater Lancer and Westbury Wharf
+Meadow Hill,M11,Westbury Wharf,203.677986,Highland,14921,Greater Lancer and Westbury Wharf
+Meadow Hill,M12,Westbury Wharf,135.442432,Highland,11606,Greater Lancer and Westbury Wharf
+Meadow Hill,M13,Westbury Wharf,158.19800800000002,Highland,10772,Greater Lancer and Westbury Wharf
+Northfields Market,N01,Northfields Market,3.7718160000000003,Lowland,45121,Northfields Market
+Northfields Market,N02,Northfields Market,5.6577210000000004,Lowland,44100,Northfields Market
+Northfields Market,N03,Northfields Market,5.6577210000000004,Lowland,49169,Northfields Market
+Northfields Market,N04,Northfields Market,3.428923,Lowland,25013,Northfields Market
+Northfields Market,N05,Northfields Market,8.743751000000001,Lowland,37343,Northfields Market
+Northfields Market,N06,Northfields Market,12.34412,Lowland,31480,Northfields Market
+Northfields Market,N07,Northfields Market,20.744982,Lowland,30962,Northfields Market
+Northfields Market,N08,Northfields Market,7.54363,Lowland,36415,Northfields Market
+Northfields Market,N09,Northfields Market,15.087259,Lowland,14519,Northfields Market
+Northfields Market,N10,Northfields Market,36.003685000000004,Lowland,7228,Northfields Market
+Northfields Market,N11,Northfields Market,17.487504,Lowland,16264,Northfields Market
+Northfields Market,N12,Northfields Market,11.658336,Lowland,38833,Northfields Market
+Northfields Market,N13,Northfields Market,5.829167999999999,Lowland,33199,Northfields Market
+Northfields Market,N14,Northfields Market,5.829166000000001,Lowland,55050,Northfields Market
+Northfields Market,N15,Northfields Market,5.829168,Lowland,54489,Northfields Market
+Northfields Market,N16,Northfields Market,5.829166999999999,Lowland,42888,Northfields Market
+Northfields Market,N17,Northfields Market,5.829168,Lowland,41188,Northfields Market
+Northfields Market,N18,Northfields Market,15.08726,Lowland,48731,Northfields Market
+Northfields Market,N19,Northfields Market,26.137739999999997,Lowland,30058,Northfields Market
+Northfields Market,N20,Northfields Market,59.66324899999999,Lowland,10383,Northfields Market
+Northfields Market,N21,Northfields Market,153.272829,Lowland,19179,Northfields Market
+Northfields Market,N22,Northfields Market,69.108371,Lowland,7164,Northfields Market
+Northfields Market,N23,Northfields Market,55.377097,Lowland,6989,Northfields Market
+Northfields Market,N24,Northfields Market,18.859073000000002,Lowland,61649,Northfields Market
+Northfields Market,N25,Northfields Market,18.859074,Lowland,52352,Northfields Market
+Northfields Market,N26,Northfields Market,7.543626000000001,Lowland,69529,Northfields Market
+Northfields Market,N27,Northfields Market,79.208121,Lowland,11297,Northfields Market
+Northfields Market,N28,Northfields Market,90.52355,Lowland,11673,Northfields Market
+Northfields Market,N29,Northfields Market,359.35106099999996,Lowland,15857,Northfields Market
+Northfields Market,N30,Northfields Market,113.840222,Lowland,9765,Northfields Market
+Pebble Palace,P01,Pebble Palace,181.04710200000002,Highland,148851,The Palace
+Pebble Palace,P02,Pebble Palace,22.630886999999998,Highland,137938,The Palace
+Pebble Palace,P03,Pebble Palace,22.630887,Highland,127116,The Palace
+Pebble Palace,P04,Pebble Palace,7.543626999999999,Highland,27817,The Palace
+Pebble Palace,P05,Pebble Palace,7.543628,Highland,29754,The Palace
+Pebble Palace,P06,Pebble Palace,7.543629999999999,Highland,52921,The Palace
+Pebble Palace,P07,Pebble Palace,7.543626999999999,Highland,56665,The Palace
+Pebble Palace,P08,Pebble Palace,7.543624999999999,Highland,91164,The Palace
+Pebble Palace,P09,Pebble Palace,7.543628999999999,Highland,57027,The Palace
+Pebble Palace,P10,Pebble Palace,7.543625,Highland,62815,The Palace
+Pebble Palace,P11,Pebble Palace,7.543628999999999,Highland,49485,The Palace
+Pebble Palace,P12,Pebble Palace,60.349031,Highland,57621,The Palace
+Pebble Palace,P13,Pebble Palace,15.773041,Highland,60912,Pebble Town
+Pebble Palace,P14,Pebble Palace,7.886523000000001,Highland,55823,Pebble Town
+Pebble Palace,P15,Pebble Palace,7.886522000000001,Highland,55350,Pebble Town
+Pebble Palace,P16,Pebble Palace,7.886522,Highland,80849,Pebble Town
+Pebble Palace,P17,Pebble Palace,7.543625999999998,Highland,94046,Pebble Town
+Pebble Palace,P18,Pebble Palace,7.543623999999999,Highland,102733,Pebble Town
+Pebble Palace,P19,Pebble Palace,7.886519000000001,Highland,79300,Pebble Town
+Pebble Palace,P20,Pebble Palace,7.886525,Highland,71287,Pebble Town
+Pebble Palace,P21,Pebble Palace,7.543628,Highland,70192,Pebble Town
+Pebble Palace,P22,Pebble Palace,7.543628999999999,Highland,45641,Pebble Town
+Pebble Palace,P23,Pebble Palace,7.886519000000001,Highland,54020,Pebble Town
+Pebble Palace,P24,Pebble Palace,7.886522999999999,Highland,53739,Pebble Town
+Pebble Palace,P25,Pebble Palace,7.543627000000001,Highland,45237,Pebble Town
+Pebble Palace,P26,Pebble Palace,7.543628,Highland,52315,Pebble Town
+Pebble Palace,P27,Foxton Heath,30.860305000000004,Highland,61276,Foxton Heath
+Pebble Palace,P28,Foxton Heath,7.886524,Highland,74056,Foxton Heath
+Pebble Palace,P29,Foxton Heath,6.09413,Highland,63439,Foxton Heath
+Pebble Palace,P30,Foxton Heath,5.829165,Highland,60749,Foxton Heath
+Pebble Palace,P31,Foxton Heath,5.829164,Highland,52803,Foxton Heath
+Pebble Palace,P32,Foxton Heath,18.516178999999994,Highland,69423,Foxton Heath
+Pebble Palace,P33,Foxton Heath,9.67891,Highland,82534,Foxton Heath
+Pebble Palace,P34,Foxton Heath,7.886522999999999,Highland,48344,Foxton Heath
+Pebble Palace,P35,Foxton Heath,15.087259,Highland,43981,Foxton Heath
+Pebble Palace,P36,Foxton Heath,39.43260799999999,Highland,49700,Foxton Heath
+Pebble Palace,P37,Foxton Heath,51.090944,Highland,50906,Foxton Heath
+Pebble Palace,P38,Pebble Palace,439.244951,Highland,21268,The Palace
+Pebble Palace,P39,Pebble Palace,453.926973,Highland,43876,The Palace
+Pebble Palace,P40,Pebble Palace,41.83285300000001,Highland,31342,The Palace
+Pebble Palace,P41,Pebble Palace,67.643286,Highland,26472,The Palace
+Pebble Palace,P42,Pebble Palace,15.087259000000001,Highland,107798,The Palace
+Permbroke Corner,PC01,West Valley,259.46031800000003,Capital,60177,West Valley
+Permbroke Corner,PC02,West Valley,473.42507100000006,Capital,248150,West Valley
+Permbroke Corner,PC03,West Valley,462.904516,Capital,107678,West Valley
+Queens Mansion,Q01,Cyber City,7.543628,Highland,123852,Cyber City
+Queens Mansion,Q02,Cyber City,7.543623,Highland,106792,Cyber City
+Queens Mansion,Q03,Cyber City,7.200737999999999,Highland,71476,Cyber City
+Queens Mansion,Q04,Cyber City,7.200737,Highland,78364,Cyber City
+Queens Mansion,Q05,Cyber City,7.200736,Highland,67157,Cyber City
+Queens Mansion,Q06,Cyber City,7.543629,Highland,68331,Cyber City
+Queens Mansion,Q07,Cyber City,7.543626,Highland,53207,Cyber City
+Queens Mansion,Q08,Cyber City,7.543628,Highland,60089,Cyber City
+Queens Mansion,Q09,Cyber City,7.543627,Highland,62523,Cyber City
+Queens Mansion,Q10,Cyber City,7.543626999999999,Highland,36051,Cyber City
+Queens Mansion,Q11,Cyber City,7.543627000000001,Highland,54220,Cyber City
+Queens Mansion,Q12,Cyber City,7.200736000000001,Highland,44533,Cyber City
+Queens Mansion,Q13,Cyber City,7.200735999999999,Highland,48497,Cyber City
+Queens Mansion,Q14,Cyber City,7.54363,Highland,50139,Cyber City
+Queens Mansion,Q15,The Lake,20.402088999999997,Highland,32820,The Lake
+Queens Mansion,Q16,The Lake,22.630888,Highland,19162,The Lake
+Queens Mansion,Q17,Cyber City,7.543631000000001,Highland,35432,Cyber City
+Queens Mansion,Q18,The Lake,7.54363,Highland,32991,The Lake
+Queens Mansion,Q19,The Lake,15.087257999999999,Highland,19483,The Lake
+Queens Mansion,Q20,The Lake,22.630888,Highland,21149,The Lake
+Queens Mansion,Q21,The Lake,64.12084800000001,Highland,42814,The Lake
+Queens Mansion,Q22,The Lake,15.087256,Highland,57345,The Lake
+Queens Mansion,Q23,The Lake,7.543628,Highland,26983,The Lake
+Queens Mansion,Q24,The Lake,7.543627,Highland,44843,The Lake
+Queens Mansion,Q25,The Lake,7.543627000000001,Highland,59482,The Lake
+Queens Mansion,Q26,The Lake,7.543627,Highland,34580,The Lake
+Queens Mansion,Q27,The Lake,15.087257999999999,Highland,28875,The Lake
+Queens Mansion,Q28,The Lake,7.543628,Highland,62474,The Lake
+Queens Mansion,Q29,The Lake,52.805403,Highland,18852,The Lake
+Queens Mansion,Q30,The Lake,15.087257999999999,Highland,23302,The Lake
+Queens Mansion,Q31,The Lake,45.26177499999999,Highland,11751,The Lake
+Queens Mansion,Q32,The Lake,37.718145000000014,Highland,32618,The Lake
+Queens Mansion,Q33,The Lake,90.523548,Highland,31393,The Lake
+Queens Mansion,Q34,The Lake,45.261776,Highland,18455,The Lake
+Queens Mansion,Q35,The Lake,51.433836,Highland,31174,The Lake
+Queens Mansion,Q36,The Lake,21.945099,Highland,53973,The Lake
+Queens Mansion,Q37,The Lake,7.543629,Highland,63549,The Lake
+Queens Mansion,Q38,The Lake,21.945101,Highland,78632,The Lake
+Queens Mansion,Q39,The Lake,57.855273,Highland,22701,The Lake
+Queens Mansion,Q40,Cyber City,15.087257999999999,Highland,36409,Cyber City
+Queens Mansion,Q41,Cyber City,7.543626999999999,Highland,41778,Cyber City
+Queens Mansion,Q42,Cyber City,15.087259,Highland,47079,Cyber City
+Queens Mansion,Q43,Cyber City,7.543627,Highland,45839,Cyber City
+Queens Mansion,Q44,Cyber City,7.200736000000001,Highland,59636,Cyber City
+Queens Mansion,Q45,Cyber City,7.200736,Highland,42050,Cyber City
+Queens Mansion,Q46,Cyber City,7.543628,Highland,54554,Cyber City
+Queens Mansion,Q47,Cyber City,7.543629,Highland,42554,Cyber City
+Queens Mansion,Q48,Cyber City,7.200734999999999,Highland,36858,Cyber City
+Queens Mansion,Q49,Foxton Heath,7.200735000000001,Highland,49062,Foxton Heath
+Queens Mansion,Q50,Foxton Heath,15.087258,Highland,29458,Foxton Heath
+Queens Mansion,Q51,Foxton Heath,15.087257000000001,Highland,22958,Foxton Heath
+Queens Mansion,Q52,Foxton Heath,16.801717999999997,Highland,22272,Foxton Heath
+Queens Mansion,Q53,Foxton Heath,5.829167,Highland,22559,Foxton Heath
+Queens Mansion,Q54,Foxton Heath,5.829166,Highland,43336,Foxton Heath
+Queens Mansion,Q55,Foxton Heath,9.25809,Highland,13682,Foxton Heath
+Queens Mansion,Q56,Foxton Heath,8.837265,Highland,81451,Foxton Heath
+Queens Mansion,Q57,Foxton Heath,5.564207000000001,Highland,61848,Foxton Heath
+Queens Mansion,Q58,Foxton Heath,7.200736000000002,Highland,48630,Foxton Heath
+Queens Mansion,Q59,Foxton Heath,12.515566000000002,Highland,36691,Foxton Heath
+Queens Mansion,Q60,Foxton Heath,49.03359000000001,Highland,26186,Foxton Heath
+Queens Mansion,Q61,Foxton Heath,22.630888,Highland,14687,Foxton Heath
+Queens Mansion,Q62,Foxton Heath,45.261775,Highland,13323,Foxton Heath
+Queens Mansion,Q63,Foxton Heath,22.630886,Highland,46322,Foxton Heath
+Queens Mansion,Q64,Foxton Heath,33.946329999999996,Highland,30582,Foxton Heath
+Queens Mansion,Q65,Foxton Heath,18.859073000000002,Highland,96749,Foxton Heath
+Queens Mansion,Q66,Foxton Heath,37.718146000000004,Highland,22886,Foxton Heath
+Queens Mansion,Q67,Foxton Heath,33.946329999999996,Highland,69631,Foxton Heath
+Readington,R01,Readington,7.543628000000001,Lowland,62081,Upper Eastland and Readington
+Readington,R02,Readington,13.201350999999999,Lowland,57590,Upper Eastland and Readington
+Readington,R03,Readington,13.201350000000001,Lowland,64327,Upper Eastland and Readington
+Readington,R04,Readington,5.657723,Lowland,34385,Upper Eastland and Readington
+Readington,R05,Readington,5.657722999999999,Lowland,26266,Upper Eastland and Readington
+Readington,R06,Readington,45.261775000000014,Lowland,26956,Upper Eastland and Readington
+Readington,R07,Readington,45.26177500000001,Lowland,18507,Upper Eastland and Readington
+Readington,R08,Readington,21.259320000000002,Lowland,10635,Upper Eastland and Readington
+Readington,R09,Readington,15.087261,Lowland,53397,Upper Eastland and Readington
+Readington,R10,Readington,21.259316999999996,Lowland,17181,Upper Eastland and Readington
+Readington,R11,Readington,623.378081,Lowland,24598,Upper Eastland and Readington
+Readington,R12,Readington,102.805326,Lowland,4938,Upper Eastland and Readington
+Readington,R13,Readington,158.727932,Lowland,4581,Upper Eastland and Readington
+Readington,R14,Readington,153.989785,Lowland,8362,Upper Eastland and Readington
+Readington,R15,Readington,96.757954,Lowland,5423,Upper Eastland and Readington
+Slothwood,SL01,East Highland,46.29045,Highland,184322,East Highland
+Slothwood,SL02,East Highland,128.92748099999997,Highland,32881,East Highland
+Slothwood,SL03,East Highland,71.66447600000001,Highland,21352,East Highland
+Slothwood,SL04,East Highland,444.90267399999993,Highland,16157,East Highland
+Slothwood,SL05,East Highland,198.020264,Highland,20036,East Highland
+Slothwood,SL06,Slothwood,127.555912,Highland,19678,Slothwood Corner
+Slothwood,SL07,Slothwood,85.037273,Highland,11680,Slothwood Corner
+Slothwood,SL08,Slothwood,85.037273,Highland,11626,Slothwood Corner
+Slothwood,SL09,Slothwood,261.829392,Highland,9013,Slothwood Corner
+Slothwood,SL10,Slothwood,161.502242,Highland,11129,Slothwood Corner
+Slothwood,SL11,Slothwood,15.773043,Highland,19420,Slothwood Corner
+Slothwood,SL12,Slothwood,29.488731,Highland,29101,Slothwood Corner
+Slothwood,SL13,Slothwood,33.0891,Highland,26608,Slothwood Corner
+Slothwood,SL14,Slothwood,15.773045,Highland,33473,Slothwood Corner
+Slothwood,SL15,Slothwood,8.244997,Highland,62003,Slothwood Corner
+Slothwood,SL16,Slothwood,7.886521999999999,Highland,55130,Slothwood Corner
+Slothwood,SL17,Slothwood,32.746207,Highland,27043,Slothwood Corner
+Slothwood,SL18,Slothwood,15.414565000000001,Highland,39957,Slothwood Corner
+Slothwood,SL19,Slothwood,15.773045,Highland,32699,Slothwood Corner
+Slothwood,SL20,Slothwood,15.773042,Highland,8117,Slothwood Corner
+Slothwood,SL21,Slothwood,29.488732000000002,Highland,7428,Slothwood Corner
+Slothwood,SL22,Slothwood,29.488733,Highland,15582,Slothwood Corner
+Slothwood,SL23,Slothwood,7.543628,Highland,53187,Slothwood Corner
+Slothwood,SL24,Slothwood,15.087255,Highland,66359,Slothwood Corner
+Slothwood,SL25,Slothwood,7.543626999999999,Highland,45571,Slothwood Corner
+Slothwood,SL26,Slothwood,45.261774,Highland,28704,Slothwood Corner
+Slothwood,SL27,Slothwood,76.80785900000001,Highland,32273,Slothwood Corner
+Slothwood,SL28,Slothwood,15.773044000000002,Highland,61893,Slothwood Corner
+Slothwood,SL29,Slothwood,54.17697100000001,Highland,23980,Slothwood Corner
+Slothwood,SL30,Slothwood,7.543626999999999,Highland,49204,Slothwood Corner
+Slothwood,SL31,Slothwood,7.886521000000001,Highland,43755,Slothwood Corner
+Slothwood,SL32,Slothwood,7.88652,Highland,70906,Slothwood Corner
+Slothwood,SL33,Slothwood,7.543626000000001,Highland,68487,Slothwood Corner
+Slothwood,SL34,Slothwood,30.860301,Highland,17894,Slothwood Corner
+Storport,ST01,East Forest,12.858458999999998,Lowland,41064,East Forest
+Storport,ST02,East Forest,26.745593,Lowland,14756,East Forest
+Storport,ST03,East Forest,12.858456,Lowland,38960,East Forest
+Storport,ST04,East Forest,26.231256,Lowland,6035,East Forest
+Storport,ST05,East Forest,395.011853,Lowland,5146,East Forest
+Storport,ST06,East Forest,26.231256,Lowland,3880,East Forest
+Storport,ST07,East Forest,52.462512,Lowland,4097,East Forest
+Storport,ST08,East Forest,659.007701,Lowland,2716,East Forest
+Storport,ST09,East Forest,776.697667,Lowland,1559,East Forest
+Storport,ST10,East Forest,709.412859,Lowland,5808,East Forest
+Storport,ST11,East Forest,485.348371,Lowland,4371,East Forest
+Techno Garden,T01,Techno Town,24.707554000000002,Capital,364527,Techno Town
+Techno Garden,T02,Techno Town,15.401464,Capital,133208,Techno Town
+Techno Garden,T03,Techno Town,11.02712,Capital,79569,Techno Town
+Techno Garden,T04,Techno Garden East,60.415265999999995,Capital,420960,Techno Garden East
+Techno Garden,T05,Techno Town,24.246157,Capital,290234,Techno Town
+Techno Garden,T06,Techno Town,20.592053999999997,Capital,206592,Techno Town
+Techno Garden,T07,Techno Garden East,62.847671,Capital,79417,Techno Garden East
+Techno Garden,T08,Techno Garden East,52.137538,Capital,245967,Techno Garden East
+Techno Garden,T09,Techno Garden West and Leighton,30.435498000000003,Capital,85742,Techno Garden West and Leighton
+Techno Garden,T10,Techno Garden West and Leighton,30.348647999999997,Capital,239867,Techno Garden West and Leighton
+Techno Garden,T11,Techno Garden East,30.703836,Capital,270773,Techno Garden East
+Techno Garden,T12,Techno Garden West and Leighton,41.19841600000001,Capital,246733,Techno Garden West and Leighton
+Techno Garden,T13,Techno Garden West and Leighton,52.328554000000004,Capital,139318,Techno Garden West and Leighton
+Tenna Court,TC01,Westbury Wharf,22.630888000000002,Highland,51023,Greater Lancer and Westbury Wharf
+Tenna Court,TC02,Westbury Wharf,27.431378,Highland,50170,Greater Lancer and Westbury Wharf
+Tenna Court,TC03,Westbury Wharf,28.054819000000002,Highland,42434,Greater Lancer and Westbury Wharf
+Tenna Court,TC04,Westbury Wharf,74.3141,Highland,18545,Greater Lancer and Westbury Wharf
+Tenna Court,TC05,Westbury Wharf,329.737641,Highland,26386,Greater Lancer and Westbury Wharf
+Tenna Court,TC06,Westbury Wharf,27.431379,Highland,26265,Greater Lancer and Westbury Wharf
+Tedding Temple,TD01,East Tedding,30.174512999999997,Capital,212174,The Temple
+Tedding Temple,TD02,Tedding Market,7.54368,Capital,71700,Tedding Market
+Tedding Temple,TD03,Tedding Market,7.543632000000001,Capital,48649,Tedding Market
+Tedding Temple,TD04,Tedding Market,7.543626000000001,Capital,60488,Tedding Market
+Tedding Temple,TD05,Tedding Market,7.543672999999998,Capital,92905,Tedding Market
+Tedding Temple,TD06,Tedding Market,7.543626,Capital,113188,Tedding Market
+Tedding Temple,TD07,Tedding Market,7.543630000000001,Capital,83030,Tedding Market
+Tedding Temple,TD08,Tedding Market,7.543629,Capital,72022,Tedding Market
+Tedding Temple,TD09,Tedding Market,7.543629999999999,Capital,121115,Tedding Market
+Tedding Temple,TD10,Tedding Market,7.543627000000001,Capital,108421,Tedding Market
+Tedding Temple,TD11,Tedding Market,7.886522,Capital,110666,Tedding Market
+Tedding Temple,TD12,Tedding Market,7.886521,Capital,102673,Tedding Market
+Tedding Temple,TD13,Tedding Market,7.543627000000001,Capital,107975,Tedding Market
+Tedding Temple,TD14,Tedding Market,7.54363,Capital,90717,Tedding Market
+Tedding Temple,TD15,Tedding Market,7.886522,Capital,79427,Tedding Market
+Tedding Temple,TD16,East Tedding,7.886521000000001,Capital,59251,The Temple
+Tedding Temple,TD17,East Tedding,22.630882999999997,Capital,204144,The Temple
+Tedding Temple,TD18,East Tedding,15.773058,Capital,96066,The Temple
+Tedding Temple,TD19,East Tedding,30.861782999999996,Capital,310653,The Temple
+Tedding Temple,TD20,East Tedding,30.174518,Capital,303407,The Temple
+Twicken Meads,TM01,Twicken Meads,7.543629999999999,Capital,125420,Twicken Common
+Twicken Meads,TM02,Twicken Meads,45.26159,Capital,457437,Twicken Bush
+Twicken Meads,TM03,Twicken Meads,7.543628,Capital,113755,Twicken Bush
+Twicken Meads,TM04,Twicken Meads,7.543647000000001,Capital,115912,Twicken Bush
+Twicken Meads,TM05,Twicken Meads,7.886521,Capital,111158,Twicken Bush
+Twicken Meads,TM06,Twicken Meads,15.43015,Capital,194227,Twicken Bush
+Twicken Meads,TM07,Twicken Meads,15.430147000000002,Capital,166622,Twicken Bush
+Twicken Meads,TM08,Twicken Meads,19.716305,Capital,130534,Twicken Common
+Twicken Meads,TM09,Twicken Meads,10.754346,Capital,108585,Twicken Common
+Twicken Meads,TM10,Twicken Meads,20.573538,Capital,124425,Twicken Common
+Twicken Meads,TM11,Twicken Meads,30.174522000000007,Capital,155531,Twicken Common
+Twicken Meads,TM12,Twicken Meads,11.315446999999999,Capital,110977,Twicken Common
+Twicken Meads,TM13,Twicken Meads,10.286763999999998,Capital,102925,Twicken Common
+Weslington,W01,Weslington North,22.630889,Capital,127711,Upper Weslington and Lower Cotham
+Weslington,W02,Weslington North,32.278627,Capital,208715,Upper Weslington and Lower Cotham
+Weslington,W03,Weslington North,17.144610999999998,Capital,122762,Upper Weslington and Lower Cotham
+Weslington,W04,Weslington North,8.572307000000002,Capital,70956,Upper Weslington and Lower Cotham
+Weslington,W05,Weslington North,7.543628999999999,Capital,56953,Upper Weslington and Lower Cotham
+Weslington,W06,Weslington North,38.061038999999994,Capital,108875,Upper Weslington and Lower Cotham
+Weslington,W07,Weslington North,42.690084000000006,Capital,130695,Mid Weslington
+Weslington,W08,Weslington North,7.54363,Capital,93050,Mid Weslington
+Weslington,W09,Weslington North,37.15704699999999,Capital,286973,Mid Weslington
+Weslington,W10,Weslington South,17.144613,Capital,124569,Mid Weslington
+Weslington,W11,Weslington South,37.889593,Capital,299515,Mid Weslington
+Weslington,W12,Weslington South,30.174515999999993,Capital,259119,Lower Weslington
+Weslington,W13,Weslington South,7.543627000000002,Capital,76681,Lower Weslington
+Weslington,W14,Weslington South,7.543628,Capital,80694,Lower Weslington
+Weslington,W15,Weslington South,25.716918,Capital,149658,Lower Weslington
+Weslington,W16,Weslington South,40.804174,Capital,162757,Lower Weslington
+Weslington,W17,Weslington South,7.543626000000001,Capital,78518,Lower Weslington
+Weslington,W18,Weslington South,113.15443599999999,Capital,131582,Lower Weslington
+Weslington,W19,Weslington South,88.63764000000002,Capital,201701,Lower Weslington
+Waterstone,WA01,Aqua Corner,223.752768,Lowland,20788,Upper Eastland and Readington
+Waterstone,WA02,Aqua Corner,223.176086,Lowland,7981,Upper Eastland and Readington
+Waterstone,WA03,Aqua Corner,223.176086,Lowland,8478,Upper Eastland and Readington
+Waterstone,WA04,Aqua Corner,390.990662,Lowland,8265,Upper Eastland and Readington
+Waterstone,WA05,Aqua Corner,577.492866,Lowland,2232,Upper Eastland and Readington
+Waterstone,WA06,Aqua Corner,258.135508,Lowland,2617,Upper Eastland and Readington
+Waterstone,WA07,Aqua Corner,130.486081,Lowland,2615,Upper Eastland and Readington
+Waterstone,WA08,Aqua Corner,130.486081,Lowland,2584,Upper Eastland and Readington
+Waterstone,WA09,Aqua Corner,766.80055,Lowland,2084,Upper Eastland and Readington
+Waterstone,WA10,Aqua Corner,253.599979,Lowland,3926,Upper Eastland and Readington
+Waltham Grove,WG01,East Forest,146.196779,Lowland,38863,East Forest
+Waltham Grove,WG02,East Forest,76.122076,Lowland,4241,East Forest
+Waltham Grove,WG03,East Forest,30.174516000000004,Lowland,37352,East Forest
+Waltham Grove,WG04,East Forest,189.962297,Lowland,5105,East Forest
+Waltham Grove,WG05,East Forest,285.972123,Lowland,5219,East Forest
+Waltham Grove,WG06,East Forest,242.191019,Lowland,6497,East Forest
+Waltham Grove,WG07,East Forest,335.239502,Lowland,7056,East Forest
+Waltham Grove,WG08,East Forest,22.630887,Lowland,29061,East Forest
+Waltham Grove,WG09,East Forest,302.43095,Lowland,7287,East Forest
+Waltham Grove,WG10,East Forest,661.392361,Lowland,6866,East Forest
+Waltham Grove,WG11,East Forest,852.056029,Lowland,16476,East Forest
+Waltham Grove,WG12,East Forest,724.0013650000001,Lowland,21762,East Forest
+Waltham Grove,WG13,East Forest,728.9265439999999,Lowland,17760,East Forest
+Waltham Grove,WG14,East Forest,428.490604,Lowland,834,East Forest

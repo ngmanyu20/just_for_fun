@@ -698,17 +698,21 @@ re-running a full agent phase for each:
   any map code:
   - **`scripts/build-lean-shapes.mjs`** (repo root, `Result Webpage/scripts/`) strips
     `geometry`/`centroid` out of `df_polygon.csv`/`df_county.csv`/`df_constituency.csv` into
-    `*_lean.csv` siblings. Dependency-free, safe to run on every deploy — wired as this site's
-    Render build command (`render.yaml`, repo root) and into `run_site.bat` for local dev, so both
-    environments regenerate from the same source CSVs the same way; nobody has to remember to run
-    it by hand. The `*_lean.csv` outputs are gitignored (see `.gitignore`) — pure build artifacts.
-    **2026-08-04, later same day**: originally written in Python
-    (`scripts/build_lean_shapes.py`) — 404'd on Render after the first deploy because its static-
-    site build image doesn't guarantee a `python`/`python3` interpreter the way it guarantees Node
-    for a static site's build step. Ported to plain Node (reusing `csv.js`'s `parseCSV`, which has
-    no fetch/DOM dependency and imports straight into Node) — no package.json/npm install needed,
-    `.mjs` runs directly. Verified the ported script produces byte-identical row content to the
-    Python version before deleting it.
+    `*_lean.csv` siblings. Dependency-free — reuses `csv.js`'s `parseCSV` (no fetch/DOM dependency,
+    imports straight into Node), no package.json/npm install needed.
+    **2026-08-04, later same day — simplified deploy story**: this site is deployed via GitHub
+    Pages (the repo's existing, already-working custom domain setup), which has no build step — it
+    serves exactly what's committed. Originally tried wiring this script into a Render static-site
+    build command instead (`render.yaml` at the repo root still documents that path if ever
+    needed), but that's a whole separate hosting platform, domain/DNS reconfiguration, etc. for a
+    site with no server-side logic at all. Simpler: the `*_lean.csv` outputs are committed to git
+    like any other data file (NOT gitignored) and just get regenerated + re-committed by hand
+    whenever `shapes/*.csv` changes (rare — "most CSV content is fixed" per the site's own data
+    model). `run_site.bat` still runs the script before serving locally, purely so local dev never
+    drifts from what's committed. (The script itself was briefly ported from an earlier Python
+    version, `build_lean_shapes.py`, after Python turned out to not be a safe assumption in a
+    generic static-site build image — moot now that no build step runs in production at all, but
+    Node has no such availability risk either way.)
   - **`shapes.js`: new `getShapeJoinIndex()`** (+ `buildShapeJoinIndexFromRows()`, tested in
     `shapes.test.mjs`), a lighter sibling of `getShapeIndex()` that loads only the lean files and
     builds just `{polygonById, polygonsByCounty, countiesByZone, constituencies}` — no geometry, no
@@ -724,9 +728,7 @@ re-running a full agent phase for each:
   - Net effect: the overview/seat-list/referendum-rollup pages' shape payload drops from ~10.2MB
     (5 full files) to ~1.66MB (3 lean files), and they no longer fetch `df_districts.csv`/
     `df_authority.csv` at all. Full `js/data/test/*.test.mjs` suite still passes.
-  - `render.yaml` also sets per-path `Cache-Control`: long-lived immutable caching for
-    `/data/shapes/*` and `/data/meta/*` (fixed reference data), a short revalidate window for
-    `/data/results/*`/`/data/referendum/*` (these DO change as counts come in), and `no-cache` for
-    `.html`/`.js`/`.css` so a deploy's code changes always take effect immediately. Plain GitHub
-    Pages can't set custom response headers at all, which is part of why Render was chosen as the
-    deploy target for this.
+  - Per-path `Cache-Control` tuning (long-lived immutable for fixed shape/meta files, short
+    revalidate for results/referendum files that change as counts come in) isn't available on
+    plain GitHub Pages — it doesn't support custom response headers. Not pursued further since it's
+    a smaller win layered on top of the payload-size fix above, not a prerequisite for it.

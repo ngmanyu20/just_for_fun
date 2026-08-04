@@ -1,0 +1,41 @@
+index,Constituency_Code,Constituency,Area,Region,Population
+0,C01,The City of Alington,90.523573,Capital,1244837
+1,C02,Upper Alington,75.436287,Capital,929939
+2,C03,Alington Pass,198.532708,Capital,1215372
+3,C04,Durdham Mews,981.389105,Capital,989048
+4,C05,Techno Town,95.974349,Capital,1074130
+5,C06,Techno Garden East,206.104311,Capital,1017117
+6,C07,Techno Garden West and Leighton,1377.501263,Capital,820942
+7,C08,Outer Central,241.396408,Capital,1078665
+8,C09,The Central,181.047148,Capital,1067517
+9,C10,The Temple,137.501276,Capital,1185695
+10,C11,Tedding Market,106.639575,Capital,1262976
+11,C12,Twicken Bush,99.095683,Capital,1159111
+12,C13,Twicken Common,110.364552,Capital,858397
+13,C14,Gorton Central,146.758108,Capital,1323615
+14,C15,Gorton and Upper Denton,356.031525,Capital,968331
+15,C16,Cotham Town,187.219173,Capital,1051651
+16,C17,Upper Weslington and Lower Cotham,609.023368,Capital,1062730
+17,C18,Mid Weslington,142.424967,Capital,934802
+18,C19,Lower Weslington,321.118565,Capital,1140710
+19,C20,West Valley,2396.037405,Capital,945697
+20,H01,The Palace,1364.742249,Highland,1129930
+21,H02,Pebble Town,116.240456,Highland,921444
+22,H03,Cyber City,193.391194,Highland,1367420
+23,H04,The Lake,667.689095,Highland,869401
+24,H05,Foxton Heath,571.429894,Highland,1409524
+25,H06,Slothwood Corner,1253.816607,Highland,981900
+26,H07,East Highland,6080.118327,Highland,981978
+27,H08,Goldcrest Cradle,517.767255,Highland,1197545
+28,H09,Little Lancer,964.992272,Highland,1141446
+29,H10,Greater Lancer and Westbury Wharf,2914.693087,Highland,1312732
+30,SE01,East Forest,12615.37933,Lowland,1002357
+31,SE02,Upper Eastland and Readington,22405.18641,Lowland,1303613
+32,SE03,Greater Almouth,7953.177101,Lowland,1085155
+33,SE04,East Almouth,345.932061,Lowland,1099968
+34,SE05,Southwest Almouth and Jackenville,468.680907,Lowland,1187313
+35,SE06,White Bridge,86.344954,Lowland,906793
+36,SE07,Red Market,83.615547,Lowland,1012051
+37,SE08,West Cross,108.54971,Lowland,1131624
+38,SE09,Bayes Causeway,2062.598296,Lowland,1099958
+39,SE10,Northfields Market,1244.106558,Lowland,957887

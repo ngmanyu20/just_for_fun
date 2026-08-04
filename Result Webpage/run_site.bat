@@ -2,7 +2,9 @@
 setlocal
 cd /d "%~dp0"
 
-echo Regenerating lean shape CSVs (scripts\build-lean-shapes.mjs) -- same step Render runs on deploy...
+echo Regenerating lean shape CSVs (scripts\build-lean-shapes.mjs)...
+echo (Deployed site (GitHub Pages) has no build step -- these outputs are committed to git,
+echo  not gitignored. Re-run this and commit the result whenever shapes/*.csv changes.)
 node scripts\build-lean-shapes.mjs
 if errorlevel 1 (
   echo build-lean-shapes.mjs failed -- see above. Not starting the server.
