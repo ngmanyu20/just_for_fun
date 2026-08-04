@@ -1,0 +1,269 @@
+/* map.css — styles for js/map/electionMap.js and js/map/referendumMap.js.
+   Reuses the spectrum, status, color and font custom properties from
+   css/base.css (never redefined here). Adds map-only custom properties for
+   the Referendum map's Yes/No encoding, since base.css only defines
+   spectrum (Left/MR/Right) and status colors — see referendumMap.js
+   module doc for why.
+   (Do not write a literal star-slash sequence anywhere in this comment
+   block — CSS has no escape for it and it silently truncates the comment,
+   which previously corrupted the :root rule right below and dropped
+   --ref-yes/--ref-no, making every referendum map shape render black.) */
+
+:root {
+  --ref-yes: #1b998b;
+  --ref-no: #d1382e;
+  /* Precinct-level Verifying/Counting fill, shared by both the referendum
+     and election maps -- a deliberate flat white (not a themed/gray
+     neutral) so an in-progress precinct still reads clearly against both
+     the "Not received" gray and the Yes/No/spectrum fill colors, in both
+     color schemes. */
+  --ref-progress: #ffffff;
+  /* A Declared election-map PRECINCT whose own round 2 (computed under the
+     constituency's real elimination) is an exact tie, when the
+     constituency's own confirmed winner isn't one of the two tied
+     candidates here -- electionMap.js's `colorForPrecinct` prefers the
+     constituency winner's own spectrum color when it IS one of the two,
+     falling back to this dedicated purple only when there's no sensible
+     winner-color to borrow. Kept visually distinct from the "Not received"
+     gray so a genuine Declared tie never reads as missing data. */
+  --precinct-tie: #9333ea;
+}
+
+.map-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+/* -- Toolbar -- */
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.map-breadcrumb {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.map-breadcrumb strong {
+  color: var(--color-text);
+}
+
+/* -- Stage (SVG + tooltip positioning context) -- */
+.map-stage {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 960 / 640;
+}
+
+/* -- Control cluster: zoom in/out, up-one-level, reset -- stacked
+   together in the map's top-left corner, overlaid on the stage. -- */
+.map-controls {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.map-controls__btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.map-controls__btn:last-child {
+  border-bottom: none;
+}
+
+.map-controls__btn:hover {
+  background: var(--color-border);
+}
+
+/* -- Shapes -- */
+.map-shape {
+  stroke: #000;
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+  transition: fill-opacity 120ms ease, stroke-width 120ms ease;
+}
+
+.map-shape:hover {
+  stroke: #000;
+  stroke-width: 1.75;
+}
+
+.map-shape--constituency {
+  stroke-width: 0.75;
+}
+
+.map-shape--second-context {
+  stroke-dasharray: 2 2;
+}
+
+.map-shape--second-context:hover {
+  stroke-width: 1;
+}
+
+.map-shape--nodata {
+  stroke-dasharray: 1 1.5;
+}
+
+.map-shape--selected {
+  stroke: var(--color-text);
+  stroke-width: 2.5;
+}
+
+/* -- Tooltip -- */
+.map-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.map-tooltip[hidden] {
+  display: none;
+}
+
+/* -- Results table inside the tooltip: Party | 1st Vote | Pct | 2nd Vote |
+   Pct | C | [D] -- up to 7 columns, so this stays compact/nowrap. -- */
+.map-tooltip__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.35rem 0;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.map-tooltip__table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-muted);
+  padding: 0.1rem 0.35rem 0.1rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.map-tooltip__table td {
+  padding: 0.15rem 0.35rem 0.15rem 0;
+}
+
+.map-tooltip__table th:not(:first-child),
+.map-tooltip__table td:not(:first-child) {
+  text-align: right;
+}
+
+/* C/D tick columns stay narrow regardless of column count. */
+.map-tooltip__table th:nth-last-child(-n+2),
+.map-tooltip__table td:nth-last-child(-n+2) {
+  padding-right: 0.15rem;
+}
+
+/* Referendum tooltip's Option/Votes/Pct table (referendumMap.js's
+   referendumOptionsTableHtml): Votes/Pct are centered under their headers
+   rather than right-aligned like the election table's numeric columns
+   above -- two classes beats the single-class rule above regardless of
+   stylesheet order. */
+.map-tooltip__table.ref-options-table th:not(:first-child),
+.map-tooltip__table.ref-options-table td:not(:first-child) {
+  text-align: center;
+}
+
+.map-tooltip__spoil-row {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.map-tooltip__cell--pending {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.map-tooltip__spoil-row td:first-child {
+  padding-left: 0.9rem; /* aligns under party names, past the color dot */
+}
+
+.map-tooltip__dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+}
+
+.map-tooltip__status {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
+}
+
+/* -- Legend -- */
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.map-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-legend__dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+}
+
+/* -- Status line -- */
+.map-status-line {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}

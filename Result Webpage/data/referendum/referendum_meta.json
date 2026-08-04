@@ -1,0 +1,9 @@
+{
+  "referendum_id": "1",
+  "question": "Testing Question 1",
+  "election_date": "2026-08-02",
+  "seat_types": [
+    { "id": "AlmaVale", "results_file": "referendum/df_results_almavale_referendum1.csv" },
+    { "id": "GeneralDirect", "results_file": "referendum/df_results_generaldirect_referendum1.csv" }
+  ]
+}

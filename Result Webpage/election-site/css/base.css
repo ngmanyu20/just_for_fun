@@ -1,0 +1,165 @@
+/* base.css — shared reset, typography, layout, nav.
+   Page-specific styles belong in their own file (results.css, referendum.css,
+   map.css) — don't grow this file with page-specific rules. */
+
+:root {
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --color-muted: #666666;
+  --color-border: #e0e0e0;
+  --color-surface: #f7f7f8;
+  --spectrum-left: #2255CC;
+  --spectrum-mr: #F2C200;
+  --spectrum-right: #D93025;
+  --status-not-received: #cccccc;
+  --status-verifying: #f2c200;
+  --status-counting: #ff9800;
+  --status-declared: #2e7d32;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #14161a;
+    --color-text: #f0f0f0;
+    --color-muted: #a0a0a8;
+    --color-border: #2c2f36;
+    --color-surface: #1c1f26;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+a { color: inherit; }
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* `#nav` is a JS-populated placeholder div sized exactly to its one child
+   (.site-nav). Without `display: contents` here, that div — not the tall
+   .app-shell — becomes .site-nav's containing block, which gives a
+   `position: sticky` child zero room to stick (its containing block scrolls
+   out from under it almost immediately). */
+#nav {
+  display: contents;
+}
+
+/* -- Shared nav bar (populated by js/nav.js) -- */
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-nav__brand {
+  font-weight: 700;
+  margin-right: auto;
+}
+
+.site-nav a {
+  text-decoration: none;
+  color: var(--color-muted);
+  font-size: 0.95rem;
+}
+
+.site-nav a[aria-current="page"],
+.site-nav a:hover {
+  color: var(--color-text);
+}
+
+.site-nav__breadcrumbs {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+}
+
+/* -- Shared small helpers -- */
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.status-badge--not-received { background: var(--status-not-received); }
+.status-badge--verifying { background: var(--status-verifying); }
+.status-badge--counting { background: var(--status-counting); color: #fff; }
+.status-badge--declared { background: var(--status-declared); color: #fff; }
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+table.data-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+table.data-table th, table.data-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* -- Back-to-top button (populated by js/nav.js) -- */
+.back-to-top {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  z-index: 200;
+}
+
+.back-to-top.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.back-to-top:hover {
+  background: var(--color-border);
+}

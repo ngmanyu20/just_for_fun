@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Referendum Results</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <!-- Map component's own stylesheet (owned by Agent 2a). Linked defensively --
+       if js/map/referendumMap.js / css/map.css haven't landed yet, this link
+       404s harmlessly and the page's own fallback UI (see js/pages/referendum.js)
+       still renders the drill-down without the visual map. -->
+  <link rel="stylesheet" href="css/map.css" />
+  <link rel="stylesheet" href="css/referendum.css" />
+</head>
+<body data-page="referendum">
+  <div class="app-shell">
+    <div id="nav"></div>
+    <main class="app-main">
+      <div id="breadcrumbs"></div>
+
+      <section id="referendum-header" class="card ref-header" aria-live="polite">
+        <p>Loading referendum…</p>
+      </section>
+
+      <section id="referendum-summary" class="card ref-summary" aria-live="polite"></section>
+
+      <section id="referendum-geo" class="ref-section" hidden>
+        <h2>Alma Vale</h2>
+        <div class="ref-geo-layout">
+          <div id="referendum-map" class="ref-map" aria-label="Referendum results map"></div>
+          <div id="referendum-geo-panel" class="ref-geo-panel"></div>
+        </div>
+      </section>
+
+      <section id="referendum-functional" class="ref-section" hidden>
+        <h2>General (Individual Sector)</h2>
+        <div id="referendum-functional-table"></div>
+      </section>
+
+      <section id="referendum-errors" class="card ref-errors" hidden></section>
+    </main>
+  </div>
+  <script type="module" src="js/pages/referendum.js"></script>
+</body>
+</html>

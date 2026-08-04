@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Map demo — Election Results</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/map.css" />
+  <style>
+    /* Demo-page-only layout chrome, not part of the map component's own CSS. */
+    .demo-section {
+      margin-bottom: 2rem;
+    }
+    .demo-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .demo-controls button {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid var(--color-border);
+      background: var(--color-bg);
+      color: var(--color-text);
+      cursor: pointer;
+    }
+    .demo-controls button[aria-pressed="true"] {
+      background: var(--color-text);
+      color: var(--color-bg);
+    }
+    .demo-log {
+      max-height: 140px;
+      overflow-y: auto;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      color: var(--color-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div id="nav"></div>
+    <main class="app-main">
+      <h1>Map component demo</h1>
+      <p class="map-breadcrumb">Standalone self-test page for <code>js/map/electionMap.js</code> and
+        <code>js/map/referendumMap.js</code> — not part of the site's own pages (those are 2b/2c's).</p>
+
+      <section class="demo-section">
+        <h2>General Election map</h2>
+        <div class="demo-controls">
+          <span>Mode:</span>
+          <button id="mode-county" type="button" aria-pressed="true">County</button>
+          <button id="mode-district" type="button" aria-pressed="false">District</button>
+          <span style="margin-left: 1rem;">Lock to constituency:</span>
+          <button id="lock-toggle" type="button" aria-pressed="false">Off</button>
+        </div>
+        <div id="election-map"></div>
+        <p>Last <code>onUnitClick</code> events:</p>
+        <div class="demo-log" id="election-log"></div>
+      </section>
+
+      <section class="demo-section">
+        <h2>Referendum map</h2>
+        <div id="referendum-map"></div>
+        <p>Last <code>onUnitClick</code> events:</p>
+        <div class="demo-log" id="referendum-log"></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    import { renderNav } from './js/nav.js';
+    import { mountElectionMap } from './js/map/electionMap.js';
+    import { mountReferendumMap } from './js/map/referendumMap.js';
+
+    renderNav(document.getElementById('nav'), 'map-demo.html');
+
+    function log(el, unit) {
+      const line = document.createElement('div');
+      line.textContent = JSON.stringify(unit);
+      el.prepend(line);
+      while (el.children.length > 12) el.removeChild(el.lastChild);
+    }
+
+    const electionLog = document.getElementById('election-log');
+    const referendumLog = document.getElementById('referendum-log');
+
+    // A constituency known to exist in df_constituency.csv, used for the
+    // lockToConstituency demo toggle (Section 1 / seat-detail page use case).
+    const DEMO_LOCK_CONSTITUENCY = 'The City of Alington';
+
+    let electionController = null;
+    let currentMode = 'county';
+    let locked = false;
+
+    async function mountElection() {
+      const container = document.getElementById('election-map');
+      electionController = await mountElectionMap(container, {
+        mode: currentMode,
+        lockToConstituency: locked ? DEMO_LOCK_CONSTITUENCY : undefined,
+        onUnitClick: (unit) => log(electionLog, unit),
+      });
+    }
+
+    function setModeButtons() {
+      document.getElementById('mode-county').setAttribute('aria-pressed', String(currentMode === 'county'));
+      document.getElementById('mode-district').setAttribute('aria-pressed', String(currentMode === 'district'));
+    }
+
+    document.getElementById('mode-county').addEventListener('click', () => {
+      currentMode = 'county';
+      setModeButtons();
+      electionController?.setMode('county');
+    });
+    document.getElementById('mode-district').addEventListener('click', () => {
+      currentMode = 'district';
+      setModeButtons();
+      electionController?.setMode('district');
+    });
+    document.getElementById('lock-toggle').addEventListener('click', async (e) => {
+      locked = !locked;
+      e.target.textContent = locked ? 'On' : 'Off';
+      e.target.setAttribute('aria-pressed', String(locked));
+      electionController?.destroy();
+      await mountElection();
+    });
+
+    async function main() {
+      setModeButtons();
+      await mountElection();
+      await mountReferendumMap(document.getElementById('referendum-map'), {
+        onUnitClick: (unit) => log(referendumLog, unit),
+      });
+    }
+
+    main().catch((err) => {
+      console.error(err);
+      document.body.insertAdjacentHTML(
+        'beforeend',
+        `<pre style="color:red; padding:1rem;">${String(err && err.stack || err)}</pre>`
+      );
+    });
+  </script>
+</body>
+</html>

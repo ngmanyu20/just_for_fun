@@ -1,0 +1,752 @@
+/* results.css — General Election pages (index.html, election-*.html).
+   Shared helpers (.card, .status-badge, .data-table, nav) live in base.css —
+   only page-specific rules belong here. */
+
+/* -- Generic page scaffolding -- */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.page-header h1 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.6rem;
+}
+.page-header__meta {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+.section-heading {
+  font-size: 1.05rem;
+  margin: 1.75rem 0 0.75rem;
+}
+.loading-msg, .empty-msg {
+  color: var(--color-muted);
+  font-style: italic;
+  padding: 1rem 0;
+}
+.error-msg {
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+@media (prefers-color-scheme: dark) {
+  .error-msg { background: #3a1414; border-color: #5c1f1f; color: #fca5a5; }
+}
+
+/* -- Stat tiles (dataviz skill: label / value / delta) -- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 1.5rem;
+}
+.stat-tile {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: var(--color-surface);
+}
+.stat-tile__label {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  margin-bottom: 0.3rem;
+}
+.stat-tile__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+}
+.stat-tile__sub {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  margin-top: 0.2rem;
+}
+
+/* Column-visibility tickboxes above the full results table
+   (election-alma-vale.js's columnToggleControls()/fullResultsTable()) --
+   unchecking one adds a `hide-col-{group}` class to the table itself, and
+   the `[data-col-group]` rules further down this file (with the
+   .gd-vote-table rules) hide every cell tagged with that group. */
+.column-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+.column-toggle__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+/* -- Seat-type overview cards (index.html) -- */
+.seat-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 2rem;
+}
+.seat-type-card h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.05rem;
+}
+.seat-type-card h3 a { text-decoration: none; }
+.seat-type-card h3 a:hover { text-decoration: underline; }
+.seat-type-card__count {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.6rem;
+}
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-border);
+  overflow: hidden;
+  margin: 0.4rem 0 0.6rem;
+}
+.progress-bar__fill {
+  height: 100%;
+  background: var(--status-declared);
+}
+
+/* -- Party tally (index.html headline) -- */
+.spectrum-summary {
+  position: relative;
+  height: 4.9rem;
+  margin-top: 0.75rem;
+}
+.spectrum-summary__item {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+/* Fixed ideological-spectrum ruler anchors -- start/center/end, not tied to
+   any data value (see spectrumSummaryRow()'s doc comment). */
+.spectrum-summary__item--start {
+  transform: translateX(0);
+  text-align: left;
+}
+.spectrum-summary__item--center {
+  transform: translateX(-50%);
+  text-align: center;
+}
+.spectrum-summary__item--end {
+  transform: translateX(-100%);
+  text-align: right;
+}
+.spectrum-summary__value {
+  font-size: 2.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.spectrum-summary__label {
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+table.data-table.party-tally-table {
+  width: auto;
+  table-layout: auto;
+}
+.party-tally-table td, .party-tally-table th {
+  text-align: center;
+  padding: 0.4rem 0.6rem;
+}
+.party-tally-table td:first-child { text-align: left; }
+.party-tally-bar {
+  display: flex;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  margin: 0.5rem 0 1rem;
+}
+.party-tally-bar__seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.party-tally-bar__seg--undecided {
+  background: repeating-linear-gradient(135deg, var(--color-border), var(--color-border) 4px, transparent 4px, transparent 8px);
+}
+.party-tally-bar__seg-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+/* -- Vote-share bars (Alma Vale / General Proportional, spectrum-level) -- */
+.vote-share-block {
+  margin: 0 0 1.25rem;
+}
+.vote-share-block__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.vote-share-block__caption {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+}
+.vote-share-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+.vote-share-bar__seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.vote-share-bar__seg-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1rem;
+}
+.legend-row__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+  flex: none;
+}
+
+/* -- Party pill (spectrum-colored dot + abbreviation) -- */
+.party-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.party-pill__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+.party-pill--muted { color: var(--color-muted); font-weight: 500; }
+
+/* -- Seat list tables (per seat-type pages) -- */
+.seat-table td, .seat-table th { vertical-align: middle; }
+
+/* General Proportional's reporting-sectors table (and its Sub_Constituency
+   sub-row breakdown) -- headers centered over their column, and all data
+   columns except the leading Sector/Sub_Constituency name (which keeps the
+   expand-toggle + name ranged left -- long names + the icon read better
+   that way than centered). */
+table.data-table.sector-table th { text-align: center; }
+table.data-table.sector-table td { text-align: center; }
+table.data-table.sector-table td:first-child { text-align: left; }
+
+/* General Proportional's "Seats by list" table (and its within-list
+   party breakdown) -- same header/data centering as the sector table
+   above, but also narrowed off the full page width since it's only 4-5
+   columns and reads better as a compact block than stretched edge-to-edge. */
+table.data-table.list-result-table { width: auto; max-width: 640px; }
+table.data-table.list-result-table th { text-align: center; }
+table.data-table.list-result-table td { text-align: center; }
+table.data-table.list-result-table td:first-child { text-align: left; }
+
+/* General Direct's vote-breakdown table (election-general-direct.js) --
+   same header/data centering as the sector table above; the
+   Constituency/Sub_Constituency name column leads the row (like the sector
+   table), so the left-aligned exception targets :first-child. */
+table.data-table.gd-vote-table th { text-align: center; }
+table.data-table.gd-vote-table td { text-align: center; }
+table.data-table.gd-vote-table td:first-child { text-align: left; }
+.vote-cell--winner { font-weight: 700; }
+.vote-cell--undecided { color: var(--color-muted); font-style: italic; }
+
+/* Column-visibility tickboxes (.column-toggle above) hide every cell in a
+   group by tagging the table with `hide-col-{group}` and matching on the
+   cells' own `data-col-group` attribute -- header and body cells alike,
+   since both carry the attribute (voteTableHead/appendTurnoutCells/
+   appendVoteCells/appendRegionSubtotalCells in election-alma-vale.js). */
+table.data-table.gd-vote-table.hide-col-evt [data-col-group='evt'],
+table.data-table.gd-vote-table.hide-col-spoil [data-col-group='spoil'] {
+  display: none;
+}
+
+/* Sticky first column (Constituency name / region label) for this table --
+   it's wide enough (Electorate through Status) that scrolling right to see
+   the later columns otherwise scrolls the row's own identity, and the
+   region subtotal row's expand/collapse toggle (election-alma-vale.js's
+   regionSubtotalRow), out of view along with it. `left: 0` pins it to the
+   scroll container's edge; the header's first cell additionally inherits
+   `position: sticky; top: 0` from `.scroll-table-wrap thead th` above, so
+   it stays put on both axes at once (that shared rule's z-index is bumped
+   to sit above this column's own sticky cells where they'd otherwise
+   overlap in the top-left corner). */
+table.data-table.gd-vote-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-bg);
+}
+table.data-table.gd-vote-table thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+}
+table.data-table.gd-vote-table tr.seat-table__region-row td:first-child,
+table.data-table.gd-vote-table tr.seat-table__total-row td:first-child {
+  background: var(--color-surface);
+}
+
+.seat-table__region-row td {
+  font-weight: 700;
+  background: var(--color-surface);
+  padding-top: 0.75rem;
+}
+/* The whole region row is the expand/collapse click target (see
+   election-alma-vale.js's regionSubtotalRow) -- cursor + hover highlight
+   make that obvious, since the ▾/▸ glyph alone doesn't read as clickable
+   at a glance. Repeated for :first-child specifically since its own sticky
+   background (further up this file) otherwise wins over this hover rule. */
+.seat-table__region-row[data-clickable] {
+  cursor: pointer;
+}
+.seat-table__region-row[data-clickable]:hover td {
+  background: var(--color-border);
+}
+table.data-table.gd-vote-table tr.seat-table__region-row[data-clickable]:hover td:first-child {
+  background: var(--color-border);
+}
+.seat-table__total-row td {
+  font-weight: 700;
+  background: var(--color-surface);
+  border-top: 2px solid var(--color-border);
+}
+/* Home Districts' vote-breakdown table (Electorate/Turnout/.../Results) --
+   centered header + data in every column. Needs the `table.data-table`
+   qualifier to out-specificity base.css's `table.data-table th/td {
+   text-align: left }` -- `.hd-table th`/`.hd-table td` alone are each only
+   1 class + 1 type, LOWER specificity than base's 1 class + 2 types, so
+   the override was silently losing without it. */
+table.data-table.hd-table th,
+table.data-table.hd-table td {
+  text-align: center;
+}
+/* Constituency/Sub_Constituency column: header centered like the rest, but
+   the name itself stays left-aligned (long names + the expand-toggle icon
+   read better ranged left than centered). */
+table.data-table.hd-table td:first-child {
+  text-align: left;
+}
+.seat-row__name { display: flex; align-items: center; gap: 0.4rem; }
+.seat-row__name a { text-decoration: none; font-weight: 600; }
+.seat-row__name a:hover { text-decoration: underline; }
+.expand-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  width: 1.4rem;
+  text-align: center;
+  padding: 0;
+}
+.expand-toggle:hover { color: var(--color-text); }
+.subrow-detail {
+  background: var(--color-surface);
+}
+.subrow-detail__inner {
+  padding: 0.6rem 1rem 0.9rem 2.2rem;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+.subrow-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.hidden { display: none !important; }
+
+/* -- Seat detail page -- */
+.seat-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+@media (min-width: 900px) {
+  .seat-detail-grid--with-map {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.map-toggle {
+  display: inline-flex;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.map-toggle button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.map-toggle button[aria-pressed="true"] {
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-color: var(--color-text);
+}
+#map-mount {
+  min-height: 360px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+/* Full-width top-level map (election-alma-vale.js), vs. the narrower
+   half-grid column version on a locked seat-detail page. */
+#map-mount.map-mount--full {
+  min-height: 520px;
+}
+
+/* -- Alma Vale's geographic drill-down layout: map (left) + a right-hand
+   panel (County/District toggle, the selected polygon's vote result, and a
+   clickable summary list) -- election-alma-vale.js's own equivalent of
+   referendum.html's `.ref-geo-layout` (css/referendum.css). Not shared
+   with that stylesheet since the two page families don't link each
+   other's CSS (BUILD_NOTES.md's file-ownership split) -- `.egeo-` here
+   parallels `.ref-` there, same structure, this page's own class names. -- */
+.egeo-layout {
+  display: grid;
+  /* Map column favored over the panel (2:1, was 1.4:1) -- the panel's own
+     content (toggle, result table, drill list) reads fine narrower, and the
+     map is the more space-hungry piece of this layout. */
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+@media (max-width: 860px) {
+  .egeo-layout {
+    grid-template-columns: 1fr;
+  }
+}
+/* `#map-mount`'s base rules above still apply (border/background/overflow) --
+   this just fits it to the grid cell instead of the full-width page. Taller
+   than the base `#map-mount`/`--full` rules (was 460px) since this map is
+   the whole left column's content, not sharing a row with anything else. */
+.egeo-layout #map-mount {
+  min-height: 620px;
+  margin-bottom: 0;
+}
+.egeo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+}
+.egeo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+}
+.egeo-controls__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.egeo-controls .map-toggle {
+  margin-bottom: 0;
+}
+.egeo-controls__reset {
+  padding: 0.35rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.egeo-controls__reset:hover {
+  background: var(--color-border);
+}
+.egeo-unit-summary {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  font-size: 0.9rem;
+}
+.egeo-unit-summary__title {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+/* -- Summary list (text/table alternative to clicking the map directly,
+   same accessibility rationale as referendum.css's `.ref-precinct-list`) -- */
+.egeo-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+/* Needs the `table.data-table` qualifier to out-specificity base.css's
+   `table.data-table { width: 100% }` (element+class beats a plain class
+   regardless of source order -- see BUILD_NOTES.md's `.ref-drill-table`
+   entry for the same gotcha, already hit twice on this build). */
+table.data-table.egeo-drill-table {
+  width: 100%;
+  font-size: 0.8rem;
+}
+.egeo-list tr[data-clickable] {
+  cursor: pointer;
+}
+.egeo-list tr[data-clickable]:hover {
+  background: var(--color-border);
+}
+.egeo-drill-table th:not(:first-child),
+.egeo-drill-table td:not(:first-child) {
+  text-align: center;
+}
+
+/* -- "1st Pref" / "2nd Pref (actual)" toggle, controls card, below the
+   County/District toggle (election-alma-vale.js's `listPrefView`) -- drives
+   the map tooltip, the vote-result box, and the summary list all at once.
+   Pill buttons, same shape as `.map-toggle` but its own class since it
+   isn't the site-wide County/District toggle. -- */
+.egeo-pref-toggle {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+.egeo-pref-toggle__btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.egeo-pref-toggle__btn[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-color: var(--color-text);
+}
+
+/* -- "Jump to" level-switch buttons at the top of the unit-summary box
+   (election-alma-vale.js's `levelSwitchButtons`) -- plain rectangular
+   buttons (not pills, to read distinctly from the pref/mode toggles),
+   the active level shown disabled rather than removed. -- */
+.egeo-level-switch {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.egeo-level-switch__btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 6px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.egeo-level-switch__btn[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-color: var(--color-text);
+  cursor: default;
+}
+
+/* -- Precinct / sub-row breakdown table -- */
+.scroll-table-wrap {
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.scroll-table-wrap table.data-table {
+  border: none;
+}
+.scroll-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 2;
+}
+/* General Direct's vote table (all 10 seats) should read top-to-bottom
+   without an inner scrollbar -- unlike the precinct/sub-row tables that
+   share .scroll-table-wrap elsewhere, this one drops the height cap. */
+.scroll-table-wrap--full-height {
+  max-height: none;
+}
+
+/* -- Charts (D3-rendered bar charts) -- */
+.chart-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--color-surface);
+  margin: 0.75rem 0 1.5rem;
+}
+.chart-card h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+.chart-svg-wrap { width: 100%; overflow-x: auto; }
+.bar-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.08s ease;
+  z-index: 50;
+  white-space: nowrap;
+}
+.bar-tooltip__value { font-weight: 700; }
+.chart-axis text {
+  fill: var(--color-muted);
+  font-size: 0.72rem;
+}
+.chart-axis path, .chart-axis line {
+  stroke: var(--color-border);
+}
+.chart-bar-label {
+  fill: var(--color-text);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- Sector status grid (General Proportional) -- */
+.sector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.6rem;
+  margin: 0.75rem 0 1.5rem;
+}
+.sector-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.65rem 0.8rem;
+  background: var(--color-surface);
+}
+.sector-card__name { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; }
+.sector-card__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+/* -- District breakdown (Local Representative) -- */
+/* Needs the `table.data-table` qualifier to out-specificity base.css's
+   `table.data-table th, table.data-table td { text-align: left }` --
+   `.district-table th`/`td` alone are each only 1 class + 1 type, LOWER
+   specificity than base's 1 class + 2 types, so this was silently losing
+   (same bug already fixed once for `.hd-table` -- see its comment below). */
+table.data-table.district-table th,
+table.data-table.district-table td {
+  text-align: center;
+}
+table.data-table.district-table th:first-child,
+table.data-table.district-table td:first-child {
+  text-align: left;
+}
+
+.banner {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  background: var(--color-surface);
+}
+.banner--provisional {
+  border-color: var(--status-counting);
+}
+
+/* -- Referendum result summary card (index.html, only rendered when this
+   election cycle has a referendum_meta.json) -- stacked lines, not a grid:
+   AlmaVale and GeneralDirect are different electorates voting on the same
+   question, so each gets its own full-width line rather than sitting
+   side-by-side as if they were comparable columns.
+   --ref-yes/--ref-no match css/map.css's referendum Yes/No encoding
+   (css/referendum.css's own copy) -- index.html doesn't link either of
+   those stylesheets, so they're redefined here rather than pulling both in
+   just for two colors. */
+:root {
+  --ref-yes: #1b998b;
+  --ref-no: #d1382e;
+}
+.referendum-summary {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 1.5rem;
+}
+.referendum-summary__question {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.referendum-summary__question a {
+  color: inherit;
+  text-decoration: none;
+}
+.referendum-summary__question a:hover {
+  text-decoration: underline;
+}
+.referendum-summary__line {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  padding: 0.2rem 0;
+}
+.referendum-summary__outcome {
+  font-weight: 700;
+}
+.referendum-summary__outcome--yes { color: var(--ref-yes); }
+.referendum-summary__outcome--no { color: var(--ref-no); }

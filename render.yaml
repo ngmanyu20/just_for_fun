@@ -1,0 +1,62 @@
+services:
+  - name: election-site
+    type: web
+    runtime: static
+    repo: https://github.com/ngmanyu20/just_for_fun
+    branch: main
+    autoDeployTrigger: commit
+    rootDir: Result Webpage
+
+    # scripts/build_lean_shapes.py strips the `geometry`/`centroid` columns
+    # out of shapes/df_polygon.csv, df_county.csv and df_constituency.csv
+    # into *_lean.csv siblings (gitignored -- see .gitignore and the script's
+    # own doc comment). Those lean files are what election-site/js/data/
+    # shapes.js's getShapeJoinIndex() fetches for any page that only needs
+    # to join Shape_ID -> Constituency/District/County, not draw a map --
+    # this is what cuts the General Election overview/results pages' payload
+    # from ~12MB to ~4MB. Runs on every deploy so it's always regenerated
+    # from whatever shapes/*.csv landed in the latest commit, never a stale
+    # hand-committed copy.
+    buildCommand: python scripts/build_lean_shapes.py
+    staticPublishPath: .
+
+    routes:
+      - source: /
+        destination: /election-site/index.html
+        type: rewrite
+
+    headers:
+      # Fixed reference data (shape joins/geometry, election_meta.json,
+      # party participation) -- doesn't change between deploys of the same
+      # election cycle, so it's safe to cache hard. A data update ships as
+      # part of a new commit/deploy either way, which serves from a fresh
+      # edge cache regardless of what a browser cached before.
+      - path: /data/shapes/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /data/meta/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+
+      # Live result data -- these files ARE expected to change (counts
+      # coming in) independently of a code deploy, so browsers should
+      # revalidate often rather than sitting on a stale copy.
+      - path: /data/results/*
+        name: Cache-Control
+        value: public, max-age=60, must-revalidate
+      - path: /data/referendum/*
+        name: Cache-Control
+        value: public, max-age=60, must-revalidate
+
+      # App code/markup -- never let a browser hang onto a stale copy after
+      # a deploy (same intent as the local serve_no_cache.py dev server, but
+      # scoped to just these, not the multi-MB data files above).
+      - path: /election-site/**/*.html
+        name: Cache-Control
+        value: no-cache
+      - path: /election-site/**/*.js
+        name: Cache-Control
+        value: no-cache
+      - path: /election-site/**/*.css
+        name: Cache-Control
+        value: no-cache

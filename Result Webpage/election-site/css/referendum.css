@@ -1,0 +1,414 @@
+/* referendum.css -- page-specific styles for referendum.html (Agent 2c).
+   Reuses base.css's reset/nav/status-badge/card/data-table helpers and the
+   spectrum- and status- prefixed CSS variables it defines. Does NOT
+   redefine anything from base.css.
+   (Note: avoid writing a literal "star-slash" sequence anywhere in this
+   comment block, e.g. in a hyphenated-list-of-prefixes aside -- CSS has no
+   escape for it and it silently truncates the comment right there,
+   corrupting every rule after it. That exact bug was found and fixed in
+   this file during testing; see the report for a matching bug flagged, not
+   fixed, in css/map.css, which this agent does not own.)
+
+   Color choice (FEATURE_SPEC.md Section 5 / task brief): a referendum is
+   Yes/No, not Left/MR/Right, so the map + summary bars use a DIVERGING
+   scale (polarity: which side of 50/50) instead of the spectrum colors.
+   This page's own bars/legend/dots reuse the SAME --ref-yes / --ref-no
+   custom properties that js/map/referendumMap.js's stylesheet (css/map.css,
+   owned by the parallel "2a" map agent) already defines, so the map and
+   this page's tables/bars read as one consistent color system rather than
+   two different Yes/No palettes on the same screen -- css/referendum.css
+   only adds --ref-neutral, a gray midpoint map.css has no need for (its
+   own encoding is solid leading-side fill + opacity, not a continuous
+   blend), used here for this page's continuous lean gradient.
+
+   Note (resolved during Phase 3 integration): map.css previously had the
+   same star-slash comment bug and its --ref-yes/--ref-no was dropped as a
+   result; this page carried a redefinition of those two properties as a
+   workaround. map.css's comment has since been fixed upstream and its
+   :root rule now parses correctly, so the workaround was removed here --
+   only --ref-neutral (this page's own continuous-lean-gradient midpoint,
+   which map.css has no equivalent for) remains below. */
+
+:root {
+  --ref-neutral: #f0efec;    /* diverging neutral midpoint (light) -- gray, matches the dataviz skill's documented diverging-pair midpoint. map.css has no equivalent -- only this page's own continuous lean gradient needs it. */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ref-neutral: #383835;  /* diverging neutral midpoint (dark) */
+  }
+}
+
+.ref-header h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.ref-header__meta {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ref-summary {
+  margin-top: 1rem;
+}
+
+/* -- Per-seat-type result cards, shown side by side (never summed into one
+   combined bar -- AlmaVale and GeneralDirect are different electorates
+   voting on the same question). -- */
+.ref-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.ref-summary__card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+.ref-summary__card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+}
+
+/* -- Status line: "Status: In Progress" until the outcome is mathematically
+   safe from the remaining undeclared electorate, then "Agree"/"Disagree"
+   (see referendum.js's referendumStatusLabel). Colored the same way the
+   rest of the page encodes Yes/No/in-progress: --ref-yes/--ref-no for a
+   settled outcome, --status-counting (this site's existing "in progress"
+   status color) while it's still open. -- */
+.ref-summary__status {
+  margin-top: 0.6rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.ref-status--yes { color: var(--ref-yes); }
+.ref-status--no { color: var(--ref-no); }
+.ref-status--progress { color: var(--status-counting); }
+
+.ref-summary__totals {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+/* -- Diverging Yes/No bar -- a single horizontal bar split at the Yes/No
+   boundary, neutral-gray track underneath for "not yet counted" share. -- */
+.ref-bar {
+  display: flex;
+  height: 1.75rem;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--ref-neutral);
+}
+
+.ref-bar__segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ref-bar__segment--yes { background: var(--ref-yes); }
+.ref-bar__segment--no { background: var(--ref-no); }
+
+.ref-bar-legend {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.ref-bar-legend__swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.ref-swatch--yes { background: var(--ref-yes); }
+.ref-swatch--no { background: var(--ref-no); }
+.ref-swatch--neutral { background: var(--ref-neutral); border: 1px solid var(--color-border); }
+
+/* -- Sections -- */
+.ref-section {
+  margin-top: 2rem;
+}
+
+.ref-section h2 {
+  margin-bottom: 0.25rem;
+}
+
+.ref-section__note {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+/* -- Geographic (Alma Vale) layout: map + drill-down panel side by side -- */
+.ref-geo-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 860px) {
+  .ref-geo-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ref-map {
+  min-height: 420px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.ref-geo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ref-drill-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ref-drill-controls label {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.ref-drill-controls select {
+  width: 100%;
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.ref-drill-controls button {
+  align-self: flex-start;
+  padding: 0.35rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.ref-drill-controls button:hover {
+  background: var(--color-border);
+}
+
+.ref-unit-summary {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  font-size: 0.9rem;
+}
+
+.ref-unit-summary__title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* -- Precinct list (text/table alternative to clicking the map -- the
+   dataviz skill's accessibility pass calls for a table view alongside any
+   chart) -- */
+.ref-precinct-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ref-precinct-list table.data-table {
+  font-size: 0.8rem;
+}
+
+.ref-precinct-list tr[data-clickable] {
+  cursor: pointer;
+}
+
+.ref-precinct-list tr[data-clickable]:hover {
+  background: var(--color-border);
+}
+
+/* -- Drill tables (Authority/County precinct-list tables and the General
+   Direct flat table + its Sub_Constituency breakdown): Name | Yes | No |
+   Lean | Status. Every column except the leading name column is centered
+   under its header. Sized to fit its own columns (overriding
+   `.data-table`'s width:100%) rather than stretching across the whole
+   section -- with Name/Yes/No shrunk to content below, a full-width table
+   would otherwise leave a huge empty gap before Lean/Status.
+   NOTE: the selector must be `table.ref-drill-table`, not `.ref-drill-table`
+   -- base.css's `table.data-table { width: 100% }` is element+class
+   specificity, which beats a plain class selector regardless of which
+   stylesheet loads later. A plain `.ref-drill-table { width: auto }` here
+   silently loses to it and the table stays full-width. -- */
+table.ref-drill-table {
+  width: auto;
+}
+
+.ref-drill-table th:not(:first-child),
+.ref-drill-table td:not(:first-child) {
+  text-align: center;
+}
+
+.ref-drill-table th,
+.ref-drill-table td {
+  padding: 0.35rem 0.5rem;
+}
+
+/* Name/Yes/No shrink to fit their own content (the classic width:1% trick)
+   instead of each claiming an even share of the table's width, so Lean's
+   bar and Status get the room they actually need. */
+.ref-drill-table th:nth-child(1),
+.ref-drill-table td:nth-child(1),
+.ref-drill-table th:nth-child(2),
+.ref-drill-table td:nth-child(2),
+.ref-drill-table th:nth-child(3),
+.ref-drill-table td:nth-child(3) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Authority/County/Precinct tables live in the narrow side panel
+   (.ref-precinct-list) -- Yes/No run smaller/tighter there so more of the
+   table's limited width goes to Lean's bar instead, and Lean is guaranteed
+   real room for its percentage labels rather than getting squeezed to
+   whatever's left after Name/Yes/No/Status claim theirs. The General
+   Direct table (#referendum-functional-table) has the whole section's
+   width to work with and keeps Yes/No larger -- see the rule below. */
+.ref-precinct-list .ref-drill-table th:nth-child(2),
+.ref-precinct-list .ref-drill-table td:nth-child(2),
+.ref-precinct-list .ref-drill-table th:nth-child(3),
+.ref-precinct-list .ref-drill-table td:nth-child(3) {
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+  font-size: 0.78rem;
+}
+
+.ref-precinct-list .ref-drill-table th:nth-child(4),
+.ref-precinct-list .ref-drill-table td:nth-child(4) {
+  min-width: 190px;
+}
+
+/* General Direct table: Yes/No read a bit larger than the side panel's
+   compact version, but without the wide padding that was pushing the
+   table's overall (width:auto) footprint out further than it needs to be. */
+#referendum-functional-table .ref-drill-table th:nth-child(2),
+#referendum-functional-table .ref-drill-table td:nth-child(2),
+#referendum-functional-table .ref-drill-table th:nth-child(3),
+#referendum-functional-table .ref-drill-table td:nth-child(3) {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  font-size: 0.95rem;
+}
+
+/* Compact, percentage-labeled Yes/No proportion bar for a drill table's
+   "Lean" column -- a scaled-down `.ref-bar`. No vote count in the label
+   (the Yes/No columns next to it already carry those as exact numbers). */
+.ref-lean-bar {
+  display: flex;
+  height: 1.3rem;
+  width: 100%;
+  max-width: 190px;
+  margin: 0 auto;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--ref-neutral);
+}
+
+.ref-lean-bar__seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ref-lean-bar__seg--yes { background: var(--ref-yes); }
+.ref-lean-bar__seg--no { background: var(--ref-no); }
+
+.ref-errors {
+  margin-top: 1.5rem;
+  border-color: var(--status-counting);
+}
+
+.ref-errors h3 {
+  margin-top: 0;
+}
+
+/* -- Collapsible Sub_Constituency rows (General Direct functional table --
+   Phase 3 addition, mirrors css/results.css's .expand-toggle/.subrow-detail/
+   .hidden, which referendum.html doesn't link since it isn't a General
+   Election page). Kept here rather than pulling in all of results.css. -- */
+.expand-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  width: 1.4rem;
+  text-align: center;
+  padding: 0;
+}
+.expand-toggle:hover { color: var(--color-text); }
+.subrow-detail {
+  background: var(--color-surface);
+}
+.subrow-detail .subrow-table {
+  margin: 0.5rem 0 0.5rem 1.8rem;
+  width: calc(100% - 1.8rem);
+}
+.hidden { display: none !important; }
+
+/* -- Total row (General Direct functional table's column sum) -- */
+.ref-total-row td {
+  font-weight: 700;
+  background: var(--color-surface);
+  border-top: 2px solid var(--color-border);
+}

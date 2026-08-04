@@ -1,0 +1,29 @@
+{
+  "election_id": "2026_Aug_GE",
+  "election_name": "2026 August General Election",
+  "election_date": "2026-08-02",
+  "election_type": "General Election",
+  "has_referendum": true,
+  "spectrums": [
+    { "id": "Left", "name": "Left", "color": "#2255CC" },
+    { "id": "MR", "name": "Middle Right", "color": "#F2C200" },
+    { "id": "Right", "name": "Right", "color": "#D93025" }
+  ],
+  "parties": [
+    { "abbreviation": "NRD", "name": "Neo Rational Democrats", "spectrum": "Left" },
+    { "abbreviation": "LRP", "name": "Liberal Democratic Party", "spectrum": "Left" },
+    { "abbreviation": "GRF", "name": "Glory Restoration Frontier", "spectrum": "MR" },
+    { "abbreviation": "GCCA", "name": "Grassroot-Civic Cooperation Alliance", "spectrum": "Right" },
+    { "abbreviation": "RA", "name": "Rural Alliance", "spectrum": "Right" }
+  ],
+  "seat_types": [
+    { "id": "AlmaVale", "name": "Alma Vale", "count": 40, "method": "SupplementaryVote", "basis": "Constituency", "results_file": "results/df_results_alma_vale.csv" },
+    { "id": "HomeDistricts", "name": "13D", "count": 5, "method": "SupplementaryVote", "basis": "Constituency", "results_file": "results/df_results_13d.csv" },
+    { "id": "GeneralDirect", "name": "General Direct", "count": 10, "method": "SupplementaryVote", "basis": "Constituency", "results_file": "results/df_results_general_direct.csv" },
+    { "id": "GeneralProportional", "name": "General Proportional", "count": 45, "method": "HareQuotaLRM", "basis": "National", "results_file": "results/df_results_general_proportional.csv", "threshold_pct": 15, "lists": [
+      { "id": "Left", "parties": ["NRD", "LRP"] },
+      { "id": "MR", "parties": ["GRF"] },
+      { "id": "Right", "parties": ["GCCA"] }
+    ] }
+  ]
+}
