@@ -7,7 +7,7 @@ services:
     autoDeployTrigger: commit
     rootDir: Result Webpage
 
-    # scripts/build_lean_shapes.py strips the `geometry`/`centroid` columns
+    # scripts/build-lean-shapes.mjs strips the `geometry`/`centroid` columns
     # out of shapes/df_polygon.csv, df_county.csv and df_constituency.csv
     # into *_lean.csv siblings (gitignored -- see .gitignore and the script's
     # own doc comment). Those lean files are what election-site/js/data/
@@ -17,7 +17,13 @@ services:
     # from ~12MB to ~4MB. Runs on every deploy so it's always regenerated
     # from whatever shapes/*.csv landed in the latest commit, never a stale
     # hand-committed copy.
-    buildCommand: python scripts/build_lean_shapes.py
+    #
+    # Node, not Python: an earlier Python version of this script 404'd in
+    # production because Render's static-site build image doesn't guarantee
+    # a `python`/`python3` interpreter the way it guarantees Node for a
+    # static site's build step. Needs no package.json/npm install -- it's a
+    # dependency-free .mjs script run directly.
+    buildCommand: node scripts/build-lean-shapes.mjs
     staticPublishPath: .
 
     routes:

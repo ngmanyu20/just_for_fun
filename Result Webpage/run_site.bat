@@ -2,10 +2,10 @@
 setlocal
 cd /d "%~dp0"
 
-echo Regenerating lean shape CSVs (scripts\build_lean_shapes.py) -- same step Render runs on deploy...
-python scripts\build_lean_shapes.py
+echo Regenerating lean shape CSVs (scripts\build-lean-shapes.mjs) -- same step Render runs on deploy...
+node scripts\build-lean-shapes.mjs
 if errorlevel 1 (
-  echo build_lean_shapes.py failed -- see above. Not starting the server.
+  echo build-lean-shapes.mjs failed -- see above. Not starting the server.
   exit /b 1
 )
 

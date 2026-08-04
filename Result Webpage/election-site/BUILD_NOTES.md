@@ -696,12 +696,19 @@ re-running a full agent phase for each:
   `shapes/df_districts.csv` (~1.7MB), which are almost entirely `geometry`/`centroid` WKT text
   needed only by the map renderer, never by a plain join. Fixed at the data layer, not by touching
   any map code:
-  - **`scripts/build_lean_shapes.py`** (repo root, `Result Webpage/scripts/`) strips
+  - **`scripts/build-lean-shapes.mjs`** (repo root, `Result Webpage/scripts/`) strips
     `geometry`/`centroid` out of `df_polygon.csv`/`df_county.csv`/`df_constituency.csv` into
-    `*_lean.csv` siblings. Pure stdlib, safe to run on every deploy — wired as this site's Render
-    build command (`render.yaml`, repo root) and into `run_site.bat` for local dev, so both
+    `*_lean.csv` siblings. Dependency-free, safe to run on every deploy — wired as this site's
+    Render build command (`render.yaml`, repo root) and into `run_site.bat` for local dev, so both
     environments regenerate from the same source CSVs the same way; nobody has to remember to run
     it by hand. The `*_lean.csv` outputs are gitignored (see `.gitignore`) — pure build artifacts.
+    **2026-08-04, later same day**: originally written in Python
+    (`scripts/build_lean_shapes.py`) — 404'd on Render after the first deploy because its static-
+    site build image doesn't guarantee a `python`/`python3` interpreter the way it guarantees Node
+    for a static site's build step. Ported to plain Node (reusing `csv.js`'s `parseCSV`, which has
+    no fetch/DOM dependency and imports straight into Node) — no package.json/npm install needed,
+    `.mjs` runs directly. Verified the ported script produces byte-identical row content to the
+    Python version before deleting it.
   - **`shapes.js`: new `getShapeJoinIndex()`** (+ `buildShapeJoinIndexFromRows()`, tested in
     `shapes.test.mjs`), a lighter sibling of `getShapeIndex()` that loads only the lean files and
     builds just `{polygonById, polygonsByCounty, countiesByZone, constituencies}` — no geometry, no
