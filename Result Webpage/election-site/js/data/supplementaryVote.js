@@ -242,6 +242,36 @@ export function leadingSpectrum(svResult, certainty) {
 }
 
 /**
+ * `spectrum`'s share (0..1) of whichever round currently backs it as the
+ * displayed color -- its round2 share (of the 2-way runoff total) once a
+ * `round2` is given, else its round1 share (of the 3-way total). Pure
+ * arithmetic, no certainty logic of its own -- callers pick which
+ * round1/round2 pair matches whatever spectrum they're actually displaying
+ * (e.g. a precinct re-run under the constituency's real elimination once
+ * that's certain, or just its own round1 while it isn't). Meant to drive
+ * fill-opacity ("color depth") as a stand-in for how convincingly a unit is
+ * currently leading -- a 70% landslide reads as a deep, confident fill; a
+ * bare 34% plurality in a 3-way split reads close to the map's neutral
+ * floor -- INSTEAD OF opacity encoding percent-counted (a separate, and at
+ * the County/District/Precinct level, less useful fact -- see
+ * `electionMap.js`'s `colorForUnitSv`/`colorForFptp`/`colorForPrecinct`).
+ * @param {string|null} spectrum
+ * @param {{Left:number, MR:number, Right:number}} round1
+ * @param {Record<string,number>|null} [round2]
+ * @returns {number|null} 0..1, or null if there's nothing valid to divide by
+ */
+export function voteShareFor(spectrum, round1, round2) {
+  if (!spectrum) return null;
+  if (round2) {
+    const total = Object.values(round2).reduce((a, b) => a + toNumber(b), 0);
+    return total > 0 ? toNumber(round2[spectrum]) / total : null;
+  }
+  const r = round1 || {};
+  const total = toNumber(r.Left) + toNumber(r.MR) + toNumber(r.Right);
+  return total > 0 ? toNumber(r[spectrum]) / total : null;
+}
+
+/**
  * Mathematical-certainty declaration rule for a Supplementary Vote seat
  * still mid-count. `computeSupplementaryVote()` above always returns
  * *some* `winner` (whichever spectrum currently leads the Declared-only

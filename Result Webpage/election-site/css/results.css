@@ -568,6 +568,7 @@ table.data-table.egeo-drill-table {
    isn't the site-wide County/District toggle. -- */
 .egeo-pref-toggle {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 .egeo-pref-toggle__btn {

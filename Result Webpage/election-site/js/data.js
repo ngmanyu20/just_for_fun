@@ -114,6 +114,9 @@ export {
   computeSupplementaryVoteFromRows,
   computeHypotheticalRunoff,
   resolveWinningParty,
+  leadingSpectrum,
+  round1PluralityLeader,
+  voteShareFor,
 } from './data/supplementaryVote.js';
 
 // -- General Proportional two-stage Hare quota + largest remainder (final),

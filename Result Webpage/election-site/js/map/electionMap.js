@@ -5,7 +5,7 @@
  *
  * Public contract (BUILD_NOTES.md "Map component contract" — 2b/2c build
  * against this signature):
- *   mountElectionMap(container, options) -> { reset, setMode, setResultView, drillTo, destroy }
+ *   mountElectionMap(container, options) -> { reset, setMode, setResultView, setColorMode, drillTo, destroy }
  *
  * **Presentation model (NYT/AP-style "one path expanded, everything else at
  * its own natural level")**: all 40 constituencies are ALWAYS rendered.
@@ -74,6 +74,7 @@ const LEGEND_ITEMS = [
  *   lockToConstituency?: string,
  *   onUnitClick?: (unit: Object) => void,
  *   resultView?: '1st'|'2nd',
+ *   colorMode?: 'first-round'|'actual',
  * }} options
  */
 export async function mountElectionMap(container, options = {}) {
@@ -113,6 +114,17 @@ export async function mountElectionMap(container, options = {}) {
     // Tooltips are computed live on hover, not cached, so changing this
     // needs no re-render -- see `setResultView`.
     resultView: options.resultView === '2nd' ? '2nd' : '1st',
+    // 'first-round'|'actual' -- the shared "Display Color" toggle
+    // (election-alma-vale.js's own `mapColorMode`, set via `setColorMode`
+    // below) driving every shape's FILL color, independently of
+    // `resultView` above (which only affects tooltip/list NUMBERS, never
+    // the map itself). Unlike `resultView`, changing this DOES need a
+    // re-render -- fill colors are baked into the shapes array each
+    // `renderAll()` call, not recomputed live on hover. See
+    // `colorForUnitSv`/`colorForPrecinct`'s doc comments for what each mode
+    // means and why neither one ever defers to a parent/child unit's own
+    // result.
+    colorMode: options.colorMode === 'first-round' ? 'first-round' : 'actual',
   };
 
   // The active second unit's OWN FPTP (first-preference-only) result
@@ -166,33 +178,51 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * A Declared precinct's fill color shows THIS PRECINCT's own leading
-   * spectrum (`info.result.winner`) while the constituency's overall
-   * result is still uncertain -- with only an early batch counted, we don't
-   * know who wins the seat yet, so every level should honestly show what's
-   * actually leading at that level (same rule the Constituency-level shapes
-   * and the County/District-level shapes already follow for themselves,
-   * via their own `winnerSpectrum`/`sv.winner`/`fptp.winnerSpectrum`).
-   * Once the constituency's own result is certain
-   * (`constituencySeat.certainty.resultCertain` -- the same gate
-   * `tooltipForConstituency`'s "C" tick and `isResultCertain()` use), every
-   * precinct inside it switches to that SAME confirmed `winnerSpectrum` --
-   * at that point "who ultimately represents this area" has one settled
-   * answer, and showing that instead of a stale/spurious local lean is the
-   * more useful fact. Falls back to a dedicated tie color
-   * (`--precinct-tie`, css/map.css) only in the near-impossible case
-   * whichever figure is being shown (local or constituency-wide) has no
-   * leader at all (an exact tie).
+   * A Declared precinct's fill color is THIS PRECINCT's OWN result, full
+   * stop -- never the constituency's, never any other unit's. The shared
+   * "Display Color" toggle (`state.colorMode`, `election-alma-vale.js`'s
+   * `mapColorMode`) picks WHICH of this precinct's own facts to show, but
+   * every level (Constituency/County-District/Precinct) always computes
+   * and shows its OWN answer independently -- by design, a Left-leaning
+   * constituency can contain a Right-leaning County/District which itself
+   * contains an MR-leading precinct, all shown simultaneously and
+   * correctly, with no unit ever overriding another's color:
+   *  - `'first-round'`: this precinct's own 1st-preference plurality leader
+   *    (`Data.round1PluralityLeader(info.result.round1)`) -- the
+   *    Supplementary Vote transfer round never enters into it, even if one
+   *    happened.
+   *  - `'actual'`: this precinct's own ACTUAL result -- `info.result.winner`,
+   *    i.e. `computeSupplementaryVote()`'s own forced-elimination round2
+   *    winner when nobody got a majority. This is always a fully-settled
+   *    fact for a single already-Declared precinct (all its ballots are
+   *    known — see `results.js`'s per-precinct `result` field), never a
+   *    "leading but might still flip" guess the way a partial-count
+   *    aggregate's own round2 would be.
+   * Falls back to a dedicated tie color (`--precinct-tie`, css/map.css)
+   * only in the near-impossible case the chosen figure has no leader at all
+   * (an exact tie).
+   *
+   * Opacity is that same spectrum's own vote SHARE in THIS precinct (`Data.
+   * voteShareFor`), not percent-counted — a single already-Declared
+   * precinct is either 0% or 100% counted, so percent-counted opacity would
+   * just be a flat on/off switch here, telling you nothing about the actual
+   * result (see `colorForUnitSv`'s doc comment for the same reasoning one
+   * level up). In `'first-round'` mode that's round1's own 3-way share; in
+   * `'actual'` mode it's round2's 2-way share once a runoff happened
+   * (`info.result.round2`), else round1's share (an outright majority).
    */
   function colorForPrecinct(info) {
     if (!info) return { fill: neutralColorVar(), fillOpacity: 0.5, className: 'map-shape--nodata' };
     if (info.status === 'Declared' && info.result) {
-      const constituencySeat = seatByConstituency.get(state.activeConstituency);
-      const resultCertain = constituencySeat && constituencySeat.certainty && constituencySeat.certainty.resultCertain;
-      const winnerSpectrum = resultCertain ? constituencySeat.winnerSpectrum : info.result.winner;
+      const firstRound = state.colorMode === 'first-round';
+      const winnerSpectrum = firstRound ? Data.round1PluralityLeader(info.result.round1) : info.result.winner;
+      const round2 = firstRound ? null : info.result.round2;
       if (winnerSpectrum) {
         const color = spectrumColorVar(winnerSpectrum);
-        if (color) return { fill: color, fillOpacity: 1, className: 'map-shape--declared' };
+        if (color) {
+          const share = Data.voteShareFor(winnerSpectrum, info.result.round1, round2);
+          return { fill: color, fillOpacity: shareOpacity(share), className: 'map-shape--declared' };
+        }
       }
       return { fill: 'var(--precinct-tie)', fillOpacity: 1, className: 'map-shape--declared map-shape--tie' };
     }
@@ -207,20 +237,53 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * County-level fill color, driven by the full Supplementary Vote result
-   * (`Data.getAlmaValeSupplementaryVoteForShapeIds`) — the leading/winning
-   * spectrum's color, opacity-scaled by how much of the unit is Declared.
-   * County mode has no "confirmed District winner" concept (see
-   * `colorForFptp` below for District mode's own rule), so this stays
-   * SV-based, matching what Alma Vale SEATS themselves use.
+   * Fill-opacity ("color depth") from a 0..1 vote share -- floored so even
+   * a bare plurality still reads as a filled-in shape, capped at 1 for a
+   * landslide. `null` (nothing valid to compute a share from yet) falls
+   * back to the same floor. Shared by every County/District/Precinct color
+   * function below -- see `Data.voteShareFor`'s doc comment for why these
+   * three use vote SHARE, not percent-counted, for opacity.
+   * @param {number|null} share
+   */
+  function shareOpacity(share) {
+    return Math.max(0.35, Math.min(1, share ?? 0.35));
+  }
+
+  /**
+   * County-level fill color: THIS COUNTY's OWN Supplementary Vote result
+   * (`Data.getAlmaValeSupplementaryVoteForShapeIds`), independently of
+   * every other unit — same "each level shows its own answer, nothing ever
+   * overrides anything else" rule `colorForPrecinct` above documents (its
+   * doc comment has the full reasoning). `state.colorMode` picks which of
+   * this county's own facts to show:
+   *  - `'first-round'`: this county's own 1st-preference plurality leader
+   *    (`Data.round1PluralityLeader(sv.round1)`), ignoring the transfer
+   *    round entirely.
+   *  - `'actual'`: this county's own ACTUAL result, INCLUDING its own
+   *    Supplementary Vote round2 — recomputed fresh off `sv.totals`
+   *    (`Data.computeSupplementaryVote`) rather than trusting `sv.winner`
+   *    (which is the "safe to call currently-leading" figure `results.js`
+   *    exposes for text labels elsewhere, gated by certainty — this color
+   *    mode intentionally wants the raw forced-elimination result
+   *    unconditionally, so it doesn't reuse that field).
+   * Opacity is that spectrum's own vote SHARE (`Data.voteShareFor`) rather
+   * than percent-counted — percent-counted doesn't tell you anything about
+   * how convincingly this county is leading, and at County granularity a
+   * handful of late precincts swinging the opacity around (with no color
+   * change at all) reads as noise, not signal. County mode has no
+   * "confirmed District winner" concept (see `colorForFptp` below for
+   * District mode's own rule), so this stays SV-based, matching what Alma
+   * Vale SEATS themselves use.
    * @param {Object} sv result of getAlmaValeSupplementaryVoteForShapeIds
    */
   function colorForUnitSv(sv) {
-    const pct = sv.statusSummary.percentDeclared;
-    if (sv.winner) {
-      const color = spectrumColorVar(sv.winner);
-      const opacity = Math.max(0.35, Math.min(1, pct / 100));
-      return { fill: color, fillOpacity: opacity };
+    const firstRound = state.colorMode === 'first-round';
+    const winnerSpectrum = firstRound ? Data.round1PluralityLeader(sv.round1) : Data.computeSupplementaryVote(sv.totals).winner;
+    if (winnerSpectrum) {
+      const color = spectrumColorVar(winnerSpectrum);
+      const round2 = firstRound ? null : sv.round2;
+      const share = Data.voteShareFor(winnerSpectrum, sv.round1, round2);
+      return { fill: color, fillOpacity: shareOpacity(share) };
     }
     return { fill: neutralColorVar(), fillOpacity: 0.75 };
   }
@@ -235,15 +298,21 @@ export async function mountElectionMap(container, options = {}) {
    * the fragment's results TABLE still shows the area's own Supplementary
    * Vote round1/round2 breakdown (a different, still-true fact about how
    * its precincts' Alma Vale ballots broke down), just not what decides
-   * this color or the D tick.
+   * this color or the D tick. Opacity is the winning spectrum's own share
+   * of this fragment's FPTP vote (not percent-counted — see
+   * `colorForUnitSv`'s doc comment for why). Not affected by the shared
+   * `state.colorMode` "Display Color" toggle (`colorForUnitSv`/
+   * `colorForPrecinct`'s own doc comments) — FPTP has no transfer round at
+   * all, so "1st-preference leader" and "actual result" are the exact same
+   * figure here.
    * @param {Object} fptp result of getAlmaValeFirstPreferenceWinnerForShapeIds
    */
   function colorForFptp(fptp) {
-    const pct = fptp.statusSummary.percentDeclared;
     if (fptp.winnerSpectrum) {
       const color = spectrumColorVar(fptp.winnerSpectrum);
-      const opacity = Math.max(0.35, Math.min(1, pct / 100));
-      return { fill: color, fillOpacity: opacity };
+      const totalVotes = Object.values(fptp.spectrumVotes || {}).reduce((a, b) => a + b, 0);
+      const share = totalVotes > 0 ? (fptp.spectrumVotes[fptp.winnerSpectrum] || 0) / totalVotes : null;
+      return { fill: color, fillOpacity: shareOpacity(share) };
     }
     return { fill: neutralColorVar(), fillOpacity: 0.75 };
   }
@@ -446,8 +515,19 @@ export async function mountElectionMap(container, options = {}) {
     for (const c of orderedConstituencies) {
       if (c.Constituency === state.activeConstituency) continue; // expanded below instead
       const seat = seatByConstituency.get(c.Constituency);
-      const color = seat && seat.winnerSpectrum
-        ? { fill: spectrumColorVar(seat.winnerSpectrum), fillOpacity: Math.max(0.35, (seat.percentDeclared || 0) / 100) }
+      // Same `state.colorMode` "Display Color" toggle as every level below
+      // (`colorForUnitSv`/`colorForPrecinct`'s doc comments) -- this
+      // constituency's own 1st-preference plurality leader, or its own
+      // ACTUAL result (recomputed off `seat.totals` so it's the raw
+      // forced-elimination figure, not `seat.winnerSpectrum`'s
+      // certainty-gated "safe to call currently-leading" one). Opacity
+      // stays percent-Declared here (unlike County/District/Precinct) --
+      // at this aggregate scale, "how much of the seat has reported" is
+      // still a useful fact on its own, separate from which figure is shown.
+      const winnerSpectrum =
+        seat && (state.colorMode === 'first-round' ? Data.round1PluralityLeader(seat.round1) : Data.computeSupplementaryVote(seat.totals).winner);
+      const color = winnerSpectrum
+        ? { fill: spectrumColorVar(winnerSpectrum), fillOpacity: Math.max(0.35, (seat.percentDeclared || 0) / 100) }
         : { fill: neutralColorVar(), fillOpacity: 0.75 };
       shapes.push({
         id: `c::${c.Constituency}`,
@@ -682,6 +762,14 @@ export async function mountElectionMap(container, options = {}) {
     state.resultView = view;
   }
 
+  /** Switch the shared "Display Color" toggle -- unlike `setResultView`, this changes what's actually painted onto the shapes, so it needs a re-render. */
+  function setColorMode(mode) {
+    if (mode !== 'first-round' && mode !== 'actual') return;
+    if (state.colorMode === mode) return;
+    state.colorMode = mode;
+    renderAll();
+  }
+
   function drillTo(level, id) {
     if (level === 'constituency') {
       if (state.lockToConstituency && id !== state.lockToConstituency) return;
@@ -729,5 +817,5 @@ export async function mountElectionMap(container, options = {}) {
 
   await renderAll();
 
-  return { reset, setMode, setResultView, drillTo, destroy };
+  return { reset, setMode, setResultView, setColorMode, drillTo, destroy };
 }
