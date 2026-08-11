@@ -497,12 +497,26 @@ function renderTopSummary() {
 }
 
 /**
+ * Whether the constituency's real elimination (`eliminatedReal`) is safe to
+ * treat as settled -- the SAME `participantsCertain`/`round1-majority` gate
+ * `unitActualRunoff` (below) and `electionMap.js`'s `constituencyRoundTwoCertain`
+ * use. `hypotheticalRunoffTable`/`titleSuffix` need this too, since they're
+ * deciding the identical question (which, if any, of the 3 columns counts
+ * as "the real one") from the same underlying fact.
+ * @param {Object|null|undefined} certainty constituency seat's `certainty`
+ * @param {string|null} eliminatedReal constituency seat's `eliminated`
+ */
+function runoffParticipantsCertain(certainty, eliminatedReal) {
+  return !!(certainty && (eliminatedReal ? certainty.participantsCertain : certainty.stage === 'round1-majority'));
+}
+
+/**
  * Round-view dispatcher for the "vote result for a polygon" box: the plain
  * 1st-preference breakdown in '1st' view, or the combined 3-column
  * hypothetical-runoff table in '2nd' view (`listPrefView`, shared with the
  * map tooltip and summary list). Returns a "No votes counted yet." message
  * instead of either table if there's nothing to show yet.
- * @param {{round1:Object, totals:Object|null, eliminatedReal:string|null, spoil:number, participation:Object|null}} data
+ * @param {{round1:Object, totals:Object|null, eliminatedReal:string|null, certainty:Object|null, spoil:number, participation:Object|null}} data
  */
 function renderRoundBody(data) {
   const totalValid1 = (data.round1.Left || 0) + (data.round1.MR || 0) + (data.round1.Right || 0);
@@ -523,12 +537,19 @@ function renderRoundBody(data) {
  * computeHypotheticalRunoff` for each of the 3 possible eliminations) --
  * all 3 scenarios visible side by side instead of clicking through them one
  * at a time. Every column's own winner is bolded, hypothetical or not. If
- * `data.eliminatedReal` additionally matches one of the 3 eliminations (an
- * actual runoff genuinely happened/is happening), that column ALSO gets a
- * background tint in its winner's spectrum color instead of an explanatory
- * sentence -- the caller (`titleSuffix`) appends " (Hypothetical)" to the
- * box's title instead, when there's no real elimination to highlight at all
- * (round1 already produced an outright majority).
+ * `data.eliminatedReal` additionally matches one of the 3 eliminations AND
+ * that elimination is itself certain (`runoffParticipantsCertain` above --
+ * an actual runoff pairing is genuinely locked in, not just "currently
+ * leading" off a partial count), that column stops being purely
+ * speculative -- the caller (`titleSuffix`) drops the " (Hypothetical)"
+ * suffix. The background tint in the winner's spectrum color is a further,
+ * stricter gate on top of that: it only appears once the constituency's
+ * overall result is ITSELF certain (`certainty.resultCertain`), because the
+ * tint reads as "this is the actual outcome" -- a runoff pairing can be
+ * locked in (who's in the final two) well before which of those two
+ * actually wins is (see BUILD_NOTES.md's Supplementary Vote
+ * declaration-certainty rework; `unitActualRunoff` below applies the exact
+ * same two-stage gate to the summary list's bold/color).
  */
 function hypotheticalRunoffTable(data) {
   const wrap = document.createElement('div');
@@ -548,8 +569,12 @@ function hypotheticalRunoffTable(data) {
     const eliminated = ids.find((id) => id !== a && id !== b);
     return { a, b, eliminated, result: Data.computeHypotheticalRunoff(data.totals, eliminated) };
   });
-  const realScenario = data.eliminatedReal ? scenarios.find((s) => s.eliminated === data.eliminatedReal) : null;
-  const realWinnerColor = realScenario && realScenario.result.winner ? spectrumColor(realScenario.result.winner) : null;
+  const participantsCertain = runoffParticipantsCertain(data.certainty, data.eliminatedReal);
+  const realScenario = participantsCertain && data.eliminatedReal ? scenarios.find((s) => s.eliminated === data.eliminatedReal) : null;
+  const realWinnerColor =
+    realScenario && data.certainty && data.certainty.resultCertain && realScenario.result.winner
+      ? spectrumColor(realScenario.result.winner)
+      : null;
 
   const table = document.createElement('table');
   table.className = 'map-tooltip__table';
@@ -612,18 +637,22 @@ function hypotheticalRunoffTable(data) {
 }
 
 /**
- * " (Hypothetical)" title suffix for '2nd' view when there's no real
- * elimination to anchor on yet -- round1 already produced an outright
- * majority, so every column in `hypotheticalRunoffTable` is purely
- * speculative (none of them is "what's actually happening"). Empty string
- * in '1st' view, or once a real elimination exists (that column gets
- * highlighted instead -- see `hypotheticalRunoffTable`).
+ * " (Hypothetical)" title suffix for '2nd' view when there's no CERTAIN
+ * real elimination to anchor on yet -- either round1 already produced an
+ * outright majority (no runoff, nothing to anchor on), or a runoff is
+ * needed but which two spectrums make it isn't locked in yet
+ * (`runoffParticipantsCertain`, same gate `hypotheticalRunoffTable` uses to
+ * pick its own "real" column) -- in both cases every column in
+ * `hypotheticalRunoffTable` is purely speculative (none of them is "what's
+ * actually happening" yet). Empty string in '1st' view, or once a real,
+ * certain elimination exists (that column gets highlighted instead -- see
+ * `hypotheticalRunoffTable`).
  */
 function titleSuffix(data) {
   if (listPrefView !== '2nd') return '';
   const totalValid1 = (data.round1.Left || 0) + (data.round1.MR || 0) + (data.round1.Right || 0);
   if (totalValid1 <= 0 && !data.spoil) return '';
-  return data.eliminatedReal ? '' : ' (Hypothetical)';
+  return runoffParticipantsCertain(data.certainty, data.eliminatedReal) && data.eliminatedReal ? '' : ' (Hypothetical)';
 }
 
 /**
@@ -705,6 +734,7 @@ function renderConstituencySummary(constituencyName) {
     round1: seat.round1,
     totals: seat.totals,
     eliminatedReal: seat.eliminated,
+    certainty: seat.certainty,
     spoil: seat.totals.Spoil || 0,
     participation,
   };
@@ -769,6 +799,7 @@ async function renderSecondSummary(constituencyName, secondId) {
     round1: sv.round1,
     totals: sv.totals,
     eliminatedReal: constituencySeat ? constituencySeat.eliminated : sv.eliminated,
+    certainty: constituencySeat ? constituencySeat.certainty : sv.certainty,
     spoil: sv.totals.Spoil || 0,
     participation,
   };
@@ -811,6 +842,7 @@ async function renderPrecinctSummary(shapeId, constituencyName) {
     round1,
     totals: declared ? row.totals : null,
     eliminatedReal: constituencySeat ? constituencySeat.eliminated : declared ? row.result.eliminated : null,
+    certainty: constituencySeat ? constituencySeat.certainty : null,
     spoil: declared ? row.spoil || 0 : 0,
     participation,
   };

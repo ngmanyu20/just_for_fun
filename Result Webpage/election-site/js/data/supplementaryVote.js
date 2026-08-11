@@ -199,6 +199,49 @@ export function computeSupplementaryVoteFromRows(rows, opts = {}) {
 }
 
 /**
+ * The plain 1st-preference plurality leader -- most round1 votes, no
+ * elimination/transfer math at all. A tie at the top returns null rather
+ * than guessing (same policy `computeSupplementaryVote` uses for a genuine
+ * round2 tie).
+ * @param {{Left:number, MR:number, Right:number}} round1
+ * @returns {string|null}
+ */
+export function round1PluralityLeader(round1) {
+  const r = round1 || {};
+  const ranked = SPECTRUMS.map((s) => [s, toNumber(r[s])]).sort((a, b) => b[1] - a[1]);
+  if (ranked[0][1] <= 0) return null;
+  if (ranked[0][1] === ranked[1][1]) return null;
+  return ranked[0][0];
+}
+
+/**
+ * The spectrum to present everywhere as "currently leading" this seat/unit
+ * -- map fill colors, "Leading: X" list labels, the constituency-level "who
+ * wins" figure precincts defer to once certain. `computeSupplementaryVote()`'s
+ * own `winner` always forces a SPECIFIC elimination + round2 hypothetical,
+ * even off a single early batch where it isn't remotely certain that's the
+ * real runoff pairing -- from an early count, round1's actual plurality
+ * leader can legitimately differ from whichever spectrum a forced early
+ * elimination happens to leave ahead in a hypothetical round2, and showing
+ * the latter as "leading" overstates what's actually known. So: show
+ * round1's own plain plurality leader for as long as it isn't even certain
+ * which two spectrums make the runoff (`certainty.participantsCertain`,
+ * unless round1 already produced a certain outright majority, `certainty.
+ * stage === 'round1-majority'`); once the runoff's participants ARE
+ * certain, the forced elimination is no longer a guess, so `svResult.
+ * winner` (the round2 leader between that certain pair) becomes the right
+ * "currently leading" figure to show, even though who ultimately wins that
+ * runoff may still be open.
+ * @param {ReturnType<typeof computeSupplementaryVote>} svResult
+ * @param {ReturnType<typeof resolveSupplementaryVoteCertainty>|null} certainty
+ * @returns {string|null}
+ */
+export function leadingSpectrum(svResult, certainty) {
+  const runoffPairingSettled = !!(certainty && (certainty.stage === 'round1-majority' || certainty.participantsCertain));
+  return runoffPairingSettled ? svResult.winner : round1PluralityLeader(svResult.round1);
+}
+
+/**
  * Mathematical-certainty declaration rule for a Supplementary Vote seat
  * still mid-count. `computeSupplementaryVote()` above always returns
  * *some* `winner` (whichever spectrum currently leads the Declared-only

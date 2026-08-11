@@ -166,26 +166,30 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * A Declared precinct's fill color always represents who wins the whole
-   * SEAT (the constituency's own `winnerSpectrum` -- the same currently-
-   * leading figure the Constituency-level shapes color by, in `renderAll`'s
-   * own constituency loop below, unconditional on `certainty.resultCertain`
-   * so this precinct-level fill updates the same way as more of the
-   * constituency reports in), NOT this precinct's own local vote lean --
-   * a precinct can genuinely favor a different spectrum than the
-   * constituency as a whole (that's real geographic variation, and still
-   * fully visible in its tooltip's own results table), but the color here
-   * is meant to answer "who ultimately represents this area," which is the
-   * SAME answer everywhere inside one constituency. Falls back to a
-   * dedicated tie color (`--precinct-tie`, css/map.css) only in the
-   * near-impossible case the constituency itself has no leader at all
-   * (an exact tie at that scale).
+   * A Declared precinct's fill color shows THIS PRECINCT's own leading
+   * spectrum (`info.result.winner`) while the constituency's overall
+   * result is still uncertain -- with only an early batch counted, we don't
+   * know who wins the seat yet, so every level should honestly show what's
+   * actually leading at that level (same rule the Constituency-level shapes
+   * and the County/District-level shapes already follow for themselves,
+   * via their own `winnerSpectrum`/`sv.winner`/`fptp.winnerSpectrum`).
+   * Once the constituency's own result is certain
+   * (`constituencySeat.certainty.resultCertain` -- the same gate
+   * `tooltipForConstituency`'s "C" tick and `isResultCertain()` use), every
+   * precinct inside it switches to that SAME confirmed `winnerSpectrum` --
+   * at that point "who ultimately represents this area" has one settled
+   * answer, and showing that instead of a stale/spurious local lean is the
+   * more useful fact. Falls back to a dedicated tie color
+   * (`--precinct-tie`, css/map.css) only in the near-impossible case
+   * whichever figure is being shown (local or constituency-wide) has no
+   * leader at all (an exact tie).
    */
   function colorForPrecinct(info) {
     if (!info) return { fill: neutralColorVar(), fillOpacity: 0.5, className: 'map-shape--nodata' };
     if (info.status === 'Declared' && info.result) {
       const constituencySeat = seatByConstituency.get(state.activeConstituency);
-      const winnerSpectrum = constituencySeat ? constituencySeat.winnerSpectrum : info.result.winner;
+      const resultCertain = constituencySeat && constituencySeat.certainty && constituencySeat.certainty.resultCertain;
+      const winnerSpectrum = resultCertain ? constituencySeat.winnerSpectrum : info.result.winner;
       if (winnerSpectrum) {
         const color = spectrumColorVar(winnerSpectrum);
         if (color) return { fill: color, fillOpacity: 1, className: 'map-shape--declared' };

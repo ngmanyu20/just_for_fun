@@ -29,15 +29,23 @@
  *
  * Declaration-certainty gate for the three Supplementary Vote seat types
  * (Alma Vale, Home Districts, General Direct): `buildSupplementaryVoteSeatSummary()`
- * / `buildSubRowSummaries()` below attach a `certainty` field (from
- * `resolveSupplementaryVoteCertainty()` in supplementaryVote.js) alongside
- * the always-present `winnerSpectrum`/`winnerParty` "currently leading"
- * figures. `certainty.resultCertain` is the gate the UI should use before
- * presenting a winner as settled — it goes true once the outstanding
- * undeclared ballots (`computeUndecidedVotes()` below, worst-cased per
- * Section 1's rule) can no longer change the outcome, which is frequently
- * true well before every row backing the seat is literally Declared (e.g.
- * 99.8% declared with a comfortable margin). This does NOT apply to
+ * / `buildSubRowSummaries()` / `getAlmaValeSupplementaryVoteForShapeIds()`
+ * below attach a `certainty` field (from `resolveSupplementaryVoteCertainty()`
+ * in supplementaryVote.js) alongside the always-present `winnerSpectrum`/
+ * `winnerParty` "currently leading" figures. Those figures come from
+ * `leadingSpectrum()` (supplementaryVote.js), NOT `computeSupplementaryVote()`'s
+ * own `winner` directly — `winner` always forces a specific elimination +
+ * round2 hypothetical even off a single early batch, so `leadingSpectrum()`
+ * only trusts that forced figure once it's certain which two spectrums even
+ * make the runoff (`certainty.participantsCertain`, or an outright round1
+ * majority already certain), and shows round1's own plain plurality leader
+ * before that — see its doc comment for why. `certainty.resultCertain` is
+ * the separate, stricter gate the UI should use before presenting a winner
+ * as SETTLED — it goes true once the outstanding undeclared ballots
+ * (`computeUndecidedVotes()` below, worst-cased per Section 1's rule) can no
+ * longer change the outcome, which is frequently true well before every row
+ * backing the seat is literally Declared (e.g. 99.8% declared with a
+ * comfortable margin). This does NOT apply to
  * General Proportional (a different method, HareQuotaLRM) or to the
  * derived Local Representative seat (its own margin-safe rule lives in
  * localRepresentative.js instead, since it's FPTP-over-Districts, not SV).
@@ -55,7 +63,7 @@ import {
   findParty,
 } from './meta.js';
 import { getShapeJoinIndex, orderConstituencies } from './shapes.js';
-import { sumSupplementaryVoteRows, computeSupplementaryVote, resolveWinningParty, resolveSupplementaryVoteCertainty } from './supplementaryVote.js';
+import { sumSupplementaryVoteRows, computeSupplementaryVote, resolveWinningParty, resolveSupplementaryVoteCertainty, leadingSpectrum } from './supplementaryVote.js';
 import { computeProportionalAllocation, computeGuaranteedMinimumAllocation } from './proportional.js';
 import {
   deriveLocalRepresentative,
@@ -255,13 +263,14 @@ export async function getAlmaValeSupplementaryVoteForShapeIds(constituencyName, 
 
   const totals = sumSupplementaryVoteRows(rows, { include: (row) => DECLARED_ONLY(row, now) });
   const svResult = computeSupplementaryVote(totals);
-  const participation = findParticipation(participationRows, 'AlmaVale', constituencyName);
-  const winnerParty = resolveWinningParty(svResult.winner, participation);
   const statusSummary = summarizeStatus(rows, { now });
   const undecided = computeUndecidedVotes(rows, now);
   const certainty = resolveSupplementaryVoteCertainty(svResult, undecided);
+  const winner = leadingSpectrum(svResult, certainty); // overrides svResult's own forced-elimination `winner`, see module doc comment
+  const participation = findParticipation(participationRows, 'AlmaVale', constituencyName);
+  const winnerParty = resolveWinningParty(winner, participation);
 
-  return { ...svResult, totals, winnerParty, statusSummary, certainty };
+  return { ...svResult, winner, totals, winnerParty, statusSummary, certainty };
 }
 
 /**
@@ -825,12 +834,13 @@ function buildSupplementaryVoteSeatSummary({
   const declaredTotals = sumSupplementaryVoteRows(rows, { include: (row) => DECLARED_ONLY(row, now) });
   const svResult = computeSupplementaryVote(declaredTotals);
 
-  const participation = findParticipation(participationRows, seatTypeId, constituency, subConstituency);
-  const winnerParty = resolveWinningParty(svResult.winner, participation);
-
   const statusSummary = summarizeStatus(rows, { now });
   const undecided = computeUndecidedVotes(rows, now);
   const certainty = resolveSupplementaryVoteCertainty(svResult, undecided);
+  const winnerSpectrum = leadingSpectrum(svResult, certainty); // overrides svResult's own forced-elimination `winner`, see module doc comment
+
+  const participation = findParticipation(participationRows, seatTypeId, constituency, subConstituency);
+  const winnerParty = resolveWinningParty(winnerSpectrum, participation);
 
   return {
     seatTypeId,
@@ -847,18 +857,23 @@ function buildSupplementaryVoteSeatSummary({
     round2: svResult.round2,
     eliminated: svResult.eliminated,
     nil: svResult.nil,
-    winnerSpectrum: svResult.winner,
+    winnerSpectrum,
     winnerParty,
     tie: svResult.tie,
     // Mathematical-certainty declaration gate (see resolveSupplementaryVoteCertainty
     // in supplementaryVote.js) -- `winnerSpectrum`/`winnerParty` above are the
-    // CURRENTLY-leading figures (safe for a "Leading: X" display even from
-    // partial data), while `certainty.resultCertain` is what UI should gate
-    // an actual settled-result display on, since it accounts for whether the
-    // remaining undeclared ballots could still change the outcome. Whenever
-    // `certainty.resultCertain` is true, `certainty.winner` always equals
-    // `winnerSpectrum` (proven in supplementaryVote.test.mjs) -- certainty
-    // only ever narrows a majority the raw current tally already shows.
+    // CURRENTLY-leading figures, safe for a "Leading: X" display even from
+    // partial data (via `leadingSpectrum()`, which itself only trusts a
+    // forced round2 hypothetical once the runoff pairing is certain -- see
+    // supplementaryVote.js's doc comment), while `certainty.resultCertain` is
+    // what UI should gate an actual settled-result display on, since it
+    // accounts for whether the remaining undeclared ballots could still
+    // change the outcome. Whenever `certainty.resultCertain` is true,
+    // `certainty.winner` always equals `winnerSpectrum` (both `leadingSpectrum()`
+    // and `certainty` itself defer to the same `svResult.winner` once the
+    // runoff pairing is certain -- proven for `certainty.winner`/`svResult.winner`
+    // in supplementaryVote.test.mjs) -- certainty only ever narrows a
+    // majority the raw current tally already shows.
     certainty,
     totals: declaredTotals,
     // Named Sub_Constituency child rows, only populated when there's more
@@ -895,10 +910,11 @@ function buildSubRowSummaries(rows, participation, now) {
   return [...bySub.entries()].map(([subConstituency, subRows]) => {
     const totals = sumSupplementaryVoteRows(subRows, { include: (row) => DECLARED_ONLY(row, now) });
     const svResult = computeSupplementaryVote(totals);
-    const winnerParty = resolveWinningParty(svResult.winner, participation);
     const statusSummary = summarizeStatus(subRows, { now });
     const undecided = computeUndecidedVotes(subRows, now);
     const certainty = resolveSupplementaryVoteCertainty(svResult, undecided);
+    const winnerSpectrum = leadingSpectrum(svResult, certainty); // overrides svResult's own forced-elimination `winner`, see module doc comment
+    const winnerParty = resolveWinningParty(winnerSpectrum, participation);
     return {
       subConstituency,
       electorate: statusSummary.totalElectorate,
@@ -909,7 +925,7 @@ function buildSubRowSummaries(rows, participation, now) {
       round2: svResult.round2,
       eliminated: svResult.eliminated,
       nil: svResult.nil,
-      winnerSpectrum: svResult.winner,
+      winnerSpectrum,
       winnerParty,
       tie: svResult.tie,
       certainty,
