@@ -18,9 +18,12 @@
  *     Percent = votes / Valid Votes (Spoil's percent uses Total Votes instead).
  *  3. 15% gate: a list needs >= 0.15 * Valid Votes to qualify for any seats.
  *     Below-gate lists get 0 seats and drop out of the quota math entirely.
- *  4. Stage 1 (seats per list): national quota = Valid Votes / totalSeats.
- *     floor(list votes / quota) seats each, then remaining seats go one at a
- *     time to the largest fractional remainders among qualifying lists.
+ *  4. Stage 1 (seats per list): national quota = (sum of qualifying lists'
+ *     votes) / totalSeats -- below-gate lists' votes are excluded from the
+ *     denominator as well as from the seat round, so all totalSeats seats
+ *     always land on qualifying lists. floor(list votes / quota) seats
+ *     each, then remaining seats go one at a time to the largest fractional
+ *     remainders among qualifying lists.
  *  5. Stage 2 (seats within a list): for a list with 2+ member parties,
  *     re-run Hare quota + largest remainder *within* the list using
  *     list-internal quota = list votes / seats the list won. A single-party
@@ -121,7 +124,6 @@ export function computeProportionalAllocation(input) {
   const validVotes = Object.values(partyVotes).reduce((sum, v) => sum + toNumber(v), 0);
   const totalVotes = validVotes + spoil;
   const gateVotes = (thresholdPct / 100) * validVotes;
-  const quota = totalSeats > 0 ? validVotes / totalSeats : 0;
 
   const listVotes = lists.map((list) => {
     const votes = list.parties.reduce((sum, p) => sum + toNumber(partyVotes[p]), 0);
@@ -129,6 +131,14 @@ export function computeProportionalAllocation(input) {
   });
 
   const qualifying = listVotes.filter((l) => l.votes >= gateVotes);
+  // Quota is based on qualifying lists' votes only, not all Valid Votes --
+  // a below-gate list gets zero seats *and* its votes are removed from the
+  // quota's denominator, so the floor+largest-remainder round below always
+  // has exactly `totalSeats` worth of quotas to hand out among the lists
+  // still in the running, and always allocates all `totalSeats` seats no
+  // matter how large a gated-out list's vote share is.
+  const qualifyingVotes = qualifying.reduce((sum, l) => sum + l.votes, 0);
+  const quota = totalSeats > 0 ? qualifyingVotes / totalSeats : 0;
 
   // Stage 1 — seats per list, largest remainder among qualifying lists only.
   const stage1Seats = hareLargestRemainder(

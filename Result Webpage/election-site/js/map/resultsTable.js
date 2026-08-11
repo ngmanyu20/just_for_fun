@@ -170,8 +170,20 @@ export function resultsTableHtml({
  * the map via `mountElectionMap`'s `setResultView`). '2nd' always means the
  * ACTUAL settled tally, same convention as everywhere else on the site this
  * toggle appears: a copy of `round1` when the unit was decided outright (no
- * runoff needed), the real `round2` once certain (eliminated spectrum's
- * cell reads 0), or "Pending" while neither is true yet.
+ * runoff needed), the real `round2` once certain, or "Pending" while
+ * neither is true yet.
+ *
+ * Once a real runoff HAS happened (`round2` truthy, settled, not pending),
+ * the eliminated spectrum's row is dropped entirely rather than shown at
+ * "0" -- it lost in round 1 and never received a single round2 vote, so
+ * listing it alongside the two spectrums actually being decided between
+ * reads as a live contender in the runoff when it structurally can't be one
+ * anymore (user-reported: a settled 2-way runoff table showing a 3rd,
+ * already-eliminated party's row right next to the two real contenders).
+ * Doesn't apply to the outright-majority case (no elimination ever
+ * happened, so every participating spectrum is still shown its real round1
+ * number) or the `pending` case (which spectrum ends up eliminated isn't
+ * locked in yet, so nothing is safe to drop).
  * @param {Object} params same shape as `resultsTableHtml`, plus `view: '1st'|'2nd'`
  * @returns {string}
  */
@@ -188,7 +200,7 @@ function singleRoundTableHtml({ round1, round2, eliminated, nil, spoil, particip
   // '2nd', not pending: round2's numbers (0 for the eliminated spectrum) if
   // a runoff actually ran, else a copy of round1 (decided outright, no
   // runoff needed) -- same "actual settled tally" rule election-alma-vale.js's
-  // `actualFinalSource` uses for the summary list's own 2nd Pref column.
+  // `unitActualRunoff` uses for the summary list's own 2nd Pref column.
   const values =
     view === '1st'
       ? round1
@@ -198,10 +210,17 @@ function singleRoundTableHtml({ round1, round2, eliminated, nil, spoil, particip
       ? Object.fromEntries(participatingSpectrums.map((id) => [id, id === eliminated ? 0 : round2[id] || 0]))
       : round1;
 
+  // Once the runoff is genuinely SETTLED (not pending -- which spectrum ends
+  // up eliminated isn't locked in yet while pending, so nothing is safe to
+  // drop), only the two spectrums actually IN it get a row -- the eliminated
+  // one is excluded outright, not shown at "0".
+  const runoffSettled = view === '2nd' && !pending && !!round2;
+  const visibleSpectrums = runoffSettled ? participatingSpectrums.filter((id) => id !== eliminated) : participatingSpectrums;
+
   const totalForPct = values ? Object.values(values).reduce((a, b) => a + b, 0) : 0;
   const currentVote = (id) => (values ? values[id] || 0 : round1[id] || 0);
-  const leader = [...participatingSpectrums].sort((a, b) => currentVote(b) - currentVote(a))[0] || null;
-  const ordered = [...participatingSpectrums].sort((a, b) => {
+  const leader = [...visibleSpectrums].sort((a, b) => currentVote(b) - currentVote(a))[0] || null;
+  const ordered = [...visibleSpectrums].sort((a, b) => {
     if (a === leader && b !== leader) return -1;
     if (b === leader && a !== leader) return 1;
     return currentVote(b) - currentVote(a);

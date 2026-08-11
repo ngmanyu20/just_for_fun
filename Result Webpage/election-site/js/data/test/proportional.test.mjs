@@ -106,26 +106,15 @@ const gated = computeProportionalAllocation({
 const gatedRight = gated.lists.find((l) => l.id === 'Right');
 assertEqual(gatedRight.qualified, false, 'Below-gate list marked unqualified');
 assertEqual(gatedRight.seats, 0, 'Below-gate list gets 0 seats');
-// NOTE: the spec's formula (Section 4, step 4) defines national quota as
-// Valid Votes / 45 where Valid Votes includes every party's votes — even
-// a list that then fails the gate and is excluded from the quota math.
-// When a gated-out list holds a large enough share, the remaining
-// qualifying lists' floor+remainder seats can sum to fewer than 45 (the
-// gated-out list's votes inflate the quota's denominator without any
-// list being left to claim the corresponding seats). The worked example
-// in the spec never exercises this — all three of its lists qualify — so
-// this is flagged as an open item in the data-layer report rather than
-// silently "fixed" by, e.g., recomputing the quota over qualifying votes
-// only. This test only asserts the two properties the spec *does* state
-// unambiguously: gated lists get zero seats, and allocation never exceeds
-// the seat count.
-const gatedTotalSeats = gated.lists.reduce((s, l) => s + l.seats, 0);
-if (gatedTotalSeats > 45) {
-  failures++;
-  console.error(`FAIL Gated-list total seats must not exceed 45: got ${gatedTotalSeats}`);
-} else {
-  console.log(`ok   Gated-list scenario allocates ${gatedTotalSeats}/45 seats (see NOTE above)`);
-}
+// The national quota is based on qualifying lists' votes only (a gated-out
+// list's votes are excluded from the denominator, not just the seat
+// round), so its own votes evaporating from the count still leaves the
+// remaining qualifying lists' floor+remainder seats summing to exactly 45.
+assertEqual(
+  gated.lists.reduce((s, l) => s + l.seats, 0),
+  45,
+  'Gated-list scenario still allocates all 45 seats among qualifying lists'
+);
 
 // Defensive: empty/all-blank input must not throw or divide by zero.
 const empty = computeProportionalAllocation({

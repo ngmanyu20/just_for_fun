@@ -178,26 +178,32 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * A Declared precinct's fill color is THIS PRECINCT's OWN result, full
-   * stop -- never the constituency's, never any other unit's. The shared
-   * "Display Color" toggle (`state.colorMode`, `election-alma-vale.js`'s
-   * `mapColorMode`) picks WHICH of this precinct's own facts to show, but
-   * every level (Constituency/County-District/Precinct) always computes
-   * and shows its OWN answer independently -- by design, a Left-leaning
-   * constituency can contain a Right-leaning County/District which itself
-   * contains an MR-leading precinct, all shown simultaneously and
-   * correctly, with no unit ever overriding another's color:
+   * A Declared precinct's fill color, per the shared "Display Color" toggle
+   * (`state.colorMode`, `election-alma-vale.js`'s `mapColorMode`):
    *  - `'first-round'`: this precinct's own 1st-preference plurality leader
-   *    (`Data.round1PluralityLeader(info.result.round1)`) -- the
-   *    Supplementary Vote transfer round never enters into it, even if one
-   *    happened.
-   *  - `'actual'`: this precinct's own ACTUAL result -- `info.result.winner`,
-   *    i.e. `computeSupplementaryVote()`'s own forced-elimination round2
-   *    winner when nobody got a majority. This is always a fully-settled
-   *    fact for a single already-Declared precinct (all its ballots are
-   *    known — see `results.js`'s per-precinct `result` field), never a
-   *    "leading but might still flip" guess the way a partial-count
-   *    aggregate's own round2 would be.
+   *    (`Data.round1PluralityLeader(info.result.round1)`) -- entirely its
+   *    own local votes, the Supplementary Vote transfer round never enters
+   *    into it, even if one happened.
+   *  - `'actual'`: this precinct's own local vote split between whichever
+   *    TWO spectrums are actually contesting the runoff -- but WHICH two
+   *    that is comes from the CONSTITUENCY's own elimination
+   *    (`constituencySeat.eliminated`), not this precinct's own locally-
+   *    lowest spectrum. There is only ONE real runoff for the whole seat;
+   *    a spectrum a precinct's own votes happen to rank lowest locally
+   *    isn't necessarily the one that's actually out of contention overall
+   *    (see BUILD_NOTES.md's 2026-08-04 "one true runoff" fix for the
+   *    original reported symptom this guards against -- a 3rd,
+   *    already-eliminated-overall party's row still showing up as if it
+   *    were a live contender in one precinct's own table/color just
+   *    because it happened to edge out the real 2nd-place spectrum
+   *    LOCALLY). WHO WINS between those two fixed spectrums, though, is
+   *    still this precinct's own local fact (`Data.computeHypotheticalRunoff`
+   *    re-runs THIS precinct's own totals under that shared elimination) --
+   *    a precinct can genuinely go the other way from its own constituency,
+   *    that's real geographic variation and still fully honest to show.
+   *    Falls back to this precinct's own round1 leader when the
+   *    constituency has no elimination at all yet (an outright majority --
+   *    nobody has a real 2nd round to be part of).
    * Falls back to a dedicated tie color (`--precinct-tie`, css/map.css)
    * only in the near-impossible case the chosen figure has no leader at all
    * (an exact tie).
@@ -207,16 +213,29 @@ export async function mountElectionMap(container, options = {}) {
    * precinct is either 0% or 100% counted, so percent-counted opacity would
    * just be a flat on/off switch here, telling you nothing about the actual
    * result (see `colorForUnitSv`'s doc comment for the same reasoning one
-   * level up). In `'first-round'` mode that's round1's own 3-way share; in
-   * `'actual'` mode it's round2's 2-way share once a runoff happened
-   * (`info.result.round2`), else round1's share (an outright majority).
+   * level up).
    */
   function colorForPrecinct(info) {
     if (!info) return { fill: neutralColorVar(), fillOpacity: 0.5, className: 'map-shape--nodata' };
     if (info.status === 'Declared' && info.result) {
       const firstRound = state.colorMode === 'first-round';
-      const winnerSpectrum = firstRound ? Data.round1PluralityLeader(info.result.round1) : info.result.winner;
-      const round2 = firstRound ? null : info.result.round2;
+      let winnerSpectrum;
+      let round2;
+      if (firstRound) {
+        winnerSpectrum = Data.round1PluralityLeader(info.result.round1);
+        round2 = null;
+      } else {
+        const constituencySeat = seatByConstituency.get(state.activeConstituency);
+        const constituencyEliminated = constituencySeat ? constituencySeat.eliminated : null;
+        if (constituencyEliminated && info.totals) {
+          const unitRunoff = Data.computeHypotheticalRunoff(info.totals, constituencyEliminated);
+          winnerSpectrum = unitRunoff.winner;
+          round2 = unitRunoff.round2;
+        } else {
+          winnerSpectrum = Data.round1PluralityLeader(info.result.round1);
+          round2 = null;
+        }
+      }
       if (winnerSpectrum) {
         const color = spectrumColorVar(winnerSpectrum);
         if (color) {
@@ -250,22 +269,28 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * County-level fill color: THIS COUNTY's OWN Supplementary Vote result
-   * (`Data.getAlmaValeSupplementaryVoteForShapeIds`), independently of
-   * every other unit — same "each level shows its own answer, nothing ever
-   * overrides anything else" rule `colorForPrecinct` above documents (its
-   * doc comment has the full reasoning). `state.colorMode` picks which of
-   * this county's own facts to show:
+   * County-level fill color, per the shared "Display Color" toggle
+   * (`state.colorMode`):
    *  - `'first-round'`: this county's own 1st-preference plurality leader
    *    (`Data.round1PluralityLeader(sv.round1)`), ignoring the transfer
    *    round entirely.
-   *  - `'actual'`: this county's own ACTUAL result, INCLUDING its own
-   *    Supplementary Vote round2 — recomputed fresh off `sv.totals`
-   *    (`Data.computeSupplementaryVote`) rather than trusting `sv.winner`
-   *    (which is the "safe to call currently-leading" figure `results.js`
-   *    exposes for text labels elsewhere, gated by certainty — this color
-   *    mode intentionally wants the raw forced-elimination result
-   *    unconditionally, so it doesn't reuse that field).
+   *  - `'actual'`: this county's own local vote split between whichever TWO
+   *    spectrums are actually contesting the runoff, per the CONSTITUENCY's
+   *    own elimination (`constituencySeat.eliminated`) -- NOT this county's
+   *    own independently-recomputed elimination. There is only ONE real
+   *    runoff for the whole seat; two counties in the same constituency
+   *    picking two DIFFERENT "eliminated" spectrums from their own local
+   *    votes alone would show two mutually-inconsistent runoffs (see
+   *    BUILD_NOTES.md's 2026-08-04 "one true runoff" fix for the original
+   *    reported symptom this guards against). WHO WINS between those two
+   *    fixed spectrums is still this county's own local fact
+   *    (`Data.computeHypotheticalRunoff` re-runs THIS county's own totals
+   *    under that shared elimination) -- a county can genuinely go the
+   *    other way from its own constituency, that's real geographic
+   *    variation and still fully honest to show. Falls back to this
+   *    county's own round1 leader when the constituency has no elimination
+   *    at all yet (an outright majority -- nobody has a real 2nd round to
+   *    be part of).
    * Opacity is that spectrum's own vote SHARE (`Data.voteShareFor`) rather
    * than percent-counted — percent-counted doesn't tell you anything about
    * how convincingly this county is leading, and at County granularity a
@@ -278,10 +303,25 @@ export async function mountElectionMap(container, options = {}) {
    */
   function colorForUnitSv(sv) {
     const firstRound = state.colorMode === 'first-round';
-    const winnerSpectrum = firstRound ? Data.round1PluralityLeader(sv.round1) : Data.computeSupplementaryVote(sv.totals).winner;
+    let winnerSpectrum;
+    let round2;
+    if (firstRound) {
+      winnerSpectrum = Data.round1PluralityLeader(sv.round1);
+      round2 = null;
+    } else {
+      const constituencySeat = seatByConstituency.get(state.activeConstituency);
+      const constituencyEliminated = constituencySeat ? constituencySeat.eliminated : null;
+      if (constituencyEliminated) {
+        const unitRunoff = Data.computeHypotheticalRunoff(sv.totals, constituencyEliminated);
+        winnerSpectrum = unitRunoff.winner;
+        round2 = unitRunoff.round2;
+      } else {
+        winnerSpectrum = Data.round1PluralityLeader(sv.round1);
+        round2 = null;
+      }
+    }
     if (winnerSpectrum) {
       const color = spectrumColorVar(winnerSpectrum);
-      const round2 = firstRound ? null : sv.round2;
       const share = Data.voteShareFor(winnerSpectrum, sv.round1, round2);
       return { fill: color, fillOpacity: shareOpacity(share) };
     }
@@ -341,7 +381,7 @@ export async function mountElectionMap(container, options = {}) {
     const pct = seat.statusSummary.percentDeclared;
     const certainty = seat.certainty;
     const confirmedWinnerSpectrum = certainty && certainty.resultCertain ? seat.winnerSpectrum : null;
-    const roundTwoCertain = !!(certainty && (seat.round2 ? certainty.participantsCertain : certainty.stage === 'round1-majority'));
+    const roundTwoCertain = unitRoundTwoCertain(seat);
     return `
       <strong>${name}</strong>
       ${resultsTableHtml({
@@ -360,24 +400,27 @@ export async function mountElectionMap(container, options = {}) {
   }
 
   /**
-   * `roundTwoCertain` gate shared by `tooltipForSecond`/`tooltipForPrecinct`:
-   * whether the CONSTITUENCY's own round1/round2 split is safe to treat as
-   * settled (results.js's `resolveSupplementaryVoteCertainty()`) — every
-   * sub-unit's "2nd Pref (actual)" table defers to this SAME constituency-
-   * wide certainty rather than computing its own, so a fully-Declared
-   * county doesn't show a settled round2 while the constituency's real
-   * runoff pairing is still unresolved.
-   * @param {Object|null} constituencySeat seatByConstituency.get(...)
+   * `roundTwoCertain` gate: whether the ELIMINATION a caller is about to
+   * present as settled is safe to treat that way
+   * (results.js's `resolveSupplementaryVoteCertainty()`). For
+   * `tooltipForConstituency`, that's the constituency seat's own
+   * round1/round2 split. For `tooltipForSecond`/`tooltipForPrecinct`, the
+   * relevant elimination is the CONSTITUENCY's (see those functions' own
+   * doc comments for why every sub-unit defers to the SAME single
+   * elimination rather than recomputing its own) — so callers pass the
+   * CONSTITUENCY seat here too, not the sub-unit's own `sv`/`info.result`.
+   * @param {Object|null} unit a seat (`seatByConstituency.get(...)`) --
+   *   whichever seat's elimination is the one actually being shown.
    */
-  function constituencyRoundTwoCertain(constituencySeat) {
-    const certainty = constituencySeat && constituencySeat.certainty;
-    return !!(certainty && (constituencySeat.round2 ? certainty.participantsCertain : certainty.stage === 'round1-majority'));
+  function unitRoundTwoCertain(unit) {
+    const certainty = unit && unit.certainty;
+    return !!(certainty && (unit.round2 ? certainty.participantsCertain : certainty.stage === 'round1-majority'));
   }
 
   /**
    * County/District-level tooltip: results table + status lines. The
    * results TABLE'S 1st-round figures come from the unit's own full
-   * Supplementary Vote computation (`sv` — a real fact about how its
+   * Supplementary Vote computation (`sv` — a real fact about how its own
    * precincts' Alma Vale ballots broke down), but its 2nd-round figures are
    * this SAME unit's own totals re-run under the CONSTITUENCY's real
    * elimination (`Data.computeHypotheticalRunoff`), not `sv.round2`/
@@ -385,15 +428,22 @@ export async function mountElectionMap(container, options = {}) {
    * — there is only ONE real runoff for the whole seat, and two counties in
    * the same constituency showing different eliminated spectrums would be
    * showing two different, mutually-inconsistent "real" runoffs (see
-   * BUILD_NOTES.md's 2026-08-04 fix for the reported symptom). The "D"
+   * BUILD_NOTES.md's 2026-08-04 fix for the originally reported symptom,
+   * and `colorForUnitSv`'s own doc comment — the map's fill color follows
+   * this exact same rule, so the color of a shape and the numbers in its
+   * own tooltip never disagree). WHO WINS between those two fixed
+   * spectrums is still this county's own local fact, though — a county can
+   * legitimately go the other way from its constituency's overall result,
+   * that's real geographic variation and still fully visible here. The "D"
    * column ("this District is confirmed won") is District-mode-only and
    * uses a DIFFERENT computation (`fptp` — first-preference-only plurality
    * by party, FEATURE_SPEC.md Section 4's Local Representative rule) — a
    * County isn't an electoral sub-unit with its own "confirmed winner"
    * concept the way a District is, so County mode never gets a D column at
-   * all (only C, the overall Constituency seat's confirmed winner, which
-   * still applies everywhere and is always SV-based since that's how Alma
-   * Vale seats themselves are decided).
+   * all. The "C" column (the overall Constituency seat's own confirmed
+   * winner) STAYS constituency-level on purpose — it's answering a different question
+   * ("who ultimately represents this whole area") than this table's own
+   * rows ("how did this unit's own votes break down").
    */
   function tooltipForSecond(shape) {
     const label = state.mode === 'county' ? 'County' : 'District';
@@ -411,7 +461,7 @@ export async function mountElectionMap(container, options = {}) {
     // mode-only, per this function's doc comment — untouched by the SV
     // certainty rule below, which only governs the SV results table itself.
     const confirmedUnitWinnerSpectrum = state.mode === 'district' ? (unitPct >= 100 ? fptp.winnerSpectrum : null) : undefined;
-    const roundTwoCertain = constituencyRoundTwoCertain(constituencySeat);
+    const roundTwoCertain = unitRoundTwoCertain(constituencySeat);
     const constituencyEliminated = constituencySeat ? constituencySeat.eliminated : null;
     const unitRunoff = constituencyEliminated ? Data.computeHypotheticalRunoff(sv.totals, constituencyEliminated) : null;
     return `
@@ -455,11 +505,14 @@ export async function mountElectionMap(container, options = {}) {
    * NOT this precinct's own isolated round2 (`info.result.round2`, computed
    * from just this one row, which eliminates whichever spectrum is LOWEST
    * *within this one precinct* — a fact that can legitimately disagree with
-   * the constituency-wide elimination). `roundTwoCertain` is likewise the
-   * CONSTITUENCY's own certainty, not a per-precinct match check — a
-   * Declared precinct's own votes are always a known, certain fact once
-   * expressed under a given elimination, so the only remaining question is
-   * whether that elimination (the constituency's) is itself certain yet.
+   * the constituency-wide elimination, and the SAME figures the map's own
+   * fill color already uses, `colorForPrecinct`, so the number in this
+   * table and the color of the shape it describes never disagree).
+   * `roundTwoCertain` is likewise the CONSTITUENCY's own certainty, not a
+   * per-precinct match check — a Declared precinct's own votes are always a
+   * known, certain fact once expressed under a given elimination, so the
+   * only remaining question is whether that elimination (the
+   * constituency's) is itself certain yet.
    */
   function tooltipForPrecinct(shape) {
     const row = shape.meta.row;
@@ -478,7 +531,7 @@ export async function mountElectionMap(container, options = {}) {
           ? activeUnitFptp.winnerSpectrum
           : null
         : undefined;
-    const roundTwoCertain = constituencyRoundTwoCertain(constituencySeat);
+    const roundTwoCertain = unitRoundTwoCertain(constituencySeat);
     const constituencyEliminated = constituencySeat ? constituencySeat.eliminated : null;
     const unitRunoff = declared && info.totals && constituencyEliminated ? Data.computeHypotheticalRunoff(info.totals, constituencyEliminated) : null;
     return `

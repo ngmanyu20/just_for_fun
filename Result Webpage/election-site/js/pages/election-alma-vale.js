@@ -555,7 +555,7 @@ function renderTopSummary() {
 /**
  * Whether the constituency's real elimination (`eliminatedReal`) is safe to
  * treat as settled -- the SAME `participantsCertain`/`round1-majority` gate
- * `unitActualRunoff` (below) and `electionMap.js`'s `constituencyRoundTwoCertain`
+ * `unitActualRunoff` (below) and `electionMap.js`'s `unitRoundTwoCertain`
  * use. `hypotheticalRunoffTable`/`titleSuffix` need this too, since they're
  * deciding the identical question (which, if any, of the 3 columns counts
  * as "the real one") from the same underlying fact.
@@ -929,9 +929,16 @@ function seatDetailFor(constituencyName) {
  * the whole seat -- every county/district/precinct inside it should show
  * ITS OWN vote split under THAT SAME elimination, not a locally-recomputed
  * one, or two areas in the same constituency can appear to be running
- * completely different runoffs. Same rule `hypotheticalRunoffTable` uses
- * for the "real" column it highlights, and `electionMap.js`'s own tooltips
- * mirror this too (`tooltipForSecond`/`tooltipForPrecinct`).
+ * completely different runoffs (BUILD_NOTES.md's 2026-08-04 "one true
+ * runoff" fix). WHO WINS between those two fixed spectrums is still this
+ * unit's own local fact, though (`Data.computeHypotheticalRunoff` re-runs
+ * THIS unit's own `totals` under the shared elimination) -- a county can
+ * genuinely go the other way from its constituency's overall result,
+ * that's real geographic variation and still fully honest to show. Same
+ * rule `hypotheticalRunoffTable` uses for the "real" column it highlights,
+ * and `electionMap.js`'s own tooltips/map colors mirror this too
+ * (`tooltipForSecond`/`tooltipForPrecinct`, `colorForUnitSv`/
+ * `colorForPrecinct`).
  * @param {Object|null} constituencySeat seatByConstituency.get(constituencyName)
  * @param {Record<string,number>} round1 this unit's own round1 tally
  * @param {Record<string,number>|null} totals this unit's own 9-column totals (null if nothing to compute from yet)

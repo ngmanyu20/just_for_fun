@@ -90,6 +90,67 @@ check(aggregateStatusLabel(99.99) === 'In progress', 'aggregateStatusLabel(99.99
 }
 
 // ---------------------------------------------------------------------
+// resultsTableHtml with view: '2nd' (dispatches to singleRoundTableHtml) --
+// a settled runoff must DROP the eliminated spectrum's row entirely, not
+// show it at "0" (the legacy dual-column shape above still shows the
+// eliminated row at 0, on purpose -- see its own test above -- since it
+// displays 1st AND 2nd side by side; the single-round map/list views only
+// ever show ONE round at a time, so an eliminated party's row has nothing
+// left to justify its presence there once the runoff is real and settled).
+// ---------------------------------------------------------------------
+{
+  // Same come-from-behind scenario as the legacy-shape test above, but
+  // requesting the single-round '2nd' view a real map tooltip/list uses.
+  const html = resultsTableHtml({
+    round1: { Left: 100, MR: 300, Right: 400 },
+    round2: { MR: 450, Right: 350 },
+    eliminated: 'Left',
+    nil: 30,
+    spoil: 15,
+    participation: PARTICIPATION_ALL,
+    confirmedWinnerSpectrum: 'MR',
+    view: '2nd',
+  });
+  check(!html.includes('>NRD<'), 'settled 2nd Round view: eliminated party (NRD/Left) row is dropped entirely, not shown at 0', { html });
+  check(html.includes('>GRF<') && html.includes('>GCCA<'), 'settled 2nd Round view: both runoff survivors still shown');
+  const grfIdx = html.indexOf('GRF');
+  const gccaIdx = html.indexOf('GCCA');
+  check(grfIdx !== -1 && gccaIdx !== -1 && grfIdx < gccaIdx, 'settled 2nd Round view: come-from-behind winner (GRF/MR) still sorts first');
+}
+{
+  // Outright round1 majority (no elimination ever happened) -- every
+  // participating spectrum keeps its row, none are "eliminated".
+  const html = resultsTableHtml({
+    round1: { Left: 600, MR: 300, Right: 100 },
+    round2: null,
+    eliminated: null,
+    nil: null,
+    spoil: 20,
+    participation: PARTICIPATION_ALL,
+    confirmedWinnerSpectrum: 'Left',
+    view: '2nd',
+  });
+  check(html.includes('>NRD<') && html.includes('>GRF<') && html.includes('>GCCA<'), 'outright-majority 2nd Round view: no elimination happened, all 3 parties still shown', { html });
+}
+{
+  // Pending (round2 exists off the current tally, but the runoff pairing
+  // isn't certain yet) -- nothing is safe to drop, so all 3 stay, each
+  // showing "Pending".
+  const html = resultsTableHtml({
+    round1: { Left: 100, MR: 300, Right: 400 },
+    round2: { MR: 450, Right: 350 },
+    eliminated: 'Left',
+    nil: 30,
+    spoil: 15,
+    participation: PARTICIPATION_ALL,
+    confirmedWinnerSpectrum: null,
+    roundTwoCertain: false,
+    view: '2nd',
+  });
+  check(html.includes('>NRD<') && html.includes('>GRF<') && html.includes('>GCCA<'), 'pending 2nd Round view: nothing dropped while the runoff pairing is still uncertain', { html });
+}
+
+// ---------------------------------------------------------------------
 // resultsTableHtml -- participation filtering (a non-participating spectrum never gets a row)
 // ---------------------------------------------------------------------
 {
