@@ -520,14 +520,27 @@ export async function mountElectionMap(container, options = {}) {
       // constituency's own 1st-preference plurality leader, or its own
       // ACTUAL result (recomputed off `seat.totals` so it's the raw
       // forced-elimination figure, not `seat.winnerSpectrum`'s
-      // certainty-gated "safe to call currently-leading" one). Opacity
-      // stays percent-Declared here (unlike County/District/Precinct) --
-      // at this aggregate scale, "how much of the seat has reported" is
-      // still a useful fact on its own, separate from which figure is shown.
-      const winnerSpectrum =
-        seat && (state.colorMode === 'first-round' ? Data.round1PluralityLeader(seat.round1) : Data.computeSupplementaryVote(seat.totals).winner);
+      // certainty-gated "safe to call currently-leading" one; the eliminated
+      // spectrum is never in contention for `winner` either way -- see
+      // `computeSupplementaryVote`'s own doc comment). In `'first-round'`
+      // mode opacity stays percent-Declared -- "how much of the seat has
+      // reported" is a useful fact on its own at this aggregate scale, and
+      // there's no 2-way runoff yet to measure a margin against. In
+      // `'actual'` mode, opacity switches to the SAME vote-SHARE-vs-
+      // opponent depth County/District/Precinct already use (`Data.
+      // voteShareFor` — round2's 2-way share once a real runoff happened,
+      // else round1's majority share) — "Display (2nd Round)" is
+      // specifically about showing 2nd-round voting strength, so it should
+      // read the same way at every level.
+      const firstRound = state.colorMode === 'first-round';
+      const winnerSpectrum = seat && (firstRound ? Data.round1PluralityLeader(seat.round1) : Data.computeSupplementaryVote(seat.totals).winner);
       const color = winnerSpectrum
-        ? { fill: spectrumColorVar(winnerSpectrum), fillOpacity: Math.max(0.35, (seat.percentDeclared || 0) / 100) }
+        ? {
+            fill: spectrumColorVar(winnerSpectrum),
+            fillOpacity: firstRound
+              ? Math.max(0.35, (seat.percentDeclared || 0) / 100)
+              : shareOpacity(Data.voteShareFor(winnerSpectrum, seat.round1, seat.round2)),
+          }
         : { fill: neutralColorVar(), fillOpacity: 0.75 };
       shapes.push({
         id: `c::${c.Constituency}`,

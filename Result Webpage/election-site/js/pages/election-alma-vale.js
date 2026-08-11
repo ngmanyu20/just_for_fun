@@ -52,54 +52,62 @@ const els = {};
 const drill = { level: 'top', constituency: null, secondId: null, precinctId: null };
 const seatDetailCache = new Map(); // constituency -> Promise<seat detail> (mirrors electionMap.js's own cache)
 
-// '1st' | '2nd' -- shared toggle (controls area, below the County/District
-// toggle) driving THREE things at once: the map's own hover tooltip
-// (electionMap.js's `setResultView`), the unit-summary box's round table,
-// and the summary list's Left/MR/Right columns. '2nd' always means the
-// ACTUAL settled tally (a copy of round1 when no runoff was needed, the
-// real round2 once certain, "Undecided" while neither is true yet for the
-// list, or a 3-column what-if-eliminated table for the summary box, since
-// there's no single "the" 2nd round until one actually happens).
+// '1st' | '2nd' -- ONE shared toggle (controls area, below the
+// County/District toggle) driving FOUR things at once, so "1st Pref" and
+// "2nd Pref (actual)" always mean the same choice everywhere on the page --
+// there used to be a second, independent "Display (1st Round)"/"Display
+// (2nd Round)" toggle for the map's own fill colors, merged into this one
+// button pair since the two were never meant to disagree:
+//  - the map's own hover tooltip (electionMap.js's `setResultView`),
+//  - the map's own shape fill COLORS (`setColorMode` -- '1st' ->
+//    'first-round', '2nd' -> 'actual'; every level still computes and shows
+//    its OWN independent result either way, never deferring to a parent/
+//    child unit -- see electionMap.js's `colorForUnitSv`/`colorForPrecinct`
+//    doc comments),
+//  - the unit-summary box's round table,
+//  - and the summary list's Left/MR/Right columns.
+// '2nd' always means the ACTUAL settled tally/result (a copy of round1 when
+// no runoff was needed, the real round2 once certain, "Undecided" while
+// neither is true yet for the list, a 3-column what-if-eliminated table for
+// the summary box, or -- for the map's colors -- each shape's own
+// forced-elimination round2 winner, unconditional on certainty since a
+// single shape's own SV computation is never itself a "might still flip"
+// guess the way a list label's certainty-gated figure would be).
+//
+// DEFAULTS to '1st' while fewer than 20 of the 40 Alma Vale seats have a
+// DECLARED WINNER -- `certainty.resultCertain`, the SAME "has this seat
+// declared" gate `isResultCertain()` uses everywhere else on this page (a
+// seat can be certain well before its own `percentDeclared` hits 100 --
+// that's the whole point of the margin-safe certainty rule; 100%-counted is
+// a much stricter, different fact and would undercount) -- computed fresh
+// on every `loadAndRenderPage()` (`applyDefaultPrefView()` below). With that
+// few seats decided, most "actual"/2nd-round figures would themselves be
+// forced-elimination guesses off a handful of precincts, so the plain
+// 1st-preference figure is the more honest default early on; once at least
+// half the seats have a declared winner, '2nd' becomes the default instead.
+// Only a DEFAULT -- never overrides an explicit click on the toggle
+// (`listPrefViewUserSet` below), including across "Reload results".
 let listPrefView = '1st';
+let listPrefViewUserSet = false;
 
-// 'first-round' | 'actual' -- separate "Display Color" toggle (controls
-// area, below the 1st/2nd Pref toggle) driving ONLY the map's own shape
-// fill colors (electionMap.js's `setColorMode`) -- unlike `listPrefView`
-// above, this never touches any NUMBERS (tooltip tables, the summary list),
-// only which of each shape's own facts picks its color. Every level always
-// shows its OWN independent answer at whichever level it's drawn -- a
-// Left-leaning constituency can perfectly well contain a Right-leaning
-// County/District containing an MR-leading precinct, all at once, with no
-// level ever overriding another's color to "agree" with it (see
-// electionMap.js's `colorForUnitSv`/`colorForPrecinct` doc comments):
-//  - 'first-round': each shape's own 1st-preference plurality leader,
-//    ignoring the Supplementary Vote transfer round entirely.
-//  - 'actual': each shape's own ACTUAL result, factoring in its own
-//    Supplementary Vote round2 once nobody has a 1st-preference majority.
-// DEFAULTS to 'first-round' while fewer than 20 of the 40 Alma Vale seats
-// are Declared (`applyDefaultColorMode()` below, computed fresh on every
-// `loadAndRenderPage()`) -- with that few seats in, most "actual" round2
-// figures would themselves be forced-elimination guesses off a handful of
-// precincts, so the plain 1st-preference leader is the more honest default
-// early on; once at least half the seats are in, 'actual' becomes the
-// default instead. Only a DEFAULT -- never overrides an explicit click on
-// the toggle (`colorModeUserSet` below), including across "Reload results".
-let mapColorMode = 'actual';
-let colorModeUserSet = false;
+/** This toggle's own 'first-round'/'actual' spelling for `mapHandle.setColorMode`/`mountElectionMapDefensively`'s `colorMode` option. */
+function mapColorModeFor(view) {
+  return view === '2nd' ? 'actual' : 'first-round';
+}
 
 /**
- * Recomputes `mapColorMode`'s default from the current seat data, per its
+ * Recomputes `listPrefView`'s default from the current seat data, per its
  * own doc comment -- called once per `loadAndRenderPage()`, before the
- * color-mode toggle/map are built, so both start in sync with whichever
- * mode ends up default. No-op once the user has clicked the toggle
- * themselves (`colorModeUserSet`) -- a reload shouldn't silently revert an
- * explicit choice.
+ * toggle/map are built, so both start in sync with whichever view ends up
+ * default. No-op once the user has clicked the toggle themselves
+ * (`listPrefViewUserSet`) -- a reload shouldn't silently revert an explicit
+ * choice.
  * @param {Array<Object>} seats `Data.getAlmaValeSeats()` result (40 seats)
  */
-function applyDefaultColorMode(seats) {
-  if (colorModeUserSet) return;
-  const declaredCount = seats.filter((s) => s.percentDeclared >= 100).length;
-  mapColorMode = declaredCount < 20 ? 'first-round' : 'actual';
+function applyDefaultPrefView(seats) {
+  if (listPrefViewUserSet) return;
+  const declaredCount = seats.filter((s) => isResultCertain(s)).length;
+  listPrefView = declaredCount < 20 ? '1st' : '2nd';
 }
 
 // Monotonic guard against out-of-order async renders (same pattern as
@@ -151,7 +159,7 @@ async function loadAndRenderPage(opts = {}) {
   shapeIndex = shapeIdx;
   participationRows = partRows;
   seatByConstituency = new Map(seats.map((s) => [s.constituency, s]));
-  applyDefaultColorMode(seats);
+  applyDefaultPrefView(seats);
   document.title = 'Alma Vale — Results';
   lastLoadedAt = new Date();
 
@@ -192,7 +200,7 @@ async function loadAndRenderPage(opts = {}) {
 
   mapHandle = await mountElectionMapDefensively(els.mapMount, {
     resultView: listPrefView,
-    colorMode: mapColorMode,
+    colorMode: mapColorModeFor(listPrefView),
     onUnitClick: (unit) => {
       if (!unit || !unit.level) return;
       selectUnit(unit, { fromMap: true }).catch((err) => console.error('[election-alma-vale] onUnitClick:', err));
@@ -289,10 +297,6 @@ function buildGeoLayout() {
   controls.appendChild(prefToggle);
   els.prefToggle = prefToggle;
 
-  const colorModeToggle = buildColorModeToggle();
-  controls.appendChild(colorModeToggle);
-  els.colorModeToggle = colorModeToggle;
-
   panel.appendChild(controls);
 
   const unitSummary = el('div', { className: 'egeo-unit-summary' });
@@ -309,8 +313,12 @@ function buildGeoLayout() {
 
 /**
  * "1st Pref" / "2nd Pref (actual)" toggle -- see `listPrefView`'s doc
- * comment for the three things it drives. Lives in the controls card,
- * right below the County/District toggle.
+ * comment for the four things it drives at once (including the map's own
+ * fill colors, via `mapColorModeFor()` -- there used to be a second,
+ * separate "Display (1st Round)"/"Display (2nd Round)" toggle for just
+ * that, merged into this single button pair since the two were never meant
+ * to disagree). Lives in the controls card, right below the County/District
+ * toggle.
  */
 function buildPrefToggle() {
   const wrap = el('div', { className: 'egeo-pref-toggle' });
@@ -322,10 +330,12 @@ function buildPrefToggle() {
     btn.dataset.view = view;
     btn.setAttribute('aria-pressed', String(view === listPrefView));
     btn.addEventListener('click', () => {
+      listPrefViewUserSet = true;
       if (listPrefView === view) return;
       listPrefView = view;
       syncPrefToggleButtons();
       if (mapHandle && mapHandle.setResultView) mapHandle.setResultView(view);
+      if (mapHandle && mapHandle.setColorMode) mapHandle.setColorMode(mapColorModeFor(view));
       renderPanel().catch((err) => console.error('[election-alma-vale] pref view change:', err));
     });
     wrap.appendChild(btn);
@@ -337,42 +347,6 @@ function syncPrefToggleButtons() {
   if (!els.prefToggle) return;
   for (const btn of els.prefToggle.children) {
     btn.setAttribute('aria-pressed', String(btn.dataset.view === listPrefView));
-  }
-}
-
-/**
- * "Display (first round leader)" / "Display (actual winner)" toggle -- see
- * `mapColorMode`'s doc comment for what each mode means.
- * Lives in the controls card, right below the 1st/2nd Pref toggle. Only
- * touches the map (`mapHandle.setColorMode`) -- doesn't re-render the panel,
- * since it changes no NUMBERS anywhere, only which fact picks each shape's
- * fill color.
- */
-function buildColorModeToggle() {
-  const wrap = el('div', { className: 'egeo-pref-toggle' });
-  for (const mode of ['first-round', 'actual']) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'egeo-pref-toggle__btn';
-    btn.textContent = mode === 'first-round' ? 'Display (first round leader)' : 'Display (actual winner)';
-    btn.dataset.mode = mode;
-    btn.setAttribute('aria-pressed', String(mode === mapColorMode));
-    btn.addEventListener('click', () => {
-      colorModeUserSet = true;
-      if (mapColorMode === mode) return;
-      mapColorMode = mode;
-      syncColorModeToggleButtons();
-      if (mapHandle && mapHandle.setColorMode) mapHandle.setColorMode(mode);
-    });
-    wrap.appendChild(btn);
-  }
-  return wrap;
-}
-
-function syncColorModeToggleButtons() {
-  if (!els.colorModeToggle) return;
-  for (const btn of els.colorModeToggle.children) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.mode === mapColorMode));
   }
 }
 
