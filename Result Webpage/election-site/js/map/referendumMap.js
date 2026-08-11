@@ -353,7 +353,7 @@ export async function mountReferendumMap(container, options = {}) {
       return;
     }
     const extent = computeExtent(focusShapes);
-    const transform = zoomTransformToFit(d3, extent, scales.xScale, scales.yScale, chrome.width, chrome.height);
+    const transform = zoomTransformToFit(d3, extent, scales.xScale, scales.yScale, chrome.width, chrome.height, 30, chrome.maxZoomScale);
     if (transform) chrome.zoomTo(transform);
     else chrome.resetZoom();
   }

@@ -211,9 +211,22 @@ export function buildChrome(container, d3, opts = {}) {
   const zoomLayer = svg.append('g').attr('class', 'map-zoom-layer');
   const shapeLayer = zoomLayer.append('g').attr('class', 'map-shape-layer');
 
+  // Max zoom scale is a FRACTION of the viewBox's fixed 960x640 extent, not
+  // an absolute pixel size -- at the same scale, a phone-width map (css/
+  // mobile.css's full-bleed treatment puts this around 350-380 CSS px) and a
+  // desktop-width one (~900px+) both show the identical fraction of the
+  // country, just rendered into far fewer physical pixels on the phone. A
+  // tiny precinct that's comfortably visible at 20x on desktop can still be
+  // sliver-thin on mobile at that same scale. Compact viewports get a
+  // proportionally higher ceiling so pinch/tap-to-zoom can actually reach a
+  // similarly legible size, rather than bottoming out below it.
+  const isCompactViewport =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+  const maxZoomScale = isCompactViewport ? 50 : 20;
+
   const zoom = d3
     .zoom()
-    .scaleExtent([1, 20])
+    .scaleExtent([1, maxZoomScale])
     .on('zoom', (event) => {
       zoomLayer.attr('transform', event.transform);
     });
@@ -289,6 +302,7 @@ export function buildChrome(container, d3, opts = {}) {
     statusLine,
     width,
     height,
+    maxZoomScale,
     resetZoom,
     zoomTo,
     showTooltip,
