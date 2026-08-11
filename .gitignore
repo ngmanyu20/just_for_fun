@@ -17,10 +17,12 @@ __pycache__/
 .venv/
 venv/
 env/
+Info_CSV/
 
 # Claude Code local settings
 .claude/
-
+Electoral_Modelling/data/
+Electoral_Modelling/generated_result/
 # Node / npm (city-roads)
 node_modules/
 shapefile/street_data export/city-roads/

@@ -67,6 +67,11 @@ let listPrefView = '1st';
 // previous call's awaited fetch is still pending.
 let renderSeq = 0;
 
+// Timestamp of the load that's currently on screen -- read by reloadControl()
+// when it's (re)built as part of loadAndRenderPage()'s own frag, so the
+// button always reflects the load it belongs to.
+let lastLoadedAt = null;
+
 const content = document.getElementById('content');
 
 async function main() {
@@ -75,6 +80,25 @@ async function main() {
     { label: 'General Election', href: 'index.html' },
     { label: 'Alma Vale' },
   ]);
+  await loadAndRenderPage();
+}
+
+/**
+ * Everything else main() used to do, factored out so the "Reload results"
+ * button (reloadControl()) can re-run it on its own -- renderNav/
+ * renderBreadcrumbs above append into #nav/#breadcrumbs rather than
+ * replacing their contents (nav.js), so they must only ever run once; this
+ * function only ever replaces #content's children (or a mount div rebuilt
+ * fresh underneath it), which is safe to repeat any number of times.
+ * @param {{forceRefresh?: boolean}} [opts] forceRefresh clears every cache
+ *   (data.js's refreshAllData() + this page's own seatDetailCache) so the
+ *   fetch actually hits the network again instead of replaying old data.
+ */
+async function loadAndRenderPage(opts = {}) {
+  if (opts.forceRefresh) {
+    seatDetailCache.clear();
+    Data.refreshAllData();
+  }
 
   const [seats, meta, shapeIdx, partRows] = await Promise.all([
     Data.getAlmaValeSeats(),
@@ -88,14 +112,18 @@ async function main() {
   participationRows = partRows;
   seatByConstituency = new Map(seats.map((s) => [s.constituency, s]));
   document.title = 'Alma Vale — Results';
+  lastLoadedAt = new Date();
 
   const frag = document.createDocumentFragment();
+  const headerReload = reloadControl();
+  els.headerReload = headerReload;
   frag.appendChild(
     el('div', { className: 'page-header' }, [
       el('div', {}, [
         el('h1', { text: 'Alma Vale' }),
         el('div', { className: 'page-header__meta', text: '40 seats' }),
       ]),
+      headerReload,
     ])
   );
 
@@ -128,8 +156,58 @@ async function main() {
       selectUnit(unit, { fromMap: true }).catch((err) => console.error('[election-alma-vale] onUnitClick:', err));
     },
   });
+  relocateReloadControlIntoMap();
 
   await selectUnit({ level: 'top' });
+}
+
+/**
+ * Moves the (already-mounted) "Reload results" control from the page
+ * header into the map's own toolbar, once `mountElectionMapDefensively()`
+ * has confirmed a `.map-toolbar` actually exists -- relocates the same DOM
+ * node (not a copy), so its click listener/state stay intact. Left in the
+ * header (where `loadAndRenderPage()` puts it) whenever the map itself
+ * never mounts (js/map/electionMap.js unavailable), so the button never
+ * disappears.
+ */
+function relocateReloadControlIntoMap() {
+  const toolbar = els.mapMount && els.mapMount.querySelector('.map-toolbar');
+  if (toolbar && els.headerReload) toolbar.appendChild(els.headerReload);
+}
+
+/**
+ * "Reload results" button + last-updated/error status text, rebuilt fresh
+ * on every loadAndRenderPage() call (it's part of the page-header inside
+ * `frag`, so a stale button never lingers). Clicking it clears every cache
+ * (data.js's refreshAllData() + this page's own seatDetailCache, see
+ * loadAndRenderPage) and re-runs the full load+render sequence in place --
+ * no page navigation/reload needed to pick up updated data/* files.
+ */
+function reloadControl() {
+  const wrap = el('div', { className: 'reload-control' });
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'reload-btn';
+  btn.textContent = 'Reload results';
+  const status = el('span', {
+    className: 'reload-status page-header__meta',
+    text: lastLoadedAt ? `Updated ${lastLoadedAt.toLocaleTimeString()}` : '',
+  });
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    btn.textContent = 'Reloading…';
+    status.textContent = '';
+    status.classList.remove('reload-status--error');
+    loadAndRenderPage({ forceRefresh: true }).catch((err) => {
+      console.error('[election-alma-vale] reload failed:', err);
+      btn.disabled = false;
+      btn.textContent = 'Reload results';
+      status.classList.add('reload-status--error');
+      status.textContent = `Reload failed: ${err && err.message ? err.message : err}`;
+    });
+  });
+  wrap.append(btn, status);
+  return wrap;
 }
 
 // ---------------------------------------------------------------------
@@ -346,6 +424,7 @@ async function renderPanel() {
   if (drill.level === 'precinct') {
     await renderPrecinctSummary(drill.precinctId, drill.constituency);
     if (seq !== renderSeq) return;
+    finalizeUnitSummary();
     await renderPrecinctList(drill.constituency, drill.secondId, seq, { highlight: drill.precinctId });
     return;
   }
@@ -353,18 +432,49 @@ async function renderPanel() {
   if (drill.level === 'second') {
     await renderSecondSummary(drill.constituency, drill.secondId);
     if (seq !== renderSeq) return;
+    finalizeUnitSummary();
     await renderPrecinctList(drill.constituency, drill.secondId, seq);
     return;
   }
 
   if (drill.level === 'constituency') {
     renderConstituencySummary(drill.constituency);
+    finalizeUnitSummary();
     await renderSecondList(drill.constituency, seq);
     return;
   }
 
   renderTopSummary();
+  finalizeUnitSummary();
   renderConstituencyList();
+}
+
+// ---------------------------------------------------------------------
+// Mobile "bottom sheet" presentation (css/mobile.css, phone widths only) --
+// once a unit deeper than the top level is selected, `.egeo-unit-summary`
+// gets a `--sheet` modifier that CSS turns into a floating card pinned to
+// the bottom of the screen (NYT-style tap-a-region-for-a-card interaction),
+// instead of the plain in-flow panel box it already is on desktop / at the
+// top level. A small close (X) button (only present while the sheet is up)
+// returns to the top-level view. Purely additive DOM/class changes -- they
+// have zero visual effect above mobile.css's 768px breakpoint, since
+// nothing outside that media query reacts to the `--sheet` class or the
+// `.egeo-unit-summary__close` button.
+// ---------------------------------------------------------------------
+function finalizeUnitSummary() {
+  const isSheet = drill.level !== 'top';
+  els.unitSummary.classList.toggle('egeo-unit-summary--sheet', isSheet);
+  if (!isSheet) return;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'egeo-unit-summary__close';
+  closeBtn.setAttribute('aria-label', 'Close, back to Alma Vale overview');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', () => {
+    selectUnit({ level: 'top' }).catch((err) => console.error('[election-alma-vale] sheet close:', err));
+  });
+  els.unitSummary.insertBefore(closeBtn, els.unitSummary.firstChild);
 }
 
 // ---------------------------------------------------------------------

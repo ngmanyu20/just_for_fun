@@ -1,0 +1,301 @@
+/* mobile.css — small-viewport overrides only.
+   Every rule here lives inside a max-width media query, and the <link> that
+   loads this file (every page, always LAST) also carries
+   media="(max-width: 768px)" — so none of this can ever affect a desktop/
+   wide viewport. Never add an unqualified (non-media-query) rule to this
+   file. Page-specific desktop rules stay in base.css/results.css/map.css/
+   referendum.css exactly as before; this file only adjusts how those same
+   rules lay out on a phone screen (tested against a Galaxy S24, ~360-412
+   CSS px wide in portrait). */
+
+@media (max-width: 768px) {
+  /* -- Shell / nav -- */
+  .app-main {
+    padding: 1rem;
+  }
+  .site-nav {
+    padding: 0.6rem 1rem;
+    gap: 1rem;
+  }
+  .site-nav a {
+    font-size: 0.88rem;
+  }
+  .site-nav__breadcrumbs {
+    font-size: 0.78rem;
+  }
+
+  /* -- Headings -- */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .page-header h1 {
+    font-size: 1.3rem;
+  }
+  .ref-header h1 {
+    font-size: 1.25rem;
+  }
+
+  /* -- Tables: the classic "scrolling table" pattern. `table.data-table`
+     becomes its own horizontally-scrollable block so a wide table (lots of
+     columns) never forces the whole page to scroll sideways -- only the
+     table itself does, and the rest of the page (nav, headings, cards)
+     stays put at full width. Cancelled below for tables that already sit
+     inside `.scroll-table-wrap` (base.css) -- that wrapper already handles
+     scrolling (plus a sticky header/first column on some tables), so
+     letting both scroll independently would just double up. */
+  table.data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  table.data-table th,
+  table.data-table td {
+    padding: 0.4rem 0.55rem;
+  }
+  .scroll-table-wrap table.data-table {
+    display: table;
+    overflow-x: visible;
+    white-space: normal;
+  }
+  /* Containers that hold a narrow drill-down table but were only built with
+     vertical scrolling in mind (base.css's .egeo-list, referendum.css's
+     .ref-precinct-list) -- add horizontal scrolling too, since their tables
+     can still be wider than a phone screen (Lean column keeps a 190px
+     min-width regardless of viewport). */
+  .egeo-list,
+  .ref-precinct-list {
+    overflow-x: auto;
+  }
+
+  /* -- Party tally / spectrum summary (index.html, election-alma-vale.html)
+     -- the desktop version is a fixed-height ruler with three items
+     absolutely positioned at 0%/50%/100% of the row's width; on a phone
+     each item's own text ("NRD (12,345 votes, 45.2%)") is wider than that
+     spacing allows and the three overlap. Laid out as three equal-width
+     flex columns side by side instead -- one line, number over label,
+     centered -- rather than the fully-stacked list this used to be: with
+     the overlap fixed, three short vertical blocks just wasted height for
+     no reason, so this condenses them back onto one row. */
+  .spectrum-summary {
+    position: static;
+    height: auto;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .spectrum-summary__item,
+  .spectrum-summary__item--start,
+  .spectrum-summary__item--center,
+  .spectrum-summary__item--end {
+    position: static;
+    transform: none;
+    text-align: center;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .spectrum-summary__value {
+    font-size: 1.3rem;
+  }
+  /* The label ("LRP: 6,728,159 (35.4%)") is the actual culprit for the
+     word-spam-onto-a-new-line look on a phone -- desktop's 1.02rem is sized
+     for a wide ruler layout, and at that size this much text routinely
+     wraps mid-value on a ~360-412px-wide screen. Shrunk enough that a short
+     label (index.html's "Left"/"Middle Right"/"Right") fits one line at a
+     glance; a long one (Alma Vale's full "PARTY: N,NNN,NNN (NN.N%)", now
+     squeezed into a third of the row instead of the old full-width line)
+     still wraps within its own column when it must, but stays put there
+     rather than spilling into its neighbors. */
+  .spectrum-summary__label {
+    font-size: 0.68rem;
+    line-height: 1.25;
+  }
+
+  /* -- Grids that assume more width than a phone has -- everything else in
+     results.css/referendum.css already uses `repeat(auto-fit, minmax(...))`
+     narrow enough to collapse to one column on its own; `.ref-summary__grid`
+     is the one exception (320px minimum item width can exceed a phone's
+     content width once the page's own padding is subtracted). Every
+     override below uses `minmax(0, 1fr)`, never a bare `1fr` -- a bare `1fr`
+     track's implicit minimum is `auto`, which resolves to its content's
+     min-content width, not 0. That's harmless for plain text content, but
+     `.egeo-layout`/`.ref-geo-layout` below hit it for real: their column
+     ends up sized to the map toolbar's un-shrinkable flex children (reload
+     button, timestamp), overflowing the whole page sideways even though
+     the grid ITSELF measures the right width. `minmax(0, 1fr)` removes
+     that floor so the track (and everything in it) can actually shrink to
+     the viewport. */
+  .ref-summary__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Same auto-minimum trap as `.ref-summary__grid` above, at the same
+     existing 860px collapse defined in results.css/referendum.css. */
+  .egeo-layout,
+  .ref-geo-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The map toolbar itself (breadcrumb + reload control) also needs to be
+     allowed to actually wrap instead of just being ALLOWED to shrink --
+     `flex-wrap: wrap` was already set (map.css), but re-assert it takes
+     effect at this width now that the grid track can shrink under it. */
+  .map-toolbar {
+    row-gap: 0.4rem;
+  }
+  .map-toolbar .reload-control {
+    margin-left: 0;
+  }
+
+  /* -- Maps -- fixed min-heights below are sized for a desktop-width map
+     (wide enough that the fixed 3:2 aspect ratio needs real vertical room);
+     on a phone the same map is much narrower and so much shorter, and the
+     desktop min-height just leaves a large empty gap under it. Shrink the
+     floor to roughly what a phone-width map actually renders at. */
+  #map-mount {
+    min-height: 200px;
+    margin-bottom: 1rem;
+  }
+  #map-mount.map-mount--full,
+  .egeo-layout #map-mount {
+    min-height: 220px;
+  }
+  .ref-map {
+    min-height: 220px;
+  }
+  .map-tooltip {
+    max-width: calc(100vw - 3rem);
+  }
+  /* Zoom/reset controls overlaid on the map -- bumped a little past the
+     desktop 28px square so they're easier to hit with a finger. */
+  .map-controls__btn {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+  }
+
+  /* -- Egeo / referendum geo layout side panels -- tighten padding now that
+     they stack full-width under the map instead of sharing a row with it. */
+  .egeo-controls,
+  .egeo-unit-summary,
+  .ref-unit-summary {
+    padding: 0.6rem 0.75rem;
+  }
+
+  /* -----------------------------------------------------------------
+     NYT-style map + drill-down card, Alma Vale seat page + referendum's
+     Alma Vale section only (scoped via `.egeo-layout`/`#referendum-map` --
+     these class/id names don't appear on any other page). Two pieces:
+     1) the map itself bleeds to the screen edges instead of sitting in a
+        padded/bordered card, like nytimes.com's mobile results map.
+     2) the selected-unit result box becomes a floating card pinned to the
+        bottom of the screen once something deeper than the top level is
+        selected (`.egeo-unit-summary--sheet`/`.ref-unit-summary--sheet`,
+        toggled in election-alma-vale.js/referendum.js's finalizeUnitSummary())
+        instead of a plain in-flow panel box -- mirrors NYT's tap-a-county,
+        get-a-card interaction. At the top level (nothing selected yet) it's
+        still just a normal in-flow box, same as before.
+     ----------------------------------------------------------------- */
+  .egeo-layout #map-mount,
+  #referendum-map.ref-map {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    width: calc(100% + 2rem);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  /* The map's own toolbar/legend/status text keep a normal inset even
+     though the card around them no longer has one -- only `.map-stage`
+     (the actual SVG drawing surface) goes truly edge-to-edge. */
+  .egeo-layout #map-mount > *,
+  #referendum-map.ref-map > * {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .egeo-layout #map-mount .map-stage,
+  #referendum-map.ref-map .map-stage {
+    padding-left: 0;
+    padding-right: 0;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+  }
+
+  .egeo-unit-summary--sheet,
+  .ref-unit-summary--sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 300;
+    max-height: 65vh;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.3);
+    padding: 0.6rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    animation: sheet-slide-up 0.22s ease-out;
+  }
+  /* Small centered "grab handle" bar, purely decorative -- the standard
+     visual cue for a native-style bottom sheet. */
+  .egeo-unit-summary--sheet::before,
+  .ref-unit-summary--sheet::before {
+    content: '';
+    display: block;
+    width: 2.5rem;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--color-border);
+    margin: 0.15rem auto 0.75rem;
+  }
+  .egeo-unit-summary__close,
+  .ref-unit-summary__close {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  @keyframes sheet-slide-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .spectrum-summary__value {
+    font-size: 1.15rem;
+  }
+  .spectrum-summary__label {
+    font-size: 0.62rem;
+  }
+  .page-header h1 {
+    font-size: 1.2rem;
+  }
+}

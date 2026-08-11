@@ -20,6 +20,20 @@
 
 export const DATA_ROOT = new URL('../../../data/', import.meta.url).href;
 
+// Bumped by bumpCacheEpoch() (called from data.js's refreshAllData()) so a
+// manual "Reload results" click gets URLs that differ from whatever was
+// fetched before -- browsers (and any CDN in front of production, per
+// serve_no_cache.py's own doc comment about production caching) are free to
+// reuse a cached response for an identical URL even after the in-memory
+// promise caches below have been cleared, so the reload button needs the
+// URL itself to change, not just a fresh fetch() call.
+let _cacheEpoch = 0;
+
+/** Advances the cache-busting epoch used by dataPath() below. */
+export function bumpCacheEpoch() {
+  _cacheEpoch += 1;
+}
+
 /**
  * Resolve a path relative to the data root (as stored in the JSON
  * manifests) to an absolute fetchable URL.
@@ -28,7 +42,9 @@ export const DATA_ROOT = new URL('../../../data/', import.meta.url).href;
  */
 export function dataPath(relPath) {
   if (!relPath) throw new Error('data layer: dataPath() called with an empty path');
-  return new URL(relPath, DATA_ROOT).href;
+  const url = new URL(relPath, DATA_ROOT);
+  if (_cacheEpoch > 0) url.searchParams.set('v', String(_cacheEpoch));
+  return url.href;
 }
 
 /**

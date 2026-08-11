@@ -436,7 +436,12 @@ table.data-table.hd-table td:first-child {
   justify-content: center;
   color: var(--color-muted);
   font-size: 0.85rem;
-  overflow: hidden;
+  /* No `overflow: hidden` here on purpose -- once js/map/mapCore.js's
+     buildChrome() mounts into this div, its map-tooltip is an absolutely-
+     positioned descendant that needs to bleed past this outer card's
+     border too (css/map.css's `.map-stage` already drops its own
+     overflow:hidden for the same reason -- this ID rule was clipping it a
+     second time, at this element's own border, even after that fix). */
   margin-bottom: 1.5rem;
 }
 
@@ -515,6 +520,13 @@ table.data-table.hd-table td:first-child {
   padding: 0.75rem 1rem;
   background: var(--color-surface);
   font-size: 0.9rem;
+}
+/* Dismiss button for the mobile "bottom sheet" presentation of this box
+   (css/mobile.css) -- hidden here unconditionally so desktop keeps its
+   existing appearance exactly as-is; mobile.css's own media query is the
+   only place that turns it back on. */
+.egeo-unit-summary__close {
+  display: none;
 }
 .egeo-unit-summary__title {
   font-weight: 600;

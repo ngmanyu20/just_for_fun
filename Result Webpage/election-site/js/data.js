@@ -42,6 +42,13 @@
  * it will not load any data.
  */
 
+// -- Cache invalidation internals (refreshAllData(), defined at the bottom
+// of this file, is the only thing that needs these) --
+import { _clearFetchCaches } from './data/csv.js';
+import { _resetShapeIndexCache, _resetShapeJoinIndexCache } from './data/shapes.js';
+import { _resetMetaCache } from './data/meta.js';
+import { bumpCacheEpoch } from './data/config.js';
+
 // -- Status / time-gating (Section 2) --
 export {
   STATUS,
@@ -135,3 +142,24 @@ export {
   getAlmaValeReferendumForCounty,
   getGeneralDirectReferendumResults,
 } from './data/referendum.js';
+
+// -- Cache invalidation (the "Reload results" button on election-alma-vale.js
+// / referendum.js) --
+/**
+ * Drops every in-memory cache this data layer keeps (fetched CSV/JSON text,
+ * the built shape index/join index, and the election/referendum/
+ * participation manifests), and advances the cache-busting epoch so the
+ * next fetch() uses a fresh URL rather than risking a browser/CDN cache hit
+ * on the old one. Every `get*`/`load*` export above re-derives its result
+ * from scratch on its next call (none of the orchestration layers --
+ * results.js/referendum.js -- keep their own state), so calling this and
+ * then re-running a page's normal load sequence is enough to pick up
+ * updated data/* files without a full page reload.
+ */
+export function refreshAllData() {
+  bumpCacheEpoch();
+  _clearFetchCaches();
+  _resetShapeIndexCache();
+  _resetShapeJoinIndexCache();
+  _resetMetaCache();
+}

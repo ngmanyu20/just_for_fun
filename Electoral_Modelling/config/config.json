@@ -1,0 +1,132 @@
+{
+  "scale": {
+    "dataUnitsPerKm": 8.01,
+    "_comment": "8.01 data coordinate units = 1 km, matching the shapefile project's projection. metersPerUnit = 1000 / dataUnitsPerKm."
+  },
+  "datasets": {
+    "constituency": {
+      "file": "df_constituency.csv",
+      "idColumns": ["Constituency"],
+      "schemaColumns": ["index", "Constituency_Code", "Constituency", "geometry", "Area", "Region", "Population", "centroid"],
+      "zoneColumn": null,
+      "hasLocationType": false,
+      "labelZoomThreshold": 0.05,
+      "extraColumnsAlways": ["Winning_Perspective"]
+    },
+    "county": {
+      "file": "df_county.csv",
+      "idColumns": ["County"],
+      "schemaColumns": ["Zone", "County", "District", "geometry", "Area", "Region", "Population", "Constituency", "centroid"],
+      "zoneColumn": "Zone",
+      "hasLocationType": false,
+      "labelZoomThreshold": 0.1
+    },
+    "ward": {
+      "file": "df_districts.csv",
+      "idColumns": ["District", "District_Ward"],
+      "schemaColumns": ["District", "District_ID", "District_Ward", "geometry", "Area", "Region", "Population", "Constituency", "centroid"],
+      "zoneColumn": "District",
+      "hasLocationType": false,
+      "labelZoomThreshold": 0.2,
+      "extraColumnsAlways": ["ward_immigrant", "ward_localists", "Winning_Perspective"]
+    },
+    "individual": {
+      "file": "df_polygon.csv",
+      "idColumns": ["Shape_ID"],
+      "schemaColumns": ["County", "District", "Shape_ID", "geometry", "Area", "Region", "Location", "County_Type", "Population", "District_Ward", "Constituency", "centroid"],
+      "zoneColumn": "District",
+      "hasLocationType": true,
+      "labelZoomThreshold": 10
+    },
+    "_comment": "One shapefile per modelling layer — each row IS the entity at that level (one constituency/county/ward/shape per row), so no one-hot encoding is needed anymore: editing a shape's custom parameters just writes plain columns onto its own row in that layer's CSV. idColumns identify a row uniquely within its file (composite for ward, since District_Ward numbers repeat across districts) and drive its display name. schemaColumns is the full known header for that file — anything loaded beyond it is treated as a user-added custom parameter in the UI. zoneColumn is the sub-Region grouping column used by the Display Region modal for that layer (null = Region-only filtering, no drill-down). Validation on load only requires idColumns + geometry/Area/Region/Population/centroid, not the full schemaColumns list, so slightly older/newer files still load."
+  },
+  "defaultDataDir": "data/processed_files",
+  "renderer": {
+    "densityMin": 50,
+    "densityMax": 15000,
+    "estPopMin": 0,
+    "estPopMax": 50000,
+    "_comment": "Copied verbatim from shapefile/js/Renderer.js's default options (densityMin/Max, estPopMin/Max) driving the blue->red heatmap gradient for the Density Color Map and the Population Density / Est Population label sub-modes."
+  },
+  "typeColors": {
+    "S":    "rgba(192, 192, 192, 0.78)",
+    "UNI":  "rgba(150, 100, 220, 0.75)",
+    "TECH": "rgba(255, 105, 180, 0.75)",
+    "GAME": "rgba( 75,   0, 110, 0.85)",
+    "A1": "rgba(147, 179, 255, 0.72)", "A2": "rgba( 65, 105, 225, 0.80)",
+    "B1": "rgba(100, 160, 255, 0.72)", "B2": "rgba( 25, 100, 200, 0.80)",
+    "C1": "rgba(120, 210, 120, 0.72)", "C2": "rgba( 40, 150,  40, 0.80)",
+    "D1": "rgba(255, 235, 100, 0.75)", "D2": "rgba(200, 165,   0, 0.80)",
+    "E1": "rgba(255, 175,  80, 0.75)", "E2": "rgba(210, 100,  10, 0.80)",
+    "F1": "rgba(195, 145,  95, 0.75)", "F2": "rgba(130,  70,  20, 0.80)",
+    "_comment": "Keyed by the individual layer's County_Type code. Only the individual layer's CSV carries this column — Type Map is a no-op on the other three layers."
+  },
+  "locationColors": {
+    "Inner City": "rgba(135, 206, 235, 0.75)",
+    "Outer City": "rgba(25,  80,  170, 0.72)",
+    "Suburb":     "rgba(255, 220,  50, 0.75)",
+    "Rural":      "rgba(60,  170,  60, 0.72)",
+    "Town":       "rgba(255, 120, 110, 0.72)",
+    "_comment": "Copied verbatim from shapefile/js/Renderer.js's LOCATION_COLORS. Only the individual layer's CSV carries a Location column — Location Map / the Location-Type label are a no-op on the other three layers."
+  },
+  "wardEdit": {
+    "immigrant": {
+      "column": "ward_immigrant",
+      "label": "Immigrant",
+      "values": { "0": "", "1": "Low Density Immigrants", "2": "Medium Density Immigrants", "3": "High Density Immigrants" },
+      "colors": {
+        "": "#ffffff",
+        "Low Density Immigrants": "#90ee90",
+        "Medium Density Immigrants": "#ffeb3b",
+        "High Density Immigrants": "#ff9800"
+      }
+    },
+    "localist": {
+      "column": "ward_localists",
+      "label": "Localist",
+      "values": { "0": "", "1": "Low Density Localists", "2": "Medium Density Localists", "3": "High Density Localists" },
+      "colors": {
+        "": "#ffffff",
+        "Low Density Localists": "#90ee90",
+        "Medium Density Localists": "#ffeb3b",
+        "High Density Localists": "#ff9800"
+      }
+    },
+    "_comment": "Ward-layer-only editing mode. Toggling 'Edit Immigrant'/'Edit Localist' then pressing 0-3 while ward shape(s) are selected writes one of 'values' into the ward_immigrant/ward_localists column for every selected ward. While a mode is active, ward fill colour switches to 'colors' keyed by the current value (white = unset)."
+  },
+  "winningPerspective": {
+    "column": "Winning_Perspective",
+    "label": "Winning Perspective",
+    "layers": ["constituency", "ward"],
+    "values": {
+      "0": [""],
+      "1": ["Vote_L", "Vote: Left_MR", "Vote: Left_R"],
+      "2": ["Vote_MR", "Vote: Left_MR", "Vote: MR_R"],
+      "3": ["Vote_R", "Vote: MR_R", "Vote: Left_R"],
+      "4": ["Head to Head"]
+    },
+    "colors": {
+      "": "#ffffff",
+      "Vote_L": "#3b82f6",
+      "Vote_MR": "#eab308",
+      "Vote_R": "#ef4444",
+      "Vote: Left_MR": "#22c55e",
+      "Vote: Left_R": "#a855f7",
+      "Vote: MR_R": "#f97316",
+      "Head to Head": "#ec4899"
+    },
+    "_comment": "Constituency AND Ward layers (toggle works on whichever is currently active). Toggling 'Winning Perspectives' then selecting shape(s) (Ctrl+Click / lasso, same as normal selection) and pressing 0-4 writes into the Winning_Perspective column on that layer's own CSV. Each key in 'values' is a cycle (array), not a single value: repeatedly pressing the same key on the same selection advances each selected shape through its own current position in that key's array (matched against the shape's current column value, wrapping back to the start). 'Vote: Left_MR' appears in both keys 1 and 2 (and 'Vote: MR_R'/'Vote: Left_R' are shared between keys 2/3 and 1/3 respectively) intentionally, since they represent the same contested-race value reachable from either side. Keys 0 and 4 are single-element cycles (always clear / always 'Head to Head'). Fill colour switches to 'colors' keyed by the current value (white = unset) while the mode is active."
+  },
+  "layers": {
+    "options": ["constituency", "county", "ward", "individual"],
+    "default": "individual",
+    "labels": {
+      "constituency": "Constituency",
+      "county": "County",
+      "ward": "Ward",
+      "individual": "Individual"
+    },
+    "highlightColor": "rgba(255, 215, 0, 0.55)",
+    "_comment": "Each layer button switches which shapefile is rendered (its own dataset from config.datasets), not a highlight filter over one shared dataset. Clicking a shape on any layer selects that single row for the custom-parameter editor."
+  }
+}

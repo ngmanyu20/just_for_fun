@@ -40,6 +40,13 @@ export function loadPartyParticipation() {
   return _partyParticipationPromise;
 }
 
+/** Drops the memoized meta promises so the next load*() call re-fetches. Exposed for the "Reload results" flow (data.js's refreshAllData()) / tests. */
+export function _resetMetaCache() {
+  _electionMetaPromise = null;
+  _referendumMetaPromise = null;
+  _partyParticipationPromise = null;
+}
+
 /**
  * Find a seat type entry by its `id` (e.g. "AlmaVale") or `name` (e.g. "Alma Vale").
  * @param {Object} electionMeta result of loadElectionMeta()

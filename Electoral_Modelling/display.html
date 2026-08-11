@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Electoral Modelling — Display Panel</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #f5f6fa;
+        color: #333;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        min-height: 100vh;
+    }
+
+    h2 {
+        font-size: 13px;
+        font-weight: 700;
+        color: #667eea;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #e9ecef;
+        margin-bottom: 10px;
+    }
+
+    .panel {
+        background: white;
+        border-radius: 8px;
+        padding: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .info-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .info-table td { padding: 3px 0; vertical-align: top; }
+    .info-table td:first-child { font-weight: 600; color: #495057; white-space: nowrap; padding-right: 10px; width: 1%; }
+    .placeholder { font-size: 11px; color: #999; }
+
+    .mode-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 20px;
+        margin-bottom: 14px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        letter-spacing: 0.4px;
+    }
+
+    .status-bar { font-size: 10px; color: #aaa; text-align: right; }
+
+    .breakdown-section-title { font-size: 10px; font-weight: 700; color: #667eea; margin-bottom: 4px; }
+    .breakdown-row { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 3px; }
+    .breakdown-key { width: 70px; flex-shrink: 0; color: #495057; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .breakdown-bar { flex: 1; height: 8px; background: #eef0f5; border-radius: 4px; overflow: hidden; }
+    .breakdown-fill { height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); }
+    .breakdown-pct { width: 78px; flex-shrink: 0; text-align: right; color: #555; }
+
+    /* Default Setting — collapsed by default so it doesn't spam the panel */
+    .settings-header {
+        display: flex; align-items: center; justify-content: space-between; cursor: pointer;
+        padding-bottom: 6px; border-bottom: 2px solid #e9ecef; margin-bottom: 0;
+    }
+    .settings-header.expanded { margin-bottom: 10px; }
+    .settings-title { font-size: 13px; font-weight: 700; color: #667eea; }
+    .settings-toggle {
+        width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ccc; background: #fff;
+        font-size: 13px; font-weight: 700; color: #667eea; cursor: pointer; line-height: 1; padding: 0;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .settings-body { display: none; }
+    .settings-body.open { display: block; }
+    .settings-label { font-size: 10px; font-weight: 600; color: #495057; display: block; margin-bottom: 4px; }
+    .settings-row { display: flex; gap: 4px; }
+    .settings-input {
+        flex: 1; padding: 5px 7px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px;
+    }
+    .settings-add-btn {
+        width: auto; padding: 0 12px; border: none; border-radius: 4px; cursor: pointer;
+        font-weight: 600; font-size: 11px; background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+    }
+    .settings-group { margin-bottom: 10px; }
+    .settings-group:last-child { margin-bottom: 0; }
+
+    .param-row {
+        display: flex; align-items: center; gap: 6px; font-size: 11px;
+        border: 1px solid #e9ecef; border-radius: 5px; padding: 4px 6px; margin-top: 4px;
+    }
+    .param-key { font-weight: 700; color: #495057; flex: 1; }
+    .param-remove { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 11px; padding: 0 2px; }
+
+    .level-btn {
+        padding: 3px 9px; border: 1px solid #ccc; border-radius: 12px; background: #fff;
+        font-size: 10px; font-weight: 600; cursor: pointer; color: #495057;
+    }
+    .level-btn.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-color: transparent; }
+    .level-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div id="modeBadge" class="mode-badge">Individual Layer</div>
+
+<div class="panel" id="settingsPanel">
+    <div class="settings-header" id="settingsHeader">
+        <span class="settings-title">⚙️ Default Setting</span>
+        <button class="settings-toggle" id="settingsToggle" title="Expand/collapse">+</button>
+    </div>
+    <div class="settings-body" id="settingsBody">
+        <div class="settings-group">
+            <label class="settings-label">Type groups (e.g. D1+E2)</label>
+            <div class="settings-row">
+                <input type="text" id="typeGroupInput" class="settings-input" placeholder="D1+E2">
+                <button id="addTypeGroupBtn" class="settings-add-btn">Add</button>
+            </div>
+            <div id="typeGroupList"></div>
+        </div>
+        <div class="settings-group">
+            <label class="settings-label">Location groups (e.g. Rural+Town)</label>
+            <div class="settings-row">
+                <input type="text" id="locationGroupInput" class="settings-input" placeholder="Rural+Town">
+                <button id="addLocationGroupBtn" class="settings-add-btn">Add</button>
+            </div>
+            <div id="locationGroupList"></div>
+        </div>
+        <div class="settings-group">
+            <label class="settings-label" style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:6px;">
+                <input type="checkbox" id="electorateDataToggle" style="margin:0;">
+                Display Electorate Data
+            </label>
+            <div id="electorateLevelRow" style="display:none; flex-wrap:wrap; gap:4px;">
+                <button type="button" class="level-btn" data-level="individual">Polygon</button>
+                <button type="button" class="level-btn" data-level="county">County</button>
+                <button type="button" class="level-btn" data-level="ward">Ward</button>
+                <button type="button" class="level-btn" data-level="constituency">Constituency</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="panel" id="shapePanel">
+    <h2>📊 Selected Shape</h2>
+    <div id="shapeInfo"><p class="placeholder">Select a shape in the main window to see its information.</p></div>
+</div>
+
+<div class="panel" id="breakdownPanel" style="display:none;">
+    <h2>🧭 Location / Type Breakdown</h2>
+    <div id="breakdownInfo"></div>
+</div>
+
+<div class="panel" id="electoratePanel" style="display:none;">
+    <h2>📈 Electorate Demographics</h2>
+    <div id="electorateInfo"></div>
+</div>
+
+<div class="panel" id="multiPanel" style="display:none;">
+    <h2>🗂️ Multiple Shapes</h2>
+    <div id="multiInfo"></div>
+</div>
+
+<div class="status-bar" id="statusBar">Waiting for main window…</div>
+
+<script>
+    const shapePanel     = document.getElementById('shapePanel');
+    const shapeInfo       = document.getElementById('shapeInfo');
+    const breakdownPanel  = document.getElementById('breakdownPanel');
+    const breakdownInfo   = document.getElementById('breakdownInfo');
+    const multiPanel      = document.getElementById('multiPanel');
+    const multiInfo        = document.getElementById('multiInfo');
+    const statusBar       = document.getElementById('statusBar');
+    const modeBadge       = document.getElementById('modeBadge');
+    const electorateToggle = document.getElementById('electorateDataToggle');
+    const electoratePanel  = document.getElementById('electoratePanel');
+    const electorateInfo   = document.getElementById('electorateInfo');
+    const electorateLevelRow = document.getElementById('electorateLevelRow');
+    const electorateLevelBtns = [...electorateLevelRow.querySelectorAll('.level-btn')];
+
+    const LAYER_LABELS = { constituency: 'Constituency Layer', county: 'County Layer', ward: 'Ward Layer', individual: 'Individual Layer' };
+
+    function fmt(n) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+    function fmtArea(v) { const n = parseFloat(v); return isNaN(n) ? '—' : `${n.toFixed(2)} km²`; }
+    function fmtCell(col, value) { return col === 'Area' ? fmtArea(value) : (value !== '' ? value : '—'); }
+
+    let lastState = null;
+
+    // ── Default Setting: Breakdown Groups — collapsed by default; reads/writes
+    // window.opener.ElectoralApp.categoryGroups directly (same live object, no copy). ────────
+
+    document.getElementById('settingsHeader').addEventListener('click', () => {
+        const body = document.getElementById('settingsBody');
+        const header = document.getElementById('settingsHeader');
+        const btn = document.getElementById('settingsToggle');
+        const open = body.classList.toggle('open');
+        header.classList.toggle('expanded', open);
+        btn.textContent = open ? '−' : '+';
+    });
+
+    function getOpenerApp() {
+        const opener = window.opener;
+        if (!opener || opener.closed) return null;
+        return opener.ElectoralApp || null;
+    }
+
+    function addCategoryGroup(kind) {
+        const app = getOpenerApp();
+        if (!app) return;
+        const input = document.getElementById(kind === 'type' ? 'typeGroupInput' : 'locationGroupInput');
+        const raw = input.value.trim();
+        if (!raw) return;
+
+        const members = raw.split('+').map(s => s.trim()).filter(Boolean);
+        if (members.length < 2) {
+            alert('Enter at least two categories separated by "+", e.g. D1+E2');
+            return;
+        }
+
+        app.categoryGroups[kind].push({ name: raw, members });
+        input.value = '';
+        renderGroupList(kind);
+    }
+
+    function removeCategoryGroup(kind, index) {
+        const app = getOpenerApp();
+        if (!app) return;
+        app.categoryGroups[kind].splice(index, 1);
+        renderGroupList(kind);
+    }
+
+    function renderGroupList(kind) {
+        const app = getOpenerApp();
+        const listEl = document.getElementById(kind === 'type' ? 'typeGroupList' : 'locationGroupList');
+        const groups = (app && app.categoryGroups[kind]) || [];
+        if (!groups.length) { listEl.innerHTML = ''; return; }
+        listEl.innerHTML = groups.map((g, i) => `
+            <div class="param-row">
+                <span class="param-key">${g.name}</span>
+                <button class="param-remove" data-kind="${kind}" data-index="${i}" title="Remove group">✕</button>
+            </div>`).join('');
+        listEl.querySelectorAll('.param-remove').forEach(btn => {
+            btn.addEventListener('click', () => removeCategoryGroup(btn.dataset.kind, parseInt(btn.dataset.index, 10)));
+        });
+    }
+
+    document.getElementById('addTypeGroupBtn').addEventListener('click', () => addCategoryGroup('type'));
+    document.getElementById('addLocationGroupBtn').addEventListener('click', () => addCategoryGroup('location'));
+    ['typeGroupInput', 'locationGroupInput'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addCategoryGroup(id === 'typeGroupInput' ? 'type' : 'location'); }
+        });
+    });
+
+    /**
+     * Combine categories into user-defined groups (set above, under "Default Setting"),
+     * e.g. a "D1+E2" group sums both into a single row. Purely a display transform — the
+     * underlying breakdown counts/percentages are untouched.
+     */
+    function applyGroups(list, groups, total) {
+        if (!groups || !groups.length) return list;
+        const used = new Set();
+        const grouped = [];
+        groups.forEach(g => {
+            let count = 0;
+            list.forEach(item => {
+                if (g.members.includes(item.key)) { count += item.count; used.add(item.key); }
+            });
+            if (count > 0) grouped.push({ key: g.name, count, pct: total > 0 ? (count / total) * 100 : 0 });
+        });
+        const ungrouped = list.filter(item => !used.has(item.key));
+        return [...grouped, ...ungrouped].sort((a, b) => b.count - a.count);
+    }
+
+    function renderBreakdownList(list, emptyLabel) {
+        if (!list.length) return `<p class="placeholder">${emptyLabel}</p>`;
+        return list.map(e => `
+            <div class="breakdown-row">
+                <span class="breakdown-key">${e.key}</span>
+                <div class="breakdown-bar"><div class="breakdown-fill" style="width:${e.pct.toFixed(1)}%"></div></div>
+                <span class="breakdown-pct">${e.pct.toFixed(1)}% (${e.count})</span>
+            </div>`).join('');
+    }
+
+    function renderBreakdownPanel(breakdown, groups) {
+        if (breakdown) {
+            groups = groups || { location: [], type: [] };
+            const locList = applyGroups(breakdown.location, groups.location, breakdown.total);
+            const typeList = applyGroups(breakdown.type, groups.type, breakdown.total);
+            breakdownInfo.innerHTML = `
+                <div class="breakdown-section-title">Location (n=${breakdown.total})</div>
+                ${renderBreakdownList(locList, 'No Location data.')}
+                <div class="breakdown-section-title" style="margin-top:8px;">Type (n=${breakdown.total})</div>
+                ${renderBreakdownList(typeList, 'No Type data.')}`;
+            breakdownPanel.style.display = '';
+        } else {
+            breakdownPanel.style.display = 'none';
+        }
+    }
+
+    // ── Electorate Demographics (csv_output/Electorate_Demographics.csv) ──────
+    // Per-polygon S/A1/A2/.../F2 population counts, aggregated up to whichever
+    // layer is selected (County/Ward/Constituency sum their member polygons;
+    // Individual reads its own row 1:1). Reuses the same categoryGroups.type
+    // groups as the Location/Type Breakdown panel above, since both key off the
+    // same type codes. Loaded lazily, once, the first time the checkbox is ticked.
+    const ELECTORATE_ID_COLUMNS = new Set(['County', 'District', 'Shape_ID', 'Constituency', 'Sub_Region']);
+    const ELECTORATE_LEVEL_LABEL = { individual: 'Polygon', county: 'County', ward: 'Ward', constituency: 'Constituency' };
+
+    // Which target levels a row can be rolled up to, keyed by the layer it was selected on. Each
+    // layer's own CSV only carries columns for itself and its ancestors (e.g. a County row has no
+    // District_Ward, since a county spans many wards — there's no single ward to roll up to), so
+    // "Polygon" and "Ward" only make sense starting from an Individual- or Ward-layer selection,
+    // both of which carry District_Ward directly on their own row.
+    const ELECTORATE_LEVELS_BY_LAYER = {
+        individual: ['individual', 'county', 'ward', 'constituency'],
+        county: ['county', 'constituency'],
+        ward: ['ward', 'constituency'],
+        constituency: ['constituency']
+    };
+
+    /** Extracts the key(s) used to look up electorateData's per-level maps from a layer row. 'ward' is a District+District_Ward composite (df_districts.csv: one row IS one ward within a district) rather than a single column, since whole-District rollups would lump every ward in that district together. */
+    function electorateKeyFor(row, level) {
+        if (!row) return null;
+        if (level === 'individual') return row.Shape_ID || null;
+        if (level === 'county') return row.County || null;
+        if (level === 'ward') return (row.District && row.District_Ward) ? `${row.District}||${row.District_Ward}` : null;
+        if (level === 'constituency') return row.Constituency || null;
+        return null;
+    }
+
+    let electorateLevel = null; // user-picked override via the level slider; null = follow the active layer
+    let electorateData = null; // null = not yet requested, 'loading', 'unavailable', or { typeKeys, byShapeId, byCounty, byWard, byConstituency }
+
+    async function loadElectorateData(app) {
+        if (electorateData !== null) return;
+        electorateData = 'loading';
+        try {
+            const res = await fetch('csv_output/Electorate_Demographics.csv');
+            if (!res.ok) throw new Error(res.statusText);
+            const text = await res.text();
+            const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
+            const headers = app.dataManager.parseCSVLine(lines[0]).map(h => h.trim());
+            const typeKeys = headers.filter(h => !ELECTORATE_ID_COLUMNS.has(h));
+
+            // Electorate_Demographics.csv's own County/District/Constituency columns are NOT used
+            // for grouping — only its Shape_ID + type counts are trusted. The individual layer's own
+            // df_polygon.csv (already loaded in the main app) is the single source of truth for which
+            // County/Ward/Constituency each polygon belongs to, so County/Ward/Constituency-level
+            // numbers are always exactly "the sum of this level's member polygons' electorate data."
+            const polygonMeta = new Map(); // Shape_ID -> { county, ward, constituency }
+            (app.dataManager.layers.individual.rows || []).forEach(r => {
+                if (!r.Shape_ID) return;
+                polygonMeta.set(r.Shape_ID, {
+                    county: r.County || null,
+                    ward: (r.District && r.District_Ward) ? `${r.District}||${r.District_Ward}` : null,
+                    constituency: r.Constituency || null
+                });
+            });
+
+            const byShapeId = new Map(), byCounty = new Map(), byWard = new Map(), byConstituency = new Map();
+            const addTo = (map, key, values) => {
+                if (!key) return;
+                let agg = map.get(key);
+                if (!agg) { agg = {}; typeKeys.forEach(k => agg[k] = 0); map.set(key, agg); }
+                typeKeys.forEach(k => agg[k] += values[k]);
+            };
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const cells = app.dataManager.parseCSVLine(lines[i]);
+                const row = {};
+                headers.forEach((h, idx) => { row[h] = cells[idx] !== undefined ? cells[idx] : ''; });
+                const values = {};
+                typeKeys.forEach(k => { values[k] = parseFloat(row[k]) || 0; });
+
+                const shapeId = row.Shape_ID;
+                if (!shapeId) continue;
+                byShapeId.set(shapeId, values);
+
+                const meta = polygonMeta.get(shapeId);
+                if (meta) {
+                    addTo(byCounty, meta.county, values);
+                    addTo(byWard, meta.ward, values);
+                    addTo(byConstituency, meta.constituency, values);
+                }
+            }
+
+            electorateData = { typeKeys, byShapeId, byCounty, byWard, byConstituency };
+        } catch (e) {
+            electorateData = 'unavailable';
+        }
+    }
+
+    /**
+     * Sums the electorate type breakdown for whichever rows (by rowIndex, within sourceLayerKey —
+     * the active map layer, since rowIndex is only meaningful within its own dataset) are selected,
+     * rolled up to targetLevel (Polygon/County/District/Constituency — may differ from sourceLayerKey
+     * when the user has overridden it via the level slider, e.g. viewing a selected polygon's whole
+     * Constituency while still on the Individual layer).
+     */
+    function electorateBreakdownFor(app, sourceLayerKey, rowIndices, targetLevel) {
+        if (!electorateData || typeof electorateData === 'string') return null;
+        const map = { individual: electorateData.byShapeId, county: electorateData.byCounty, ward: electorateData.byWard, constituency: electorateData.byConstituency }[targetLevel];
+        if (!map) return null;
+
+        const dm = app.dataManager;
+        const keys = new Set();
+        rowIndices.forEach(idx => {
+            const row = dm.row(sourceLayerKey, idx);
+            const key = electorateKeyFor(row, targetLevel);
+            if (key) keys.add(key);
+        });
+        if (!keys.size) return null;
+
+        const agg = {};
+        electorateData.typeKeys.forEach(k => agg[k] = 0);
+        let found = false;
+        keys.forEach(k => {
+            const rec = map.get(k);
+            if (rec) { found = true; electorateData.typeKeys.forEach(t => agg[t] += rec[t]); }
+        });
+        if (!found) return null;
+
+        const total = electorateData.typeKeys.reduce((s, k) => s + agg[k], 0);
+        const list = electorateData.typeKeys
+            .filter(k => agg[k] > 0)
+            .map(k => ({ key: k, count: agg[k], pct: total > 0 ? (agg[k] / total) * 100 : 0 }))
+            .sort((a, b) => b.count - a.count);
+        return { total, list };
+    }
+
+    /** Enables/highlights the level-slider buttons for what's derivable from layerKey's own rows, returns the effective level to render at. */
+    function updateElectorateLevelControls(layerKey) {
+        const available = ELECTORATE_LEVELS_BY_LAYER[layerKey] || [layerKey];
+        const effective = (electorateLevel && available.includes(electorateLevel)) ? electorateLevel : layerKey;
+        electorateLevelBtns.forEach(btn => {
+            const ok = available.includes(btn.dataset.level);
+            btn.disabled = !ok;
+            btn.classList.toggle('active', ok && btn.dataset.level === effective);
+        });
+        return effective;
+    }
+
+    electorateLevelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            electorateLevel = btn.dataset.level;
+            lastState = null;
+            syncFromOpener();
+        });
+    });
+
+    function renderElectoratePanel(app, layerKey, rowIndices) {
+        if (!electorateToggle.checked) {
+            electoratePanel.style.display = 'none';
+            electorateLevelRow.style.display = 'none';
+            return;
+        }
+        electoratePanel.style.display = '';
+        electorateLevelRow.style.display = 'flex';
+        const effectiveLevel = updateElectorateLevelControls(layerKey);
+
+        if (electorateData === null) loadElectorateData(app);
+        if (electorateData === 'loading') {
+            electorateInfo.innerHTML = '<p class="placeholder">Loading electorate data…</p>';
+            return;
+        }
+        if (electorateData === 'unavailable') {
+            electorateInfo.innerHTML = '<p class="placeholder">csv_output/Electorate_Demographics.csv not found.</p>';
+            return;
+        }
+        if (!rowIndices.length) {
+            electorateInfo.innerHTML = '<p class="placeholder">Select a shape in the main window to see its information.</p>';
+            return;
+        }
+
+        const breakdown = electorateBreakdownFor(app, layerKey, rowIndices, effectiveLevel);
+        if (!breakdown) {
+            electorateInfo.innerHTML = '<p class="placeholder">No electorate data for this selection.</p>';
+            return;
+        }
+        const typeList = applyGroups(breakdown.list, app.categoryGroups.type, breakdown.total);
+        electorateInfo.innerHTML = `
+            <div class="breakdown-section-title">Electorate Type — ${ELECTORATE_LEVEL_LABEL[effectiveLevel]} (n=${fmt(breakdown.total)})</div>
+            ${renderBreakdownList(typeList, 'No Type data.')}`;
+    }
+
+    electorateToggle.addEventListener('change', () => { lastState = null; syncFromOpener(); });
+
+    function renderMultiInfo(app) {
+        const dm = app.dataManager;
+        const layer = app.activeLayer;
+        const idx = app.multiSelectedRowIndices;
+        const entities = dm.entities(layer).filter(p => idx.has(p.rowIndex));
+
+        let totalArea = 0, totalPop = 0;
+        entities.forEach(p => {
+            totalArea += p.area || 0;
+            totalPop += isNaN(p.population) ? 0 : p.population;
+        });
+        const avgDensity = totalArea > 0 ? totalPop / totalArea : 0;
+
+        multiInfo.innerHTML = `
+            <table class="info-table">
+                <tr><td>Shapes Selected</td><td>${entities.length}</td></tr>
+                <tr><td>Total Area</td><td>${totalArea.toFixed(2)} km²</td></tr>
+                <tr><td>Total Population</td><td>${fmt(totalPop)}</td></tr>
+                <tr><td>Avg Density</td><td>${fmt(avgDensity)} /km²</td></tr>
+            </table>`;
+
+        renderBreakdownPanel(dm.individualBreakdownForSet(layer, idx), app.categoryGroups);
+        renderElectoratePanel(app, layer, [...idx]);
+    }
+
+    /** True while Local Campaign mode is on (Individual layer only) — drives display.html's hover-follow instead of click-select. */
+    function isCampaignHoverActive(app) {
+        return !!(app.campaignTool && app.campaignTool.active);
+    }
+
+    function render(app) {
+        const dm = app.dataManager;
+        const layer = app.activeLayer;
+        const campaignHover = isCampaignHoverActive(app);
+        const entity = campaignHover ? (app.campaignHoverEntity || null) : app.selectedEntity;
+        const multi = app.multiSelectedRowIndices;
+
+        modeBadge.textContent = (campaignHover ? '🎯 Campaign Hover · ' : '') + (LAYER_LABELS[layer] || layer);
+
+        if (!campaignHover && multi.size >= 2) {
+            shapePanel.style.display = 'none';
+            multiPanel.style.display = '';
+            renderMultiInfo(app);
+            return;
+        }
+        multiPanel.style.display = 'none';
+        shapePanel.style.display = '';
+
+        if (!entity) {
+            shapeInfo.innerHTML = `<p class="placeholder">${campaignHover ? 'Move the mouse over a polygon in the main window.' : 'Select a shape in the main window to see its information.'}</p>`;
+            breakdownPanel.style.display = 'none';
+            renderElectoratePanel(app, layer, []);
+            return;
+        }
+
+        const row = dm.row(layer, entity.rowIndex);
+        const infoCols = dm.infoColumns(layer);
+        const densityStr = entity.populationDensity ? fmt(entity.populationDensity) : '—';
+
+        shapeInfo.innerHTML = `
+            <table class="info-table">
+                ${infoCols.map(c => `<tr><td>${c}</td><td>${fmtCell(c, row[c])}</td></tr>`).join('')}
+                <tr><td>Pop Density</td><td>${densityStr} /km²</td></tr>
+            </table>`;
+
+        renderBreakdownPanel(dm.individualBreakdown(layer, entity), app.categoryGroups);
+        renderElectoratePanel(app, layer, [entity.rowIndex]);
+    }
+
+    function stateHash(app) {
+        const dm = app.dataManager;
+        const layer = app.activeLayer;
+        const campaignHover = isCampaignHoverActive(app);
+        const entity = campaignHover ? (app.campaignHoverEntity || null) : app.selectedEntity;
+        const opts = app.renderer.options;
+        const filter = app.zoneFilters[layer];
+        const multi = app.multiSelectedRowIndices;
+        return [
+            dm.entities(layer).length,
+            layer,
+            campaignHover,
+            entity ? entity.rowIndex : 'none',
+            entity ? JSON.stringify(dm.row(layer, entity.rowIndex)) : '',
+            multi.size, [...multi].sort().join(','),
+            opts.showDensityColorMap, opts.showTypeColorMap, opts.showLocationColorMap,
+            opts.showDensityLabel, opts.showLocationTypeLabel, opts.densityDisplayMode,
+            filter ? [...filter].sort().join(',') : 'all',
+            JSON.stringify(app.categoryGroups),
+            electorateToggle.checked,
+            electorateLevel,
+            typeof electorateData === 'string' ? electorateData : (electorateData ? 'loaded' : 'unloaded')
+        ].join('||');
+    }
+
+    function syncFromOpener() {
+        const opener = window.opener;
+        if (!opener || opener.closed) {
+            statusBar.textContent = 'Main window closed.';
+            return;
+        }
+        try {
+            const app = opener.ElectoralApp;
+            if (!app || !app.dataManager) {
+                statusBar.textContent = 'Waiting for data…';
+                return;
+            }
+            const hash = stateHash(app);
+            if (hash !== lastState) {
+                lastState = hash;
+                render(app);
+                renderGroupList('type');
+                renderGroupList('location');
+            }
+            statusBar.textContent = `Synced · ${new Date().toLocaleTimeString()}`;
+        } catch (e) {
+            statusBar.textContent = 'Sync error: ' + e.message;
+        }
+    }
+
+    // Polls at a normal 300ms cadence, but switches to a fast 50ms cadence while Local Campaign
+    // mode is on so the panel hover-follows the mouse in near real time instead of lagging behind
+    // clicks (see render()'s campaignHover branch, fed by App.js's campaignHoverEntity).
+    const POLL_MS_NORMAL = 300;
+    const POLL_MS_CAMPAIGN = 50;
+
+    function scheduleNextSync() {
+        const app = getOpenerApp();
+        const fast = !!(app && isCampaignHoverActive(app));
+        setTimeout(() => { syncFromOpener(); scheduleNextSync(); }, fast ? POLL_MS_CAMPAIGN : POLL_MS_NORMAL);
+    }
+
+    scheduleNextSync();
+    syncFromOpener();
+</script>
+</body>
+</html>

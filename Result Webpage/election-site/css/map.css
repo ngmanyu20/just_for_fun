@@ -43,6 +43,7 @@
 .map-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
 }
 
@@ -55,6 +56,17 @@
   color: var(--color-text);
 }
 
+/* Reload control (css/base.css's .reload-control) relocated here, into the
+   map's own toolbar, once the map finishes mounting (election-alma-vale.js
+   / referendum.js -- both move the same DOM node rather than build a
+   second one) -- pushed flush right so the toolbar reads as
+   "breadcrumb left, reload right", same split the page header used before
+   the button lived inside the map. Falls back to staying in the page
+   header (no rule needed here) whenever the map itself is unavailable. */
+.map-toolbar .reload-control {
+  margin-left: auto;
+}
+
 /* -- Stage (SVG + tooltip positioning context) -- */
 .map-stage {
   position: relative;
@@ -62,7 +74,13 @@
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background: var(--color-bg);
-  overflow: hidden;
+  /* No `overflow: hidden` here on purpose -- the tooltip below is an
+     absolutely-positioned child of this stage, and it must be able to
+     bleed past the stage's own border near the map's edges instead of
+     getting clipped/truncated there. The shape layer doesn't need this
+     for its own clipping: the <svg> element clips its zoom/pan content to
+     its own viewport by default (SVG UA stylesheet), independent of this
+     parent's overflow. */
 }
 
 .map-svg {

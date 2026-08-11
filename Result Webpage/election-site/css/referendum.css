@@ -53,6 +53,11 @@
   align-items: center;
 }
 
+/* Pushed flush right in the meta row -- see base.css's .reload-control. */
+.ref-header__meta .reload-control {
+  margin-left: auto;
+}
+
 .ref-summary {
   margin-top: 1rem;
 }
@@ -242,6 +247,13 @@
   padding: 0.75rem;
   background: var(--color-surface);
   font-size: 0.9rem;
+}
+/* Dismiss button for the mobile "bottom sheet" presentation of this box
+   (css/mobile.css) -- hidden here unconditionally so desktop keeps its
+   existing appearance exactly as-is; mobile.css's own media query is the
+   only place that turns it back on. */
+.ref-unit-summary__close {
+  display: none;
 }
 
 .ref-unit-summary__title {

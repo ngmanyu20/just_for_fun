@@ -33,6 +33,7 @@ let seatTypeIds = new Set();
 let almaValeData = null; // { referendumId, question, national, statusSummary, precinctRows }
 let precinctRowById = new Map();
 let map = null; // mounted js/map/referendumMap.js instance, or null if unavailable
+let lastLoadedAt = null; // read by reloadControl() when renderHeaderSkeleton() rebuilds it
 
 const drill = { authority: null, county: null, precinct: null };
 const errors = [];
@@ -190,7 +191,58 @@ function renderHeaderSkeleton() {
   const meta = document.createElement('div');
   meta.className = 'ref-header__meta';
   meta.innerHTML = `<span>Referendum #${referendumMeta.referendum_id}</span><span>${referendumMeta.election_date || ''}</span>`;
+  meta.appendChild(reloadControl());
   el.appendChild(meta);
+  els.headerMeta = meta;
+}
+
+/**
+ * "Reload results" button + last-updated/error status text, rebuilt fresh
+ * on every renderHeaderSkeleton() call (`el.innerHTML = ''` there clears
+ * any previous one). Clicking it clears every data-layer cache (data.js's
+ * refreshAllData()) and re-runs the full load+render sequence in place --
+ * no page navigation/reload needed to pick up updated data/* files.
+ */
+function reloadControl() {
+  const wrap = document.createElement('div');
+  wrap.className = 'reload-control';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'reload-btn';
+  btn.textContent = 'Reload results';
+  const status = document.createElement('span');
+  status.className = 'reload-status';
+  status.textContent = lastLoadedAt ? `Updated ${lastLoadedAt.toLocaleTimeString()}` : '';
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    btn.textContent = 'Reloading…';
+    status.textContent = '';
+    status.classList.remove('reload-status--error');
+    loadAndRenderReferendum({ forceRefresh: true }).catch((err) => {
+      console.error('[referendum] reload failed:', err);
+      btn.disabled = false;
+      btn.textContent = 'Reload results';
+      status.classList.add('reload-status--error');
+      status.textContent = `Reload failed: ${err && err.message ? err.message : err}`;
+    });
+  });
+  wrap.append(btn, status);
+  return wrap;
+}
+
+/**
+ * Moves the (already-mounted) "Reload results" control from the page
+ * header into the map's own toolbar, once `tryMountMap()` has confirmed a
+ * `.map-toolbar` actually exists -- relocates the same DOM node (not a
+ * copy), so its click listener/state stay intact. Left in the header
+ * (where `renderHeaderSkeleton()` puts it) whenever the map itself never
+ * mounts (e.g. no AlmaVale seat type this referendum, or js/map/referendumMap.js
+ * unavailable), so the button never disappears.
+ */
+function relocateReloadControlIntoMap() {
+  const toolbar = els.mapHost && els.mapHost.querySelector('.map-toolbar');
+  const control = els.headerMeta && els.headerMeta.querySelector('.reload-control');
+  if (toolbar && control) toolbar.appendChild(control);
 }
 
 function renderSectionSummaries(sectionResults) {
@@ -368,6 +420,7 @@ async function tryMountMap() {
         );
       },
     });
+    relocateReloadControlIntoMap();
   } catch (err) {
     map = null;
     reportError('Map component (js/map/referendumMap.js) unavailable', err);
@@ -469,6 +522,7 @@ async function renderUnitSummaryAndList() {
 
   if (drill.precinct) {
     renderPrecinctDetail(drill.precinct);
+    finalizeUnitSummary();
     renderPrecinctTableForCounty(drill.county, { highlight: drill.precinct });
     return;
   }
@@ -477,6 +531,7 @@ async function renderUnitSummaryAndList() {
     const summary = await Data.getAlmaValeReferendumForCounty(drill.county, NOW);
     if (seq !== renderSeq) return; // superseded by a newer selection while awaiting
     renderUnitSummaryBlock(`County ${drill.county}`, summary.summary, summary.statusSummary, summary.precinctRows.length);
+    finalizeUnitSummary();
     renderPrecinctTableForCounty(drill.county);
     return;
   }
@@ -491,6 +546,7 @@ async function renderUnitSummaryAndList() {
       summary.precinctRows.length,
       `${summary.counties.length} counties`
     );
+    finalizeUnitSummary();
     await renderCountyTableForAuthority(drill.authority, seq);
     return;
   }
@@ -501,7 +557,33 @@ async function renderUnitSummaryAndList() {
     almaValeData.statusSummary,
     almaValeData.precinctRows.length
   );
+  finalizeUnitSummary();
   await renderAuthorityTable(seq);
+}
+
+// ---------------------------------------------------------------------
+// Mobile "bottom sheet" presentation (css/mobile.css, phone widths only) --
+// same technique as election-alma-vale.js's own finalizeUnitSummary(): once
+// a unit deeper than the top level is selected, `.ref-unit-summary` gets a
+// `--sheet` modifier that CSS turns into a floating card pinned to the
+// bottom of the screen instead of the plain in-flow panel box it already is
+// on desktop / at the top level, with a close (X) button back to the
+// top-level view. No visual effect above mobile.css's 768px breakpoint.
+// ---------------------------------------------------------------------
+function finalizeUnitSummary() {
+  const isSheet = !!(drill.precinct || drill.county || drill.authority);
+  els.unitSummary.classList.toggle('ref-unit-summary--sheet', isSheet);
+  if (!isSheet) return;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'ref-unit-summary__close';
+  closeBtn.setAttribute('aria-label', 'Close, back to Alma Vale overview');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', () => {
+    selectUnit({ level: 'top' }).catch((err) => reportError('sheet close', err));
+  });
+  els.unitSummary.insertBefore(closeBtn, els.unitSummary.firstChild);
 }
 
 function renderUnitSummaryBlock(title, summary, statusSummary, precinctCount, extraNote) {
@@ -915,6 +997,27 @@ function renderFatalError() {
 
 async function main() {
   renderNav(document.getElementById('nav'), 'referendum.html');
+  await loadAndRenderReferendum();
+}
+
+/**
+ * Everything else main() used to do, factored out so the "Reload results"
+ * button (reloadControl(), wired into renderHeaderSkeleton()) can re-run it
+ * on its own without re-invoking renderNav (nav.js's renderNav appends into
+ * #nav rather than replacing its contents, so it must only run once --
+ * calling it again would stack a second nav bar). Every section this
+ * function touches (header, summary cards, geo panel, functional table) is
+ * rebuilt via `.innerHTML = ''` + fresh children, so repeat calls are safe.
+ * @param {{forceRefresh?: boolean}} [opts] forceRefresh clears every cache
+ *   (data.js's refreshAllData()) so the fetch actually hits the network
+ *   again instead of replaying old data, and clears the accumulated
+ *   `errors` list from any previous load.
+ */
+async function loadAndRenderReferendum(opts = {}) {
+  if (opts.forceRefresh) {
+    Data.refreshAllData();
+  }
+  errors.length = 0;
 
   try {
     referendumMeta = await Data.loadReferendumMeta();
@@ -929,6 +1032,7 @@ async function main() {
   // section if its seat type is actually present in seat_types[].
   seatTypeIds = new Set((referendumMeta.seat_types || []).map((st) => st.id));
 
+  lastLoadedAt = new Date();
   renderHeaderSkeleton();
 
   const sectionResults = {};
