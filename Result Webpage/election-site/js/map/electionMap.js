@@ -628,10 +628,22 @@ export async function mountElectionMap(container, options = {}) {
       // `seat.*` is only touched inside this branch -- reached only when
       // `winnerSpectrum` is truthy, which (per the `seat &&` above) only
       // happens when `seat` itself is truthy too.
+      //
+      // Mobile-only override (user feedback): at THIS level (Constituency),
+      // "2nd Pref (actual)" normally shades by the real 2-way vote SHARE,
+      // same as every level below -- but that made an already-fully-
+      // Declared constituency with a genuinely close real runoff look less
+      // solid here than the exact same constituency in "1st Pref", which
+      // read as broken/inconsistent between the two toggle states. So on a
+      // phone, this level always shades by percent-Declared instead
+      // (matching what "1st Pref" already shows), whichever Pref mode is
+      // active -- County/District/Precinct (`shareFillColor`'s other
+      // callers) keep their real vote-share shading either way. Desktop is
+      // untouched: still the original per-mode split.
       const color = winnerSpectrum
         ? shareFillColor(
             spectrumColorVar(winnerSpectrum),
-            firstRound ? (seat.percentDeclared || 0) / 100 : Data.voteShareFor(winnerSpectrum, seat.round1, seat.round2)
+            isCompactViewport() || firstRound ? (seat.percentDeclared || 0) / 100 : Data.voteShareFor(winnerSpectrum, seat.round1, seat.round2)
           )
         : { fill: neutralColorVar(), fillOpacity: 0.75 };
       shapes.push({
