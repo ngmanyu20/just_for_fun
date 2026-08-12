@@ -152,6 +152,67 @@ export function statusColorVar(status) {
   return `var(${STATUS_VAR[status] || STATUS_VAR['Not received']})`;
 }
 
+/**
+ * Resolves a `var(--custom-prop)` string (as returned by spectrumColorVar/
+ * statusColorVar) to its actual computed color, by reading the custom
+ * property straight off `:root`. Returns the input unchanged if it isn't a
+ * `var(...)` reference, or resolution isn't possible for any reason (no
+ * `document`, property not actually a hex color, etc.) -- callers that need
+ * a literal RGB value (`tintColor` below) already treat "didn't resolve" as
+ * "just use the original color", so this never needs to throw.
+ */
+function resolveCssColor(colorRef) {
+  if (typeof colorRef !== 'string') return colorRef;
+  const m = colorRef.match(/^var\((--[\w-]+)\)$/);
+  if (!m || typeof document === 'undefined' || typeof getComputedStyle !== 'function') return colorRef;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
+  return value || colorRef;
+}
+
+function hexToRgb(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex({ r, g, b }) {
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  return `#${[r, g, b].map((v) => clamp(v).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Fixed light-gray mix target for `tintColor` -- NOT theme-dependent (no
+// dark-mode variant) on purpose: the whole point is a result that reads the
+// same regardless of the page's own background, rather than blending
+// toward whatever that background happens to be (see `tintColor`'s doc
+// comment for why that's the actual problem being solved).
+const TINT_TARGET = { r: 232, g: 232, b: 236 };
+
+/**
+ * Mixes a `var(--...)`/hex color reference toward a fixed light gray by
+ * `ratio` (1 = color unchanged, 0 = pure light gray), returning a literal
+ * hex string. Used for the mobile-only "solid vote-share shading" path in
+ * electionMap.js's `shareFillColor` -- a semi-transparent `fill-opacity`
+ * blends toward whatever the PAGE background happens to be, which reads
+ * fine against base.css's white light-mode background but reads as a dim,
+ * muddy smear against dark mode's near-black one. Mixing at the color level
+ * instead, toward a FIXED reference, produces the same legible pastel-to-
+ * vivid result regardless of theme. Returns the input unchanged if it can't
+ * be resolved to a literal hex color (e.g. `resolveCssColor` gave up).
+ * @param {string} colorRef
+ * @param {number} ratio 0..1
+ */
+export function tintColor(colorRef, ratio) {
+  const rgb = hexToRgb(resolveCssColor(colorRef));
+  if (!rgb) return colorRef;
+  const t = Math.max(0, Math.min(1, ratio));
+  return rgbToHex({
+    r: TINT_TARGET.r + (rgb.r - TINT_TARGET.r) * t,
+    g: TINT_TARGET.g + (rgb.g - TINT_TARGET.g) * t,
+    b: TINT_TARGET.b + (rgb.b - TINT_TARGET.b) * t,
+  });
+}
+
 /** Pick the highest-value key of a {Left,Right,MR} totals object, or null if all zero. */
 export function argmaxSpectrum(totals) {
   let best = null;
@@ -168,6 +229,19 @@ export function argmaxSpectrum(totals) {
 
 export function formatPercent(n) {
   return `${(n || 0).toFixed(1)}%`;
+}
+
+/**
+ * Single source of truth for "is this the phone-width layout" (css/
+ * mobile.css's own breakpoint) -- used wherever map behavior itself (not
+ * just its CSS) needs to differ on a phone: the zoom ceiling and fill-color
+ * contrast floor below, plus electionMap.js's own color-floor use. Desktop/
+ * tablet behavior at every call site is whatever it already was before this
+ * existed -- this only ever ADDS a mobile-specific branch, never changes
+ * the un-matched (desktop) path.
+ */
+export function isCompactViewport() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
 }
 
 // ---------------------------------------------------------------------
@@ -220,9 +294,7 @@ export function buildChrome(container, d3, opts = {}) {
   // sliver-thin on mobile at that same scale. Compact viewports get a
   // proportionally higher ceiling so pinch/tap-to-zoom can actually reach a
   // similarly legible size, rather than bottoming out below it.
-  const isCompactViewport =
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
-  const maxZoomScale = isCompactViewport ? 50 : 20;
+  const maxZoomScale = isCompactViewport() ? 50 : 20;
 
   const zoom = d3
     .zoom()
@@ -271,6 +343,15 @@ export function buildChrome(container, d3, opts = {}) {
   }
 
   function showTooltip(event, html) {
+    // On a phone, a tap fires the same hover/click handlers a mouse would,
+    // so this hover tooltip used to pop up right on top of the shape the
+    // user just tapped -- AND the tap's own onUnitClick already opens the
+    // bottom-sheet card (css/mobile.css) with the same result. Two
+    // overlapping info boxes over a map that's already small; the sheet is
+    // the one actually meant for touch, so the hover tooltip just stays
+    // hidden here instead of fighting it for the same screen space. Desktop
+    // (a real mouse hover, no sheet involved) is unaffected.
+    if (isCompactViewport()) return;
     tooltip.innerHTML = html;
     tooltip.hidden = false;
     positionTooltip(event);

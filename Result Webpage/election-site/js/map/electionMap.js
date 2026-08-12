@@ -51,6 +51,8 @@ import {
   statusColorVar,
   computeExtent,
   zoomTransformToFit,
+  isCompactViewport,
+  tintColor,
 } from './mapCore.js';
 import { aggregateStatusLabel, resultsTableHtml, statusLinesHtml } from './resultsTable.js';
 
@@ -240,7 +242,7 @@ export async function mountElectionMap(container, options = {}) {
         const color = spectrumColorVar(winnerSpectrum);
         if (color) {
           const share = Data.voteShareFor(winnerSpectrum, info.result.round1, round2);
-          return { fill: color, fillOpacity: shareOpacity(share), className: 'map-shape--declared' };
+          return { ...shareFillColor(color, share), className: 'map-shape--declared' };
         }
       }
       return { fill: 'var(--precinct-tie)', fillOpacity: 1, className: 'map-shape--declared map-shape--tie' };
@@ -259,13 +261,49 @@ export async function mountElectionMap(container, options = {}) {
    * Fill-opacity ("color depth") from a 0..1 vote share -- floored so even
    * a bare plurality still reads as a filled-in shape, capped at 1 for a
    * landslide. `null` (nothing valid to compute a share from yet) falls
-   * back to the same floor. Shared by every County/District/Precinct color
-   * function below -- see `Data.voteShareFor`'s doc comment for why these
-   * three use vote SHARE, not percent-counted, for opacity.
+   * back to the same floor. Only used by `shareFillColor`'s desktop branch
+   * below now -- see that function's doc comment for the compact-viewport
+   * alternative.
    * @param {number|null} share
    */
   function shareOpacity(share) {
     return Math.max(0.35, Math.min(1, share ?? 0.35));
+  }
+
+  /**
+   * The single "how solid should this vote-share-driven shape look" choice
+   * every Declared-or-partial County/District/Precinct/Constituency color
+   * below funnels through. `fill` is a spectrum color (`spectrumColorVar`'s
+   * `var(--...)` reference); `share` is a 0..1 fraction -- that spectrum's
+   * own vote SHARE at County/District/Precinct and Constituency-"actual"
+   * level, or Constituency-first-round's percent-Declared (see each color
+   * function's own doc comment for which).
+   *
+   * Desktop: unchanged from before this function existed -- the plain color
+   * at `fill-opacity: shareOpacity(share)`, alpha-blended over whatever the
+   * page background is.
+   *
+   * Compact viewport: a SOLID color instead (`fillOpacity: 1`), mixed
+   * toward a fixed light gray by `tintColor` in proportion to `share`.
+   * Reported problem this fixes: alpha-blending toward the background reads
+   * fine against base.css's white light-mode page, but on a dark-mode
+   * background (near-black `--color-bg`) the same low opacity reads as a
+   * dim, muddy smear rather than a lighter tint of the real color -- and
+   * "2nd Pref (actual)"'s real vote-share figures are typically lower/
+   * closer than "1st Pref"'s near-always-~100%-once-Declared ones, so
+   * *that* toggle state was hitting the muddy end far more often, reading
+   * as visibly worse even though both use the exact same color logic.
+   * Mixing at the color level instead of the alpha level produces the same
+   * legible result regardless of page background/theme. Floored higher
+   * (0.55) than desktop's opacity floor since even the tint's dimmest end
+   * still needs to read as a clear color, not a near-gray.
+   */
+  function shareFillColor(fill, share) {
+    if (isCompactViewport()) {
+      const ratio = Math.max(0.55, Math.min(1, share ?? 0.55));
+      return { fill: tintColor(fill, ratio), fillOpacity: 1 };
+    }
+    return { fill, fillOpacity: shareOpacity(share) };
   }
 
   /**
@@ -323,7 +361,7 @@ export async function mountElectionMap(container, options = {}) {
     if (winnerSpectrum) {
       const color = spectrumColorVar(winnerSpectrum);
       const share = Data.voteShareFor(winnerSpectrum, sv.round1, round2);
-      return { fill: color, fillOpacity: shareOpacity(share) };
+      return shareFillColor(color, share);
     }
     return { fill: neutralColorVar(), fillOpacity: 0.75 };
   }
@@ -352,7 +390,7 @@ export async function mountElectionMap(container, options = {}) {
       const color = spectrumColorVar(fptp.winnerSpectrum);
       const totalVotes = Object.values(fptp.spectrumVotes || {}).reduce((a, b) => a + b, 0);
       const share = totalVotes > 0 ? (fptp.spectrumVotes[fptp.winnerSpectrum] || 0) / totalVotes : null;
-      return { fill: color, fillOpacity: shareOpacity(share) };
+      return shareFillColor(color, share);
     }
     return { fill: neutralColorVar(), fillOpacity: 0.75 };
   }
@@ -587,13 +625,14 @@ export async function mountElectionMap(container, options = {}) {
       // read the same way at every level.
       const firstRound = state.colorMode === 'first-round';
       const winnerSpectrum = seat && (firstRound ? Data.round1PluralityLeader(seat.round1) : Data.computeSupplementaryVote(seat.totals).winner);
+      // `seat.*` is only touched inside this branch -- reached only when
+      // `winnerSpectrum` is truthy, which (per the `seat &&` above) only
+      // happens when `seat` itself is truthy too.
       const color = winnerSpectrum
-        ? {
-            fill: spectrumColorVar(winnerSpectrum),
-            fillOpacity: firstRound
-              ? Math.max(0.35, (seat.percentDeclared || 0) / 100)
-              : shareOpacity(Data.voteShareFor(winnerSpectrum, seat.round1, seat.round2)),
-          }
+        ? shareFillColor(
+            spectrumColorVar(winnerSpectrum),
+            firstRound ? (seat.percentDeclared || 0) / 100 : Data.voteShareFor(winnerSpectrum, seat.round1, seat.round2)
+          )
         : { fill: neutralColorVar(), fillOpacity: 0.75 };
       shapes.push({
         id: `c::${c.Constituency}`,
